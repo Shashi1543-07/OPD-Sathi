@@ -4,7 +4,7 @@ OPD Saathi is a multilingual, voice-first patient history-taking and queue syste
 
 ## Project status
 
-Phase 0 — Foundations and tooling and Phase 1 — UI foundation and language selection are complete. Phase 2 — Identity, audit, and rate limiting is implemented on `phase-02-identity-security`; its local gate evidence is in the [Phase 2 report](docs/phase-reports/phase-02.md). Target-version GitHub CI remains pending before approval to start Phase 3. See the [Phase 2 plan](docs/phase-plans/phase-02.md), [project checklist](OPD_Saathi_TODO.md), [phase reports](docs/phase-reports/), and [build playbook](AGENT_PLAYBOOK.md).
+Phase 0 — Foundations and tooling, Phase 1 — UI foundation and language selection, and Phase 2 — Identity, audit, and rate limiting are complete. Phase 2 was merged into `phase-01-ui-foundation` as `900d0ef`; all six GitHub checks passed. See the [Phase 2 report](docs/phase-reports/phase-02.md) for implementation and verification details. Phase 3 is next and remains gated on explicit approval. See the [Phase 2 plan](docs/phase-plans/phase-02.md), [project checklist](OPD_Saathi_TODO.md), [phase reports](docs/phase-reports/), and [build playbook](AGENT_PLAYBOOK.md).
 
 ## Development setup
 

@@ -33,7 +33,7 @@ This is the execution checklist derived from [OPD Saathi Agent Build Playbook](O
 
 ## Phase 1 — UI foundation and language selection
 
-Phase 1 is complete on `phase-01-ui-foundation` with the human visual review approved. Phase 2 implementation is underway on `phase-02-identity-security`; see [the Phase 1 report](docs/phase-reports/phase-01.md) and [the Phase 2 plan](docs/phase-plans/phase-02.md).
+Phase 1 is complete on `phase-01-ui-foundation` with the human visual review approved. Phase 2 is complete and merged into that branch as `900d0ef`; see [the Phase 1 report](docs/phase-reports/phase-01.md) and [the Phase 2 report](docs/phase-reports/phase-02.md).
 
 - [x] 1.1 Add design tokens, Tailwind theme, self-hosted fonts, responsive foundations, and contrast checking (12 documented text pairs pass at 4.5:1 or above).
 - [x] 1.2 Build the accessible shared component set and component tests (9 Vitest tests pass).
@@ -49,7 +49,7 @@ Phase 1 is complete on `phase-01-ui-foundation` with the human visual review app
 
 ## Phase 2 — Identity, audit, and rate limiting
 
-Phase 2 implementation is complete on `phase-02-identity-security`; local gate evidence is in the [Phase 2 report](docs/phase-reports/phase-02.md). Wait for explicit approval before starting Phase 3.
+Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All six GitHub checks passed; local and CI evidence is in the [Phase 2 report](docs/phase-reports/phase-02.md). Wait for explicit approval before starting Phase 3.
 
 - [x] 2.1 Add user/kiosk/token/audit migrations, immutable audit permissions, and tenant RLS (migrations 0002–0003 applied locally; app role cannot update audit rows).
 - [x] 2.2 Implement Argon2id and JWT security with the required attack/failure tests (12 security tests pass; core security coverage 98%).
@@ -61,7 +61,7 @@ Phase 2 implementation is complete on `phase-02-identity-security`; local gate e
 - [x] 2.8 Add immutable audit helper and admin audit endpoint (app role update/delete denied; pagination and events verified).
 - [x] 2.9 Wire typed frontend auth, protected routes, refresh, login, and logout flows (16 Vitest tests; 4 Phase 2 Playwright tests pass).
 - [x] 2.10 Finalize CSP/security headers, microphone policy, and request size limits.
-- [x] Gate: route-matrix, JWT, tenant-isolation, append-only audit, rate-limit, module coverage, Bandit, web, and dependency-audit checks pass locally. Target-version GitHub CI and reversible migration job remain pending external execution.
+- [x] Gate: route-matrix, JWT, tenant-isolation, append-only audit, rate-limit, module coverage, Bandit, web, and dependency-audit checks pass locally; all six target-version GitHub checks, including reversible migrations, passed before PR #1 merged as `900d0ef`.
 
 ## Phase 3 — Data model, seeds, and pagination
 

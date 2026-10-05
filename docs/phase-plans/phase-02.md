@@ -1,6 +1,6 @@
 # Phase 02 — Identity, audit, and rate limiting
 
-**Status: Implementation complete; awaiting human approval** on `phase-02-identity-security`, branched from the Phase 1 completion commit `0cae260` after human approval. Local gates are recorded in the [Phase 2 report](../phase-reports/phase-02.md); target-version GitHub CI remains the final external check.
+**Status: Complete and merged.** PR #1 merged `phase-02-identity-security` into `phase-01-ui-foundation` as merge commit `900d0ef`; all six GitHub checks passed. The final CI evidence is recorded in the [Phase 2 report](../phase-reports/phase-02.md). Phase 3 remains gated on explicit human approval.
 
 ## Goal
 

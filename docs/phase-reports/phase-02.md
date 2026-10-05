@@ -2,6 +2,7 @@
 
 **Branch:** `phase-02-identity-security`
 **Commit:** 7f03b11 (Phase 2 implementation commit).
+**Final status:** Complete; PR #1 merged into `phase-01-ui-foundation` as `900d0ef`. All six GitHub checks passed on the merged PR.
 
 ## 1. In plain words
 
@@ -55,6 +56,10 @@ The route matrix includes all app routes, including hidden health/readiness rout
 - `npm audit --audit-level=high` — **0 vulnerabilities**.
 - `python -m alembic -c services/api/alembic.ini current` using the migration-role URL from `.env` — `0003_secret_lookup_rls (head)`.
 
+### Final GitHub CI
+
+PR #1 passed all six required checks before merging as `900d0ef`. The successful run covered the Python 3.12 backend, reversible Alembic upgrade/downgrade/upgrade cycle, frontend on Node 24 (including Lighthouse and generated API type drift), and security scans. CI fixes parameterized the RLS setting name for Semgrep, replaced the Gitleaks Action's PR API lookup with a local commit-range scan, and updated Lighthouse to 13.5.0. The current lockfile no longer includes vulnerable `extract-zip`; `npm audit --audit-level=high` reports zero vulnerabilities.
+
 ## 5. Screenshots and artifacts
 
 - [Staff sign-in screen](../screenshots/phase-02/staff-login.png)
@@ -71,7 +76,7 @@ The route matrix includes all app routes, including hidden health/readiness rout
 
 ## 7. Known issues and decisions
 
-- GitHub Actions was not run from this local Windows turn. The local environment used Python 3.11.9 and Node 20.19.0; the workflow targets Python 3.12 and Node 24. The workflow includes a clean upgrade/downgrade/upgrade migration check, Gitleaks, Semgrep, and the full frontend suite; those target-version CI results remain the final external check.
+- Local Phase 2 measurements were collected with Python 3.11.9 and Node 20.19.0. The final GitHub CI run on PR #1 used the configured Python 3.12 and Node 24 and passed all six checks, including the migration cycle, Gitleaks, Semgrep, and the full frontend suite.
 - The local schema was not downgraded because that would remove existing local tables and data. The new CI job exercises reversibility against its disposable PostgreSQL service.
 - No ADR was needed: PyJWT and Argon2id were already named in the locked stack. No clinical content was added.
 
@@ -79,4 +84,4 @@ The route matrix includes all app routes, including hidden health/readiness rout
 
 Phase 3 adds the domain data model, synthetic seeds, and pagination. It can use the hospital identity and forced RLS foundation added here.
 
-Reply `approve phase 2` to continue.
+Phase 2 is complete and merged. Phase 3 is the next planned phase; the project checklist requires explicit human approval before it starts.
