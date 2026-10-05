@@ -9,6 +9,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       OSA_APP_PASSWORD: ${OSA_APP_PASSWORD:?Set OSA_APP_PASSWORD}
       OSA_MIGRATOR_PASSWORD: ${OSA_MIGRATOR_PASSWORD:?Set OSA_MIGRATOR_PASSWORD}
+      OSA_WORKER_PASSWORD: ${OSA_WORKER_PASSWORD:?Set OSA_WORKER_PASSWORD}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
@@ -38,6 +39,22 @@ services:
       retries: 12
     restart: unless-stopped
 
+  worker-role-bootstrap:
+    image: postgres:16.9
+    command: ["sh", "/scripts/bootstrap-worker-role.sh"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-osa}
+      POSTGRES_ADMIN_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_ADMIN_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      OSA_WORKER_PASSWORD: ${OSA_WORKER_PASSWORD:?Set OSA_WORKER_PASSWORD}
+    volumes:
+      - ./services/api/scripts/bootstrap-worker-role.sh:/scripts/bootstrap-worker-role.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
@@ -48,6 +65,7 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+asyncpg://osa_app:${OSA_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
+      WORKER_DATABASE_URL: postgresql+asyncpg://osa_worker:${OSA_WORKER_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
       MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:${OSA_MIGRATOR_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
       REDIS_STATE_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       REDIS_CACHE_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
@@ -58,6 +76,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      worker-role-bootstrap:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
       interval: 10s
@@ -70,12 +90,15 @@ services:
       context: .
       dockerfile: services/api/Dockerfile
     command: ["python", "-m", "app.workers.main"]
-    environment: *app_environment
+    environment:
+      <<: *app_environment
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      worker-role-bootstrap:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:

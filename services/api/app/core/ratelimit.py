@@ -3,7 +3,9 @@
 import asyncio
 import time
 from collections import defaultdict, deque
+from collections.abc import Awaitable
 from dataclasses import dataclass
+from typing import Any, cast
 from uuid import uuid4
 
 from redis.asyncio import Redis
@@ -79,14 +81,18 @@ async def check_rate_limit(
 ) -> RateLimitResult | None:
     """Return a decision; `None` means fail-closed storage is unavailable."""
     try:
-        allowed, used, retry_after = await redis.eval(
-            _SLIDING_WINDOW,
-            1,
-            key,
-            window_seconds * 1000,
-            limit,
-            uuid4().hex,
+        result = await cast(
+            Awaitable[Any],
+            redis.eval(
+                _SLIDING_WINDOW,
+                1,
+                key,
+                window_seconds * 1000,  # type: ignore[arg-type]
+                limit,  # type: ignore[arg-type]
+                uuid4().hex,
+            ),
         )
+        allowed, used, retry_after = result
     except (RedisError, OSError, TimeoutError):
         if fail_closed:
             return None

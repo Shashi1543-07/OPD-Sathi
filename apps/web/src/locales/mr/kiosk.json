@@ -108,5 +108,9 @@
   "summaryMedications": "औषधे",
   "summaryAllergies": "अॅलर्जी",
   "summaryFamilyHistory": "कुटुंबाच्या आरोग्याची माहिती",
-  "summaryOther": "इतर माहिती"
+  "summaryOther": "इतर माहिती",
+  "queueToken": "तुमचा रांगेचा टोकन",
+  "statusLink": "रांगेची स्थिती पाहण्यासाठी स्कॅन करा",
+  "printReceipt": "पावती प्रिंट करा",
+  "statusQrLabel": "रांग स्थिती QR कोड"
 }

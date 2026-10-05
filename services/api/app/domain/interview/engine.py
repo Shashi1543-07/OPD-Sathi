@@ -146,9 +146,7 @@ def build_case_sheet(state: InterviewState) -> dict[str, Any]:
         elif question_id == "past_history":
             past_conditions.append(value)
         elif question_id == "family_history":
-            family_history.append(
-                {"text_original": value, "text_en": value, "confidence": 0.5}
-            )
+            family_history.append({"text_original": value, "text_en": value, "confidence": 0.5})
         else:
             hpi["associated_symptoms"].append(
                 {"text_original": value, "text_en": value, "confidence": 0.5}

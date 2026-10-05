@@ -2,11 +2,13 @@
 
 import json
 from datetime import timedelta
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
+from redis.exceptions import RedisError
+from sqlalchemy import text
 
 from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
@@ -17,6 +19,7 @@ from app.db.repositories import (
     CaseSheetRepository,
     IntakeRepository,
     InterviewTurnRepository,
+    QueueRepository,
 )
 from app.db.session import set_hospital_scope
 from app.domain.interview.bank import QUESTIONS, Language
@@ -30,6 +33,9 @@ from app.domain.interview.engine import (
     next_question,
     start,
 )
+from app.domain.queue.redis_queue import QueueRedis
+from app.domain.queue.scoring import queue_score
+from app.domain.queue.tokens import create_status_token, status_token_digest
 
 router = APIRouter(prefix="/intake", tags=["intake"])
 _SESSION_TTL_FACTOR = 60 * 60
@@ -632,8 +638,15 @@ async def confirm_summary(
     state = _read_state(
         await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
     )
+    if state.get("phase") == "confirmed" and isinstance(state.get("queue"), dict):
+        return cast(dict[str, Any], state["queue"])
     if state.get("phase") != "summary":
         raise _error(409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first.")
+    status_token = create_status_token(
+        key=request.app.state.settings.app_hmac_key_bytes,
+        hospital_id=hospital_id,
+        visit_id=visit_id,
+    )
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         confirmed = await CaseSheetRepository(connection, request.app.state.settings).confirm(
@@ -643,6 +656,25 @@ async def confirm_summary(
             raise _error(
                 409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first."
             )
+        queue_record = await QueueRepository(connection, request.app.state.settings).confirm_visit(
+            redis=request.app.state.redis_state,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            status_hash=status_token_digest(status_token),
+        )
+        details = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT urgency, urgency_reasons, age_years, pregnant, queued_at "
+                        "FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
         await audit(
             connection,
             request,
@@ -653,17 +685,83 @@ async def confirm_summary(
             resource_type="visit",
             resource_id=visit_id,
         )
+    score = queue_score(
+        int(details["queued_at"].timestamp() * 1000),
+        details["urgency"],
+        details["age_years"],
+        bool(details["pregnant"]),
+        urgent_bonus_min=request.app.state.settings.urgent_bonus_min,
+        priority_bonus_min=request.app.state.settings.priority_bonus_min,
+        vulnerable_bonus_min=request.app.state.settings.vulnerable_bonus_min,
+    )
+    try:
+        await QueueRedis(
+            request.app.state.redis_state, app_env=request.app.state.settings.app_env
+        ).enqueue(
+            hospital_id=hospital_id,
+            department_id=queue_record["department_id"],
+            visit_id=visit_id,
+            score=score,
+            item={
+                "visit_id": str(visit_id),
+                "token": queue_record["token_label"],
+                "urgency": details["urgency"],
+                "status": "queued",
+            },
+        )
+    except Exception:
+        # The committed outbox row is retried by the relay.
+        pass
+    position: int | None
+    try:
+        position = await QueueRedis(
+            request.app.state.redis_state, app_env=request.app.state.settings.app_env
+        ).position(
+            hospital_id=hospital_id,
+            department_id=queue_record["department_id"],
+            visit_id=visit_id,
+        )
+    except RedisError:
+        position = None
+    if position is None:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            rows = await QueueRepository(connection, request.app.state.settings).queued_visits(
+                hospital_id=hospital_id, department_id=queue_record["department_id"]
+            )
+        rows.sort(
+            key=lambda item: (
+                queue_score(
+                    int((item["queued_at"] or details["queued_at"]).timestamp() * 1000),
+                    item["urgency"],
+                    item["age_years"],
+                    bool(item["pregnant"]),
+                    urgent_bonus_min=request.app.state.settings.urgent_bonus_min,
+                    priority_bonus_min=request.app.state.settings.priority_bonus_min,
+                    vulnerable_bonus_min=request.app.state.settings.vulnerable_bonus_min,
+                ),
+                str(item["visit_id"]),
+            )
+        )
+        position = next(
+            (index + 1 for index, item in enumerate(rows) if item["visit_id"] == visit_id), None
+        )
+    queue_response = {
+        "confirmed": True,
+        "status": "queued",
+        "token": queue_record["token_label"],
+        "status_token": status_token,
+        "status_url": f"/s/{status_token}",
+        "position": position,
+    }
     state["phase"] = "confirmed"
+    state["queue"] = queue_response
     await request.app.state.redis_state.set(
         _session_key(hospital_id, visit_id),
         json.dumps(state, separators=(",", ":")),
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
-    return {
-        "confirmed": True,
-        "status": "awaiting_confirmation",
-        "token": "Will be assigned when queue registration is available.",
-    }
+    return queue_response
 
 
 @router.delete("/sessions/{visit_id}", status_code=status.HTTP_204_NO_CONTENT)

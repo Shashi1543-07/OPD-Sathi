@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, ConnectionIndicator, Toast } from "../components/ui";
 import { staffAuth, StaffUser } from "../lib/auth";
+import { StaffQueueBoard } from "./StaffQueueBoard";
 
 const navigationByRole: Record<StaffUser["role"], string[]> = {
   admin: ["dashboard", "queue", "consultations", "patients", "reports", "settings"],
@@ -105,11 +106,7 @@ export function StaffShell() {
           {checkingSession ? (
             <p role="status">{t("checkingSession", { ns: "staff" })}</p>
           ) : user ? (
-            <section className="staff-login-card" aria-label={t("staffWelcome", { ns: "staff" })}>
-              <h2>{t("signedInAs", { ns: "staff", role: user.role })}</h2>
-              <p>{user.email}</p>
-              <p>{t("secureSession", { ns: "staff" })}</p>
-            </section>
+            <><section className="staff-login-card" aria-label={t("staffWelcome", { ns: "staff" })}><h2>{t("signedInAs", { ns: "staff", role: user.role })}</h2><p>{user.email}</p><p>{t("secureSession", { ns: "staff" })}</p></section><StaffQueueBoard /></>
           ) : (
             <section className="staff-login-card">
               <h2>{t("staffWelcome", { ns: "staff" })}</h2>

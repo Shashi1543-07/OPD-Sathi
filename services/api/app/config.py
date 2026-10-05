@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     web_origin: str = "http://localhost:5173"
     log_level: str = "INFO"
     database_url: str = "postgresql+asyncpg://osa_app:local-only@localhost:5432/osa"
+    worker_database_url: str = ""
     migrations_database_url: str = "postgresql+asyncpg://osa_migrator:local-only@localhost:5432/osa"
     redis_state_url: str = "redis://:local-only@localhost:6379/0"
     redis_cache_url: str = "redis://:local-only@localhost:6379/1"
@@ -30,6 +31,10 @@ class Settings(BaseSettings):
     kiosk_token_hours: int = 12
     patient_session_hours: int = 2
     max_request_body_bytes: int = 1_048_576
+    urgent_bonus_min: int = 360
+    priority_bonus_min: int = 45
+    vulnerable_bonus_min: int = 15
+    default_consult_min: float = 4.0
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -67,6 +72,10 @@ class Settings(BaseSettings):
             raise ValueError("JWT_KID must contain between 1 and 64 characters")
         if self.max_request_body_bytes < 1024:
             raise ValueError("MAX_REQUEST_BODY_BYTES must be at least 1024")
+        if min(self.urgent_bonus_min, self.priority_bonus_min, self.vulnerable_bonus_min) < 0:
+            raise ValueError("queue score bonuses cannot be negative")
+        if not 1 <= self.default_consult_min <= 15:
+            raise ValueError("DEFAULT_CONSULT_MIN must be between 1 and 15")
         return self
 
     @property

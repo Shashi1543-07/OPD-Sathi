@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+: "${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD must be set}"
+: "${OSA_WORKER_PASSWORD:?OSA_WORKER_PASSWORD must be set}"
+
+export PGPASSWORD="$POSTGRES_ADMIN_PASSWORD"
+psql --host "$POSTGRES_HOST" --username "$POSTGRES_ADMIN_USER" --dbname "$POSTGRES_DB" \
+  --set=worker_password="$OSA_WORKER_PASSWORD" \
+  --set=database_name="$POSTGRES_DB" <<'SQL'
+SELECT format(
+  'CREATE ROLE osa_worker LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT BYPASSRLS',
+  :'worker_password'
+)
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'osa_worker')
+\gexec
+ALTER ROLE osa_worker LOGIN PASSWORD :'worker_password'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT BYPASSRLS;
+GRANT CONNECT ON DATABASE :"database_name" TO osa_worker;
+SQL

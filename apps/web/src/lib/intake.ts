@@ -114,7 +114,10 @@ export const intake = {
       method: "PATCH",
       body: JSON.stringify({ question_id: questionId, answer, input_mode: "touch" }),
     }),
-  confirm: () => patientRequest<{ confirmed: boolean; token: string }>("/confirm", { method: "POST" }),
+  confirm: () => patientRequest<{ confirmed: boolean; token: string; status_token: string; status_url: string; position: number | null }>("/confirm", {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+  }),
   cancel: async () => {
     const session = getPatientSession();
     if (session) await patientRequest<void>("", { method: "DELETE" }).catch(() => undefined);

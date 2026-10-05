@@ -1,5 +1,6 @@
 """Bearer-token dependencies and the explicit public-route inventory."""
 
+import re
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
@@ -17,6 +18,8 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/auth/refresh"),
         ("POST", "/auth/logout"),
         ("POST", "/kiosks/activate"),
+        ("GET", "/status/{token}"),
+        ("GET", "/status/{token}/stream"),
         ("GET", "/openapi.json"),
         ("HEAD", "/openapi.json"),
         ("GET", "/docs"),
@@ -62,7 +65,13 @@ def current_principal(request: Request) -> dict[str, Any]:
 
 async def authentication_gate(request: Request) -> None:
     """Reject anonymous access to every route outside the public allow-list."""
-    if (request.method.upper(), request.url.path) in PUBLIC_ROUTES:
+    if request.scope.get("type") == "websocket":
+        return
+    path = request.url.path
+    if (request.method.upper(), path) in PUBLIC_ROUTES or (
+        request.method.upper() == "GET"
+        and re.fullmatch(r"/status/[A-Za-z0-9_-]{43}(?:/stream)?", path) is not None
+    ):
         return
     _request_token(request)
 

@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from redis.exceptions import RedisError
 from sqlalchemy import bindparam, column, select, table, text, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -242,6 +243,310 @@ class VisitRepository:
                 "created_at",
             ),
         )
+
+
+class QueueRepository:
+    """Tenant-scoped durable queue writes and daily token allocation."""
+
+    def __init__(self, connection: AsyncConnection, settings: Settings):
+        self.connection = connection
+        self.settings = settings
+
+    async def allocate_daily_token_number(
+        self,
+        *,
+        redis: Any,
+        hospital_id: UUID,
+        department_id: UUID,
+        service_date: date,
+    ) -> int:
+        """Allocate a collision-free daily token; PostgreSQL serializes fallback and repair."""
+        from app.domain.queue.tokens import daily_counter_key
+
+        lock_key = f"{hospital_id}:{department_id}:{service_date.isoformat()}"
+        await self.connection.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+            {"lock_key": lock_key},
+        )
+        maximum = await self.connection.scalar(
+            text(
+                "SELECT coalesce(max(token_number), 0) FROM visits "
+                "WHERE hospital_id = :hospital_id AND department_id = :department_id "
+                "AND service_date = :service_date"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "department_id": department_id,
+                "service_date": service_date,
+            },
+        )
+        minimum = int(maximum or 0) + 1
+        key = daily_counter_key(self.settings.app_env, hospital_id, department_id, service_date)
+        try:
+            value = await redis.eval(
+                "local n=redis.call('INCR',KEYS[1]); "
+                "local floor=tonumber(ARGV[1]); "
+                "if n < floor then n=floor; redis.call('SET',KEYS[1],n) end; "
+                "if redis.call('TTL',KEYS[1]) < 0 then "
+                "redis.call('EXPIRE',KEYS[1],tonumber(ARGV[2])) end; return n",
+                1,
+                key,
+                minimum,
+                36 * 60 * 60,
+            )
+            return int(value)
+        except RedisError:
+            # A Redis outage must not stop registration; the transaction lock protects MAX+1.
+            return minimum
+
+    async def confirm_visit(
+        self,
+        *,
+        redis: Any,
+        hospital_id: UUID,
+        visit_id: UUID,
+        status_hash: str,
+    ) -> dict[str, Any]:
+        """Assign the daily token and persist a queue event in the caller's transaction."""
+        from app.domain.queue.tokens import token_label
+
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT v.department_id, v.service_date, v.status, v.token_number, "
+                        "v.token_label, v.status_token_hash, d.token_prefix FROM visits v "
+                        "JOIN departments d ON d.hospital_id = v.hospital_id "
+                        "AND d.id = v.department_id WHERE v.hospital_id = :hospital_id "
+                        "AND v.id = :visit_id "
+                        "FOR UPDATE OF v"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise LookupError("visit not found")
+        row_data: dict[str, Any] = dict(row)
+        if row_data["token_number"] is not None and row_data["status_token_hash"] is not None:
+            return {
+                "department_id": row_data["department_id"],
+                "service_date": row_data["service_date"],
+                "token_number": row_data["token_number"],
+                "token_label": row_data["token_label"],
+            }
+        if row_data["status"] != "awaiting_confirmation":
+            raise ValueError("visit is not awaiting confirmation")
+        # Phase 5's temporary route: the Phase 6 router will replace this deterministic rule.
+        age = await self.connection.scalar(
+            text(
+                "SELECT age_years FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        if age is not None:
+            target_code = "PAED" if age < 14 else "GENMED"
+            routed = (
+                (
+                    await self.connection.execute(
+                        text(
+                            "SELECT id, token_prefix FROM departments "
+                            "WHERE hospital_id = :hospital_id "
+                            "AND code = :code AND is_active = true LIMIT 1"
+                        ),
+                        {"hospital_id": hospital_id, "code": target_code},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if routed is not None:
+                await self.connection.execute(
+                    text(
+                        "UPDATE visits SET department_id = :department_id "
+                        "WHERE hospital_id = :hospital_id "
+                        "AND id = :visit_id"
+                    ),
+                    {
+                        "department_id": routed["id"],
+                        "hospital_id": hospital_id,
+                        "visit_id": visit_id,
+                    },
+                )
+                row_data["department_id"] = routed["id"]
+                row_data["token_prefix"] = routed["token_prefix"]
+        number = await self.allocate_daily_token_number(
+            redis=redis,
+            hospital_id=hospital_id,
+            department_id=row_data["department_id"],
+            service_date=row_data["service_date"],
+        )
+        label = token_label(row_data["token_prefix"], number)
+        await self.connection.execute(
+            text(
+                "UPDATE visits SET status = 'queued', token_number = :number, "
+                "token_label = :label, "
+                "status_token_hash = :status_hash, queued_at = now() "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {
+                "number": number,
+                "label": label,
+                "status_hash": status_hash,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+            },
+        )
+        await self.connection.execute(
+            text(
+                "INSERT INTO outbox (id, hospital_id, topic, payload) VALUES "
+                "(:id, :hospital_id, 'queue.changed', CAST(:payload AS jsonb))"
+            ),
+            {
+                "id": uuid7(),
+                "hospital_id": hospital_id,
+                "payload": json.dumps(
+                    {
+                        "op": "upsert",
+                        "visit_id": str(visit_id),
+                        "department_id": str(row_data["department_id"]),
+                    },
+                    separators=(",", ":"),
+                ),
+            },
+        )
+        return {
+            "department_id": row_data["department_id"],
+            "service_date": row_data["service_date"],
+            "token_number": number,
+            "token_label": label,
+        }
+
+    async def queued_visits(
+        self, *, hospital_id: UUID, department_id: UUID | None = None
+    ) -> list[dict[str, Any]]:
+        department_filter = "AND v.department_id = :department_id " if department_id else ""
+        query_params: dict[str, Any] = {"hospital_id": hospital_id}
+        if department_id:
+            query_params["department_id"] = department_id
+        result = await self.connection.execute(
+            text(
+                "SELECT v.id AS visit_id, v.department_id, v.status, v.urgency, v.urgency_reasons, "
+                "v.age_years, v.pregnant, v.token_label, v.token_number, v.queued_at, "
+                "v.called_at, v.consult_started_at, v.consult_ended_at, v.assigned_doctor_id "
+                "FROM visits v WHERE v.hospital_id = :hospital_id AND v.status IN "
+                "('queued', 'called', 'in_consult') "
+                + department_filter
+                + "ORDER BY v.queued_at, v.id"
+            ),
+            query_params,
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    async def queue_estimate_inputs(
+        self, *, hospital_id: UUID, department_id: UUID
+    ) -> tuple[int, list[float]]:
+        doctors = await self.connection.scalar(
+            text(
+                "SELECT count(*) FROM users WHERE hospital_id = :hospital_id AND role = 'doctor' "
+                "AND is_active = true AND department_id = :department_id"
+            ),
+            {"hospital_id": hospital_id, "department_id": department_id},
+        )
+        result = await self.connection.execute(
+            text(
+                "SELECT extract(epoch FROM (consult_ended_at - consult_started_at)) / 60.0 "
+                "FROM visits WHERE hospital_id = :hospital_id AND department_id = :department_id "
+                "AND status = 'done' AND consult_ended_at IS NOT NULL "
+                "AND consult_started_at IS NOT NULL ORDER BY consult_ended_at DESC LIMIT 20"
+            ),
+            {"hospital_id": hospital_id, "department_id": department_id},
+        )
+        return int(doctors or 0), [float(value) for value in result.scalars().all()]
+
+    async def visit_status_by_hash(self, status_hash: str) -> dict[str, Any] | None:
+        result = await self.connection.execute(
+            text(
+                "SELECT id AS visit_id, hospital_id, department_id, status, urgency, token_label, "
+                "service_date, queued_at FROM visits WHERE status_token_hash = :status_hash LIMIT 1"
+            ),
+            {"status_hash": status_hash},
+        )
+        row = result.mappings().first()
+        return dict(row) if row is not None else None
+
+    async def transition_visit(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        target: str,
+        actor_id: UUID,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Transition a visit and write its outbox event atomically."""
+        from app.domain.queue.state import require_transition
+
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT department_id, status, urgency, age_years, pregnant, token_label, "
+                        "queued_at FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id "
+                        "FOR UPDATE"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise LookupError("visit not found")
+        require_transition(row["status"], target)
+        timestamp_column = {
+            "called": "called_at",
+            "in_consult": "consult_started_at",
+            "done": "consult_ended_at",
+        }.get(target)
+        timestamp_sql = f", {timestamp_column} = now()" if timestamp_column else ""
+        doctor_sql = ", assigned_doctor_id = :actor_id" if target == "in_consult" else ""
+        await self.connection.execute(
+            text(
+                "UPDATE visits SET status = :target"
+                + timestamp_sql
+                + doctor_sql
+                + " WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {
+                "target": target,
+                "actor_id": actor_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+            },
+        )
+        if target in {"cancelled", "no_show", "done"}:
+            event = {
+                "op": "remove",
+                "visit_id": str(visit_id),
+                "department_id": str(row["department_id"]),
+            }
+        else:
+            event = {
+                "op": "upsert",
+                "visit_id": str(visit_id),
+                "department_id": str(row["department_id"]),
+            }
+        await self.connection.execute(
+            text(
+                "INSERT INTO outbox (id, hospital_id, topic, payload) VALUES "
+                "(:id, :hospital_id, 'queue.changed', CAST(:payload AS jsonb))"
+            ),
+            {"id": uuid7(), "hospital_id": hospital_id, "payload": json.dumps(event)},
+        )
+        return {**dict(row), "visit_id": visit_id, "status": target, "override_reason": reason}
 
 
 class CaseSheetRepository:

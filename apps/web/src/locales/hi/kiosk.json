@@ -108,5 +108,9 @@
   "summaryMedications": "दवाइयाँ",
   "summaryAllergies": "एलर्जी",
   "summaryFamilyHistory": "परिवार की स्वास्थ्य जानकारी",
-  "summaryOther": "अन्य जानकारी"
+  "summaryOther": "अन्य जानकारी",
+  "queueToken": "आपका कतार टोकन",
+  "statusLink": "कतार की स्थिति देखने के लिए स्कैन करें",
+  "printReceipt": "रसीद प्रिंट करें",
+  "statusQrLabel": "कतार स्थिति QR कोड"
 }

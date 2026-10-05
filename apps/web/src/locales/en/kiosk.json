@@ -108,5 +108,9 @@
   "summaryMedications": "Medicines",
   "summaryAllergies": "Allergies",
   "summaryFamilyHistory": "Family health information",
-  "summaryOther": "Other information"
+  "summaryOther": "Other information",
+  "queueToken": "Your queue token",
+  "statusLink": "Scan to see your queue status",
+  "printReceipt": "Print receipt",
+  "statusQrLabel": "Queue status QR code"
 }

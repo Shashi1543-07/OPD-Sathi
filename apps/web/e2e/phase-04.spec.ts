@@ -137,7 +137,16 @@ async function installApiMocks(page: Page, locale: Locale) {
     } : questionResponse() });
   });
   await page.route("**/intake/sessions/*/confirm", async (route) =>
-    route.fulfill({ json: { confirmed: true, token: "Will be assigned when queue registration is available." } }),
+    route.fulfill({
+      json: {
+        confirmed: true,
+        status: "queued",
+        token: "GEN-007",
+        status_token: "S".repeat(43),
+        status_url: `/s/${"S".repeat(43)}`,
+        position: 1,
+      },
+    }),
   );
 }
 
@@ -175,5 +184,7 @@ for (const language of ["en", "hi", "mr"] as const) {
     }
     await page.getByRole("button", { name: copy.confirm }).click();
     await expect(page.getByRole("heading", { name: /Your information is ready|आपकी जानकारी|तुमची माहिती/ })).toBeVisible();
+    await expect(page.getByText("GEN-007")).toBeVisible();
+    await expect(page.locator(".token-receipt svg")).toBeVisible();
   });
 }

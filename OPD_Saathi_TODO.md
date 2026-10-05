@@ -95,17 +95,19 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 
 ## Phase 5 — Queue, token, and live position
 
-- [ ] 5.1 Implement and test queue scoring, including worked example C, B, D, A.
-- [ ] 5.2 Allocate unique daily department tokens, including database fallback when Redis is down.
-- [ ] 5.3 Add atomic Redis queue operations and live delta publishing.
-- [ ] 5.4 Add idempotent outbox relay and Redis outage recovery.
-- [ ] 5.5 Implement queue rebuild from the database.
-- [ ] 5.6 Replace stub confirmation with token/queue creation and temporary routing defaults.
-- [ ] 5.7 Add patient status, SSE, ETA, micro-cache, and visit state machine.
-- [ ] 5.8 Add staff queue actions and authenticated WebSocket snapshot/delta protocol.
-- [ ] 5.9 Wire token/QR/print slip, patient live status, and staff queue UI.
-- [ ] 5.10 Add synthetic queue simulator.
+- [x] 5.1 Implement and test queue scoring, including worked example C, B, D, A.
+- [x] 5.2 Allocate unique daily department tokens, including database fallback when Redis is down.
+- [x] 5.3 Add atomic Redis queue operations and live delta publishing.
+- [x] 5.4 Add idempotent outbox relay and Redis outage recovery.
+- [x] 5.5 Implement queue rebuild from the database.
+- [x] 5.6 Replace stub confirmation with token/queue creation and temporary routing defaults.
+- [x] 5.7 Add patient status, SSE, ETA, micro-cache, and visit state machine.
+- [x] 5.8 Add staff queue actions and authenticated WebSocket snapshot/delta protocol.
+- [x] 5.9 Wire token/QR/print slip, patient live status, and staff queue UI.
+- [x] 5.10 Add synthetic queue simulator.
 - [ ] Gate: scoring/order, starvation, concurrency, rebuild/recovery, and queue latency/realtime thresholds pass; queue domain coverage meets threshold.
+
+Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](docs/phase-reports/phase-05.md). Its live-service concurrency, rebuild/recovery, and performance measurements still need configured PostgreSQL and Redis.
 
 ## Phase 6 — Red flags and department routing
 

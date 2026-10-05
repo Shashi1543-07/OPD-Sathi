@@ -437,6 +437,7 @@ async def _seed_bulk(*, visits: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("queue-rebuild", help="Rebuild Redis queues from PostgreSQL")
     admin = commands.add_parser("create-admin", help="Create an initial hospital administrator")
     admin.add_argument("--hospital-id", type=UUID)
     admin.add_argument("--hospital-name")
@@ -450,6 +451,27 @@ def main() -> None:
     bulk = commands.add_parser("seed-bulk", help="Insert deterministic synthetic visits")
     bulk.add_argument("--visits", type=int, default=100_000)
     args = parser.parse_args()
+    if args.command == "queue-rebuild":
+        import redis.asyncio as redis
+
+        from app.workers.main import rebuild_all
+
+        async def run_queue_rebuild() -> None:
+            settings = get_settings()
+            engine = create_async_engine(settings.worker_database_url or settings.database_url)
+            client = redis.from_url(  # type: ignore[no-untyped-call]
+                settings.redis_state_url, decode_responses=True
+            )
+            try:
+                async with engine.begin() as connection:
+                    count = await rebuild_all(connection, client, settings=settings)
+                print(f"Rebuilt Redis queue entries: {count}")
+            finally:
+                await client.aclose()
+                await engine.dispose()
+
+        asyncio.run(run_queue_rebuild())
+        return
     if args.command == "seed-demo":
         asyncio.run(_seed_demo())
         return

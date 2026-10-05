@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { DangerTile, FacesScale, VoiceOrb } from "../components/ui";
 import { intake, type CaseSheet, type ConsentCopy, type DangerTile as DangerOption, type IntakeResponse, type Question } from "../lib/intake";
 import { useLanguageStore } from "../languageStore";
+import { QRCodeSVG } from "qrcode.react";
 
 type Stage = "consent" | "identity" | "danger" | "interview" | "summary" | "done" | "help";
 
@@ -31,7 +32,7 @@ export function KioskIntake() {
   const [answer, setAnswer] = useState<string | number>("");
   const [caseSheet, setCaseSheet] = useState<CaseSheet>();
   const [readback, setReadback] = useState("");
-  const [stubToken, setStubToken] = useState("");
+  const [queueToken, setQueueToken] = useState<{ token: string; statusUrl: string }>();
 
   useEffect(() => {
     if (!session || !consent) {
@@ -205,11 +206,11 @@ export function KioskIntake() {
             <div className="kiosk-summary-changes">
               {answered.map((item) => <button className="ui-button ui-button--secondary" type="button" key={item.id} onClick={() => { setEditing(item); setAnswer(item.answer); move("interview"); }}>{t("change", { ns: "kiosk" })}: {item.prompt}</button>)}
             </div>
-            <button className="ui-button ui-button--primary ui-button--kiosk" type="button" disabled={busy} onClick={() => void run(async () => { const result = await intake.confirm(); setStubToken(result.token); intake.finish(); move("done"); })}>{t("confirmIntake", { ns: "kiosk" })}</button>
+            <button className="ui-button ui-button--primary ui-button--kiosk" type="button" disabled={busy} onClick={() => void run(async () => { const result = await intake.confirm(); setQueueToken({ token: result.token, statusUrl: result.status_url }); intake.finish(); move("done"); })}>{t("confirmIntake", { ns: "kiosk" })}</button>
           </>
         )}
 
-        {stage === "done" && <><h1>{t("doneTitle", { ns: "kiosk" })}</h1><p>{stubToken}</p><button className="ui-button ui-button--primary ui-button--kiosk" type="button" onClick={() => navigate("/kiosk", { replace: true })}>{t("restartPreview", { ns: "kiosk" })}</button></>}
+        {stage === "done" && queueToken && <div className="token-receipt"><h1>{t("doneTitle", { ns: "kiosk" })}</h1><p>{t("queueToken", { ns: "kiosk" })}</p><strong className="status-token">{queueToken.token}</strong><a href={queueToken.statusUrl}><QRCodeSVG value={new URL(queueToken.statusUrl, window.location.origin).toString()} size={180} title={t("statusQrLabel", { ns: "kiosk" })} /></a><p>{t("statusLink", { ns: "kiosk" })}</p><button className="ui-button ui-button--secondary no-print" type="button" onClick={() => window.print()}>{t("printReceipt", { ns: "kiosk" })}</button><button className="ui-button ui-button--primary ui-button--kiosk no-print" type="button" onClick={() => navigate("/kiosk", { replace: true })}>{t("restartPreview", { ns: "kiosk" })}</button></div>}
         {stage === "help" && <><h1>{t("staffMessage", { ns: "kiosk" })}</h1><button className="ui-button ui-button--primary ui-button--kiosk" type="button" onClick={() => navigate("/kiosk", { replace: true })}>{t("restartPreview", { ns: "kiosk" })}</button></>}
       </section>
     </main>

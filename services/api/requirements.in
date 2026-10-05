@@ -8,6 +8,7 @@ sqlalchemy[asyncio]
 asyncpg
 alembic
 redis
+arq
 
 # Test and development tooling
 httpx
