@@ -19,6 +19,7 @@ from starlette.responses import Response
 from app.api.v1 import admin as admin_api
 from app.api.v1 import audit as audit_api
 from app.api.v1 import auth as auth_api
+from app.api.v1 import intake as intake_api
 from app.config import Settings, get_settings
 from app.core.auth import authentication_gate
 from app.core.errors import (
@@ -175,6 +176,7 @@ def create_app(
     app.include_router(auth_api.router)
     app.include_router(audit_api.router)
     app.include_router(admin_api.router)
+    app.include_router(intake_api.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:

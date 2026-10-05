@@ -54,7 +54,10 @@ e2e:
 eval:
 	@echo "Evaluation suites are added with their corresponding feature phases."
 
-eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live:
+eval-interview:
+	PYTHONPATH=$(API_DIR) python eval/interview/evaluate.py
+
+eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live:
 	@echo "$@ is not available until its implementation phase."
 
 prompts-audio simulate-queue load chaos scan backup restore screenshots:

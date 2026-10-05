@@ -1,0 +1,16 @@
+{
+  "review_status": "approved",
+  "questions": [
+    {
+      "id": "fever",
+      "module": "fever",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "What changes have you noticed in how you feel?",
+        "hi": "आपने अपनी तबीयत में क्या बदलाव महसूस किए हैं?",
+        "mr": "तुमच्या तब्येतीत कोणते बदल जाणवले आहेत?"
+      }
+    }
+  ]
+}

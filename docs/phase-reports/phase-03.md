@@ -34,4 +34,4 @@ Follow the [Phase 3 manual demo steps](../phase-plans/phase-03.md#manual-demo-st
 
 ## Remaining handoff
 
-Review the GitHub CI result for `phase-03-data-model`. This local report does not imply that the remote run has passed. Phase 4 remains unstarted and requires human approval after Phase 3 review.
+At the time this report was written, Phase 4 had not started. Phase 4 implementation has since been added locally; see its [plan](../phase-plans/phase-04.md) and [report](phase-04.md). This update does not change the pending Phase 3 remote CI/merge status recorded above.

@@ -615,3 +615,22 @@ export function ReadAloudStubNote() {
     </span>
   );
 }
+
+export function VoiceOrb({
+  disabled = true,
+}: {
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation("kiosk");
+  return (
+    <button
+      className="ui-voice-orb"
+      type="button"
+      disabled={disabled}
+      aria-label={t("voiceComing")}
+      title={t("voiceComing")}
+    >
+      <Headphones aria-hidden="true" />
+    </button>
+  );
+}

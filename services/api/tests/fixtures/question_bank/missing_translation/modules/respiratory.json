@@ -1,0 +1,16 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "respiratory",
+      "module": "respiratory",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "What changes have you noticed in your breathing or cough?",
+        "hi": "साँस लेने या खाँसी में आपने क्या बदलाव देखा है?",
+        "mr": "श्वास घेण्यात किंवा खोकल्यात तुम्हाला काय बदल जाणवला आहे?"
+      }
+    }
+  ]
+}

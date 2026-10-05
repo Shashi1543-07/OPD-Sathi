@@ -1,6 +1,6 @@
 # Phase 3 plan: data model, seeds, and pagination
 
-**Status: Implementation complete locally on `phase-03-data-model`; GitHub CI and merge are pending.** Phase 3 follows the [build playbook](../../AGENT_PLAYBOOK.md#phase-3--data-model-seeds-and-pagination-f5-schema). Phase 4 has not started.
+**Status: Implementation complete locally on `phase-03-data-model`; GitHub CI and merge were pending at this handoff.** Phase 3 follows the [build playbook](../../AGENT_PLAYBOOK.md#phase-3--data-model-seeds-and-pagination-f5-schema). Phase 4 implementation has since been added; see the [Phase 4 plan](phase-04.md) and [report](../phase-reports/phase-04.md).
 
 ## Scope delivered
 
@@ -29,4 +29,4 @@ Use synthetic data only. Do not use this seed or these credentials with real pat
 
 ## Handoff
 
-Review the GitHub workflow checks for the Phase 3 branch. After those checks pass and the phase is approved, the next planned work is Phase 4: deterministic interview and case-sheet flows. No Phase 4 code has been started.
+Review the GitHub workflow checks for the Phase 3 branch. Phase 4 work is now present locally and its evidence is recorded in the Phase 4 report; Phase 4 approval is still required before Phase 5.
