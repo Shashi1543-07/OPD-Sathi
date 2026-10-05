@@ -28,9 +28,11 @@ from app.db.session import set_hospital_scope, set_secret_lookup_scope
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import average_consult_minutes, estimate_wait, queue_score
 from app.domain.queue.tokens import status_token_digest
+from app.domain.redflags.engine import RULES
 
 router = APIRouter(tags=["queue"])
 STAFF_ROLES = ("nurse", "doctor", "admin")
+RED_FLAG_REASONS = {rule.id: rule.reason_en for rule in RULES}
 
 
 class TransitionPayload(BaseModel):
@@ -40,6 +42,10 @@ class TransitionPayload(BaseModel):
 class OverridePayload(TransitionPayload):
     reason: str = Field(min_length=5, max_length=500)
     urgency: Literal["routine", "priority", "urgent"] | None = None
+
+
+class RouteConfirmPayload(TransitionPayload):
+    reason: str = Field(min_length=5, max_length=500)
 
 
 def _problem(status: int, code: str, title: str, detail: str) -> ApiProblemError:
@@ -261,6 +267,7 @@ async def staff_queue(
                     "age_years": row["age_years"],
                     "position": index,
                     "queued_at": row["queued_at"].isoformat() if row["queued_at"] else None,
+                    "routing": (row.get("case_sheet_data") or {}).get("routing"),
                 }
             )
     offset = (
@@ -275,6 +282,93 @@ async def staff_queue(
         else None
     )
     return {"items": visible, "next_cursor": next_cursor, "limit": limit}
+
+
+@router.post("/queue/{visit_id}/routing/confirm")
+async def confirm_routing(
+    visit_id: UUID,
+    payload: RouteConfirmPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("nurse", "admin"))],
+) -> dict[str, Any]:
+    """Audit a nurse/admin decision to accept a low-confidence route suggestion."""
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        assigned_department = await connection.scalar(
+            text(
+                "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
+                "AND id = :actor_id AND is_active = true"
+            ),
+            {"hospital_id": hospital_id, "actor_id": actor_id},
+        )
+        if principal["role"] != "admin" and assigned_department is None:
+            raise _problem(
+                403, "FORBIDDEN", "Permission denied", "No staff department is assigned."
+            )
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT c.data, v.department_id FROM case_sheets c JOIN visits v "
+                        "ON v.hospital_id = c.hospital_id AND v.id = c.visit_id "
+                        "WHERE c.hospital_id = :hospital_id AND c.visit_id = :visit_id "
+                        "AND (CAST(:department_id AS uuid) IS NULL OR "
+                        "v.department_id = CAST(:department_id AS uuid)) "
+                        "AND v.status IN ('queued', 'called', 'in_consult') FOR UPDATE OF c"
+                    ),
+                    {
+                        "hospital_id": hospital_id,
+                        "visit_id": visit_id,
+                        "department_id": assigned_department
+                        if principal["role"] != "admin"
+                        else None,
+                    },
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise _problem(
+                404, "ROUTE_UNAVAILABLE", "Route unavailable", "This route is unavailable."
+            )
+        data = row["data"]
+        routing = data.get("routing", {})
+        if not routing.get("needs_nurse_confirmation"):
+            raise _problem(
+                409,
+                "ROUTE_ALREADY_CONFIRMED",
+                "Route already confirmed",
+                "This route no longer needs confirmation.",
+            )
+        routing["needs_nurse_confirmation"] = False
+        await connection.execute(
+            text(
+                "UPDATE case_sheets SET data = CAST(:data AS jsonb), version = version + 1, "
+                "last_edited_by = :actor_id WHERE hospital_id = :hospital_id "
+                "AND visit_id = :visit_id"
+            ),
+            {
+                "data": json.dumps(data, separators=(",", ":")),
+                "actor_id": actor_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+            },
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="routing.confirmed",
+            resource_type="visit",
+            resource_id=visit_id,
+            meta={"reason": payload.reason, "department_code": routing.get("department_code")},
+        )
+    return {"visit_id": str(visit_id), "routing": routing, "confirmed": True}
 
 
 @router.post("/queue/call-next")
@@ -429,6 +523,141 @@ async def cancel_visit(
     return await _change_status(request, visit_id, principal, "cancelled")
 
 
+@router.get("/alerts")
+async def open_alerts(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+    acknowledged: bool = False,
+    department_id: UUID | None = None,
+) -> dict[str, Any]:
+    """List red-flag events for the authenticated staff member's hospital."""
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        assigned_department = await connection.scalar(
+            text(
+                "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
+                "AND id = :actor_id AND is_active = true"
+            ),
+            {"hospital_id": hospital_id, "actor_id": actor_id},
+        )
+        if principal["role"] != "admin" and assigned_department is None:
+            raise _problem(
+                403, "FORBIDDEN", "Permission denied", "No staff department is assigned."
+            )
+        if principal["role"] != "admin" and assigned_department is not None:
+            if department_id is not None and department_id != assigned_department:
+                raise _problem(
+                    403, "FORBIDDEN", "Permission denied", "This department is unavailable."
+                )
+            department_id = assigned_department
+        result = await connection.execute(
+            text(
+                "SELECT e.id, e.visit_id, e.rule_id, e.level, e.evidence, e.created_at, "
+                "v.department_id, v.token_label, e.acknowledged_at "
+                "FROM red_flag_events e JOIN visits v ON v.hospital_id = e.hospital_id "
+                "AND v.id = e.visit_id WHERE e.hospital_id = :hospital_id "
+                "AND (e.source = 'rule' OR e.rule_id = 'RF_DS_TILE') "
+                "AND ((:acknowledged = true AND e.acknowledged_at IS NOT NULL) OR "
+                "(:acknowledged = false AND e.acknowledged_at IS NULL)) "
+                "AND (CAST(:department_id AS uuid) IS NULL OR "
+                "v.department_id = CAST(:department_id AS uuid)) "
+                "ORDER BY e.created_at DESC LIMIT 100"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "acknowledged": acknowledged,
+                "department_id": department_id,
+            },
+        )
+        rows = [dict(row) for row in result.mappings().all()]
+    return {
+        "items": [
+            {
+                **{
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"created_at", "acknowledged_at"}
+                },
+                "reason_en": RED_FLAG_REASONS.get(
+                    row["rule_id"], "A danger-sign help tile was selected."
+                ),
+                "created_at": row["created_at"].isoformat(),
+                "acknowledged_at": row["acknowledged_at"].isoformat()
+                if row["acknowledged_at"]
+                else None,
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.post("/alerts/{alert_id}/ack")
+async def acknowledge_alert(
+    alert_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+) -> dict[str, Any]:
+    """Acknowledge one alert and leave an audit record."""
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        assigned_department = await connection.scalar(
+            text(
+                "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
+                "AND id = :actor_id AND is_active = true"
+            ),
+            {"hospital_id": hospital_id, "actor_id": actor_id},
+        )
+        if principal["role"] != "admin" and assigned_department is None:
+            raise _problem(
+                403, "FORBIDDEN", "Permission denied", "No staff department is assigned."
+            )
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "UPDATE red_flag_events SET acknowledged_by = :actor_id, "
+                        "acknowledged_at = now() WHERE hospital_id = :hospital_id "
+                        "AND id = :alert_id AND acknowledged_at IS NULL AND EXISTS ("
+                        "SELECT 1 FROM visits v WHERE v.hospital_id = red_flag_events.hospital_id "
+                        "AND v.id = red_flag_events.visit_id AND "
+                        "(CAST(:department_id AS uuid) IS NULL OR "
+                        "v.department_id = CAST(:department_id AS uuid))) "
+                        "RETURNING id, visit_id"
+                    ),
+                    {
+                        "actor_id": actor_id,
+                        "hospital_id": hospital_id,
+                        "alert_id": alert_id,
+                        "department_id": assigned_department
+                        if principal["role"] != "admin"
+                        else None,
+                    },
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise _problem(
+                404, "ALERT_UNAVAILABLE", "Alert unavailable", "This alert is unavailable."
+            )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="red_flag.acknowledged",
+            resource_type="red_flag_event",
+            resource_id=alert_id,
+        )
+    return {"id": str(row["id"]), "acknowledged": True}
+
+
 async def _perform_override_visit(
     visit_id: UUID,
     payload: OverridePayload,
@@ -541,8 +770,12 @@ async def override_visit(
 
 
 @router.websocket("/ws/staff/queue")
-async def staff_queue_socket(websocket: WebSocket, department_id: UUID) -> None:
-    """Authenticate via the first frame, then forward atomic Redis queue deltas."""
+async def staff_queue_socket(
+    websocket: WebSocket,
+    department_id: UUID | None = None,
+    alerts_only: bool = False,
+) -> None:
+    """Authenticate via the first frame, then forward queue deltas or hospital alerts."""
     await websocket.accept()
     try:
         auth_frame = await asyncio.wait_for(websocket.receive_json(), timeout=10)
@@ -562,8 +795,24 @@ async def staff_queue_socket(websocket: WebSocket, department_id: UUID) -> None:
             await websocket.close(code=4403)
             return
         hospital_id = UUID(claims["hospital_id"])
+        actor_id = UUID(claims["sub"])
         async with websocket.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
+            assigned_department = await connection.scalar(
+                text(
+                    "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
+                    "AND id = :actor_id AND is_active = true"
+                ),
+                {"hospital_id": hospital_id, "actor_id": actor_id},
+            )
+            if claims["role"] != "admin":
+                if assigned_department is None:
+                    await websocket.close(code=4403)
+                    return
+                if department_id is not None and department_id != assigned_department:
+                    await websocket.close(code=4403)
+                    return
+                department_id = assigned_department
             rows = await QueueRepository(connection, websocket.app.state.settings).queued_visits(
                 hospital_id=hospital_id, department_id=department_id
             )
@@ -585,15 +834,29 @@ async def staff_queue_socket(websocket: WebSocket, department_id: UUID) -> None:
         ]
         client = websocket.app.state.redis_state
         queue = QueueRedis(client, app_env=websocket.app.state.settings.app_env)
-        _, channel, seq_key = queue.keys(hospital_id, department_id)
-        sequence = int(await client.get(seq_key) or 0)
-        await websocket.send_json({"type": "queue.snapshot", "seq": sequence, "items": items})
+        channel: str | None = None
+        alert_pattern: str | None = None
+        sequence = 0
+        if department_id is not None and not alerts_only:
+            _, channel, seq_key = queue.keys(hospital_id, department_id)
+            sequence = int(await client.get(seq_key) or 0)
+        if not alerts_only:
+            await websocket.send_json({"type": "queue.snapshot", "seq": sequence, "items": items})
         pubsub = client.pubsub()
-        await pubsub.subscribe(channel)
+        if alerts_only:
+            alert_pattern = f"osa:{websocket.app.state.settings.app_env}:{hospital_id}:alerts:"
+            alert_pattern += str(department_id) if department_id is not None else "*"
+            await pubsub.psubscribe(alert_pattern)
+        elif channel is not None:
+            await pubsub.subscribe(channel)
+        else:
+            alert_pattern = f"osa:{websocket.app.state.settings.app_env}:{hospital_id}:alerts:*"
+            await pubsub.psubscribe(alert_pattern)
         try:
             import time
 
             last_ping = time.monotonic()
+            last_escalation = last_ping
             while True:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
                 if message and message.get("data"):
@@ -601,6 +864,35 @@ async def staff_queue_socket(websocket: WebSocket, department_id: UUID) -> None:
                 if time.monotonic() - last_ping >= 25:
                     await websocket.send_json({"type": "ping"})
                     last_ping = time.monotonic()
+                if time.monotonic() - last_escalation >= 60:
+                    async with websocket.app.state.engine.begin() as connection:
+                        await set_hospital_scope(connection, hospital_id)
+                        overdue = await connection.execute(
+                            text(
+                                "SELECT e.id, e.visit_id, e.rule_id, e.level, e.evidence "
+                                "FROM red_flag_events e JOIN visits v "
+                                "ON v.hospital_id = e.hospital_id AND v.id = e.visit_id "
+                                "WHERE e.hospital_id = :hospital_id "
+                                "AND (CAST(:department_id AS uuid) IS NULL OR "
+                                "v.department_id = CAST(:department_id AS uuid)) "
+                                "AND (e.source = 'rule' OR e.rule_id = 'RF_DS_TILE') "
+                                "AND e.acknowledged_at IS NULL "
+                                "AND e.created_at <= now() - interval '60 seconds' "
+                                "ORDER BY e.created_at LIMIT 100"
+                            ),
+                            {"hospital_id": hospital_id, "department_id": department_id},
+                        )
+                        for alert in overdue.mappings().all():
+                            await websocket.send_json(
+                                {
+                                    "type": "alert.escalated",
+                                    **{
+                                        k: str(v) if isinstance(v, UUID) else v
+                                        for k, v in alert.items()
+                                    },
+                                }
+                            )
+                    last_escalation = time.monotonic()
                 try:
                     frame = await asyncio.wait_for(websocket.receive_json(), timeout=0.01)
                     if isinstance(frame, dict) and frame.get("type") == "pong":
@@ -608,7 +900,10 @@ async def staff_queue_socket(websocket: WebSocket, department_id: UUID) -> None:
                 except TimeoutError:
                     pass
         finally:
-            await pubsub.unsubscribe(channel)
+            if alert_pattern is not None:
+                await pubsub.punsubscribe(alert_pattern)
+            else:
+                await pubsub.unsubscribe(channel)
             await pubsub.aclose()
     except (WebSocketDisconnect, TimeoutError):
         return

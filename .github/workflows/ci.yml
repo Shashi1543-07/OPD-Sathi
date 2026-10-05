@@ -50,6 +50,8 @@ jobs:
       - run: mypy --strict services/api/app
       - run: PYTHONPATH=services/api python services/api/scripts/validate_question_bank.py
       - run: PYTHONPATH=services/api python eval/interview/evaluate.py
+      - run: make eval-redflags
+      - run: git diff --exit-code -- docs/EVALUATION.md eval/redflags/scripts.jsonl eval/routing/cases.jsonl eval/routing/evaluation.json
       - run: PYTHONPATH=services/api python services/api/scripts/write_case_sheet_schema.py --check
       - run: alembic -c services/api/alembic.ini upgrade head && alembic -c services/api/alembic.ini downgrade base && alembic -c services/api/alembic.ini upgrade head
         env:

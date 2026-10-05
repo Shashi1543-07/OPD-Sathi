@@ -14,6 +14,7 @@ from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
 from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
+from app.core.ids import uuid7
 from app.core.security import issue_access_token
 from app.db.repositories import (
     CaseSheetRepository,
@@ -36,6 +37,9 @@ from app.domain.interview.engine import (
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
 from app.domain.queue.tokens import create_status_token, status_token_digest
+from app.domain.redflags.engine import PatientFacts, RedFlag, evaluate, maximum_urgency
+from app.domain.routing.engine import Route
+from app.domain.routing.engine import route as route_department
 
 router = APIRouter(prefix="/intake", tags=["intake"])
 _SESSION_TTL_FACTOR = 60 * 60
@@ -96,6 +100,178 @@ def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
 
 def _session_key(hospital_id: UUID, visit_id: UUID) -> str:
     return f"osa:intake:{hospital_id}:{visit_id}"
+
+
+async def _evaluate_visit(
+    connection: Any,
+    *,
+    hospital_id: UUID,
+    visit_id: UUID,
+    answers: dict[str, str | int],
+    tile_ids: list[str],
+) -> tuple[list[RedFlag], Route, list[dict[str, Any]]]:
+    """Persist new rule events and monotonically raise urgency inside the visit transaction."""
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT v.age_years, v.pregnant, v.department_id, v.status, v.urgency, "
+                    "v.token_label, "
+                    "v.urgency_reasons, p.sex FROM visits v JOIN patients p "
+                    "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
+                    "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return [], route_department(""), []
+    text_answer = " ".join(str(value) for value in answers.values() if isinstance(value, str))
+    severity_value = answers.get("severity")
+    flags = evaluate(
+        text_answer,
+        facts=PatientFacts(
+            age=row["age_years"],
+            sex=row["sex"],
+            pregnant=row["pregnant"],
+            severity=severity_value if isinstance(severity_value, int) else None,
+            tile_ids=tuple(tile_ids),
+        ),
+    )
+    route_result = route_department(
+        text_answer,
+        age=row["age_years"],
+        sex=row["sex"],
+        pregnant=row["pregnant"],
+    )
+    existing = set(
+        (
+            await connection.execute(
+                text(
+                    "SELECT rule_id FROM red_flag_events WHERE hospital_id = :hospital_id "
+                    "AND visit_id = :visit_id"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id},
+            )
+        )
+        .scalars()
+        .all()
+    )
+    alerts: list[dict[str, Any]] = []
+    current_reasons = row["urgency_reasons"] or []
+    reason_ids = set(current_reasons if isinstance(current_reasons, list) else [])
+    for flag in flags:
+        reason_ids.add(flag.id)
+        if flag.id in existing:
+            continue
+        event_id = uuid7()
+        await connection.execute(
+            text(
+                "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, "
+                "evidence) VALUES (:id, :hospital_id, :visit_id, :source, :rule_id, :level, "
+                ":evidence)"
+            ),
+            {
+                "id": event_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "source": flag.source,
+                "rule_id": flag.id,
+                "level": flag.level,
+                "evidence": flag.evidence,
+            },
+        )
+        if flag.level == "urgent":
+            alerts.append(
+                {
+                    "type": "alert.urgent",
+                    "id": str(event_id),
+                    "visit_id": str(visit_id),
+                    "rule_id": flag.id,
+                    "level": flag.level,
+                    "reason_en": flag.reason_en,
+                    "evidence": flag.evidence,
+                    "token_label": row["token_label"],
+                }
+            )
+    urgency = maximum_urgency(flags)
+    urgency = max((row["urgency"], urgency), key=("routine", "priority", "urgent").index)
+    await connection.execute(
+        text(
+            "UPDATE visits SET urgency = :urgency, urgency_reasons = CAST(:reasons AS jsonb) "
+            "WHERE hospital_id = :hospital_id AND id = :visit_id"
+        ),
+        {
+            "urgency": urgency,
+            "reasons": json.dumps(sorted(reason_ids)),
+            "hospital_id": hospital_id,
+            "visit_id": visit_id,
+        },
+    )
+    if row["status"] == "queued" and urgency != row["urgency"]:
+        await connection.execute(
+            text(
+                "INSERT INTO outbox (id, hospital_id, topic, payload) VALUES "
+                "(:id, :hospital_id, 'queue.changed', CAST(:payload AS jsonb))"
+            ),
+            {
+                "id": uuid7(),
+                "hospital_id": hospital_id,
+                "payload": json.dumps(
+                    {
+                        "op": "upsert",
+                        "visit_id": str(visit_id),
+                        "department_id": str(row["department_id"]),
+                    }
+                ),
+            },
+        )
+    for alert in alerts:
+        alert["department_id"] = str(row["department_id"])
+    return flags, route_result, alerts
+
+
+def _patient_case_sheet(
+    data: dict[str, Any], flags: list[RedFlag], route_result: Route
+) -> dict[str, Any]:
+    """Attach current explainable results while excluding staff-only flag details."""
+    data["red_flags"] = [
+        {
+            "id": flag.id,
+            "level": flag.level,
+            "source": flag.source,
+            "evidence": flag.evidence,
+        }
+        for flag in flags
+        if flag.visible_to_patient
+    ]
+    data["routing"] = {
+        "department_code": route_result.department_code,
+        "confidence": route_result.confidence,
+        "reason_en": route_result.reason_en,
+        "needs_nurse_confirmation": route_result.needs_nurse_confirmation,
+    }
+    return data
+
+
+async def _publish_alerts(
+    redis: Any,
+    *,
+    app_env: str,
+    hospital_id: UUID,
+    alerts: list[dict[str, Any]],
+) -> None:
+    for alert in alerts:
+        department_id = alert.pop("department_id")
+        channel = f"osa:{app_env}:{hospital_id}:alerts:{department_id}"
+        try:
+            await redis.publish(channel, json.dumps(alert, separators=(",", ":")))
+        except RedisError:
+            # GET /alerts reads the durable event table when a transient notification is missed.
+            continue
 
 
 async def _authorized_visit(
@@ -187,14 +363,29 @@ async def _finish_interview(
     interview_state: InterviewState,
 ) -> dict[str, Any]:
     data = build_case_sheet(interview_state)
+    alerts: list[dict[str, Any]] = []
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
+        flags, route_result, alerts = await _evaluate_visit(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            answers=interview_state.answers,
+            tile_ids=list(interview_state.red_flag_ids),
+        )
+        data = _patient_case_sheet(data, flags, route_result)
         case_sheet_id = await CaseSheetRepository(connection, request.app.state.settings).save(
             hospital_id=hospital_id, visit_id=visit_id, data=data
         )
         await IntakeRepository(connection, request.app.state.settings).set_visit_status(
             hospital_id=hospital_id, visit_id=visit_id, status="awaiting_confirmation"
         )
+    await _publish_alerts(
+        request.app.state.redis_state,
+        app_env=request.app.state.settings.app_env,
+        hospital_id=hospital_id,
+        alerts=alerts,
+    )
     state_data["phase"] = "summary"
     state_data["case_sheet_id"] = str(case_sheet_id)
     key = _session_key(hospital_id, visit_id)
@@ -403,11 +594,25 @@ async def save_danger_signs(
         raise _error(
             409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
         )
+    alerts: list[dict[str, Any]] = []
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         await IntakeRepository(connection, request.app.state.settings).record_danger_tiles(
             hospital_id=hospital_id, visit_id=visit_id, tile_ids=payload.tile_ids
         )
+        _, _, alerts = await _evaluate_visit(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            answers={},
+            tile_ids=payload.tile_ids,
+        )
+    await _publish_alerts(
+        request.app.state.redis_state,
+        app_env=request.app.state.settings.app_env,
+        hospital_id=hospital_id,
+        alerts=alerts,
+    )
     state["danger_ids"] = payload.tile_ids
     interview_state = start(context["language"], red_flag_ids=tuple(payload.tile_ids))
     state["interview"] = interview_state.model_dump(mode="json")
@@ -536,6 +741,7 @@ async def submit_answer(
         except InterviewValidationError as exc:
             raise _error(422, "VALIDATION_FAILED", "Answer not accepted", str(exc)) from exc
         raw_answer = None if payload.skip or payload.answer is None else str(payload.answer)
+        alerts: list[dict[str, Any]] = []
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
             await InterviewTurnRepository(connection, request.app.state.settings).add(
@@ -546,11 +752,24 @@ async def submit_answer(
                 input_mode=payload.input_mode,
                 text_original=raw_answer,
             )
+            _, _, alerts = await _evaluate_visit(
+                connection,
+                hospital_id=hospital_id,
+                visit_id=visit_id,
+                answers=next_state.answers,
+                tile_ids=next_state.red_flag_ids,
+            )
         state["interview"] = next_state.model_dump(mode="json")
         await request.app.state.redis_state.set(
             key,
             json.dumps(state, separators=(",", ":")),
             ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+        )
+        await _publish_alerts(
+            request.app.state.redis_state,
+            app_env=request.app.state.settings.app_env,
+            hospital_id=hospital_id,
+            alerts=alerts,
         )
         return await _question_response(
             request, hospital_id=hospital_id, visit_id=visit_id, state=state
@@ -588,6 +807,7 @@ async def correct_interview_answer(
         data = build_case_sheet(updated)
     except InterviewValidationError as exc:
         raise _error(422, "VALIDATION_FAILED", "Answer not accepted", str(exc)) from exc
+    alerts: list[dict[str, Any]] = []
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         await InterviewTurnRepository(connection, request.app.state.settings).add(
@@ -598,10 +818,24 @@ async def correct_interview_answer(
             input_mode=payload.input_mode,
             text_original=str(payload.answer),
         )
+        flags, route_result, alerts = await _evaluate_visit(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            answers=updated.answers,
+            tile_ids=updated.red_flag_ids,
+        )
         if state.get("phase") == "summary":
+            data = _patient_case_sheet(data, flags, route_result)
             await CaseSheetRepository(connection, request.app.state.settings).save(
                 hospital_id=hospital_id, visit_id=visit_id, data=data
             )
+    await _publish_alerts(
+        request.app.state.redis_state,
+        app_env=request.app.state.settings.app_env,
+        hospital_id=hospital_id,
+        alerts=alerts,
+    )
     state["interview"] = updated.model_dump(mode="json")
     state["corrections"] = int(state.get("corrections", 0)) + 1
     await request.app.state.redis_state.set(
@@ -647,11 +881,61 @@ async def confirm_summary(
         hospital_id=hospital_id,
         visit_id=visit_id,
     )
+    alerts: list[dict[str, Any]] = []
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        confirmed = await CaseSheetRepository(connection, request.app.state.settings).confirm(
-            hospital_id=hospital_id, visit_id=visit_id
+        repository = CaseSheetRepository(connection, request.app.state.settings)
+        saved = await repository.get(hospital_id=hospital_id, visit_id=visit_id)
+        if saved is None:
+            raise _error(
+                409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first."
+            )
+        interview_state = InterviewState.model_validate(state["interview"])
+        flags, route_result, alerts = await _evaluate_visit(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            answers=interview_state.answers,
+            tile_ids=interview_state.red_flag_ids,
         )
+        case_data = _patient_case_sheet(saved["data"], flags, route_result)
+        if route_result.department_code != "NURSE_TRIAGE":
+            routed = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT id FROM departments WHERE hospital_id = :hospital_id "
+                            "AND code = :code AND is_active = true LIMIT 1"
+                        ),
+                        {"hospital_id": hospital_id, "code": route_result.department_code},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if routed is not None:
+                await connection.execute(
+                    text(
+                        "UPDATE visits SET department_id = :department_id "
+                        "WHERE hospital_id = :hospital_id AND id = :visit_id"
+                    ),
+                    {
+                        "department_id": routed["id"],
+                        "hospital_id": hospital_id,
+                        "visit_id": visit_id,
+                    },
+                )
+            else:
+                case_data["routing"] = {
+                    "department_code": "NURSE_TRIAGE",
+                    "confidence": 0.0,
+                    "reason_en": (
+                        "The suggested department is unavailable; nurse confirmation is required."
+                    ),
+                    "needs_nurse_confirmation": True,
+                }
+        await repository.save(hospital_id=hospital_id, visit_id=visit_id, data=case_data)
+        confirmed = await repository.confirm(hospital_id=hospital_id, visit_id=visit_id)
         if not confirmed:
             raise _error(
                 409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first."
@@ -685,6 +969,12 @@ async def confirm_summary(
             resource_type="visit",
             resource_id=visit_id,
         )
+    await _publish_alerts(
+        request.app.state.redis_state,
+        app_env=request.app.state.settings.app_env,
+        hospital_id=hospital_id,
+        alerts=alerts,
+    )
     score = queue_score(
         int(details["queued_at"].timestamp() * 1000),
         details["urgency"],

@@ -339,44 +339,6 @@ class QueueRepository:
             }
         if row_data["status"] != "awaiting_confirmation":
             raise ValueError("visit is not awaiting confirmation")
-        # Phase 5's temporary route: the Phase 6 router will replace this deterministic rule.
-        age = await self.connection.scalar(
-            text(
-                "SELECT age_years FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id"
-            ),
-            {"hospital_id": hospital_id, "visit_id": visit_id},
-        )
-        if age is not None:
-            target_code = "PAED" if age < 14 else "GENMED"
-            routed = (
-                (
-                    await self.connection.execute(
-                        text(
-                            "SELECT id, token_prefix FROM departments "
-                            "WHERE hospital_id = :hospital_id "
-                            "AND code = :code AND is_active = true LIMIT 1"
-                        ),
-                        {"hospital_id": hospital_id, "code": target_code},
-                    )
-                )
-                .mappings()
-                .first()
-            )
-            if routed is not None:
-                await self.connection.execute(
-                    text(
-                        "UPDATE visits SET department_id = :department_id "
-                        "WHERE hospital_id = :hospital_id "
-                        "AND id = :visit_id"
-                    ),
-                    {
-                        "department_id": routed["id"],
-                        "hospital_id": hospital_id,
-                        "visit_id": visit_id,
-                    },
-                )
-                row_data["department_id"] = routed["id"]
-                row_data["token_prefix"] = routed["token_prefix"]
         number = await self.allocate_daily_token_number(
             redis=redis,
             hospital_id=hospital_id,
@@ -450,6 +412,9 @@ class QueueRepository:
                 )
             ],
         )
+        case_sheets = table(
+            "case_sheets", column("hospital_id"), column("visit_id"), column("data")
+        )
         statement = (
             select(
                 visits.c.id.label("visit_id"),
@@ -466,6 +431,12 @@ class QueueRepository:
                 visits.c.consult_started_at,
                 visits.c.consult_ended_at,
                 visits.c.assigned_doctor_id,
+                case_sheets.c.data.label("case_sheet_data"),
+            )
+            .outerjoin(
+                case_sheets,
+                (case_sheets.c.hospital_id == visits.c.hospital_id)
+                & (case_sheets.c.visit_id == visits.c.id),
             )
             .where(
                 visits.c.hospital_id == hospital_id,
@@ -782,9 +753,11 @@ class IntakeRepository:
             (
                 await self.connection.execute(
                     text(
-                        "SELECT v.id, v.patient_id, v.language, v.status, "
+                        "SELECT v.id, v.patient_id, v.language, v.status, v.age_years, "
+                        "v.pregnant, p.sex, "
                         "c.granted AS consent_granted FROM visits v LEFT JOIN consents c "
                         "ON c.hospital_id = v.hospital_id AND c.visit_id = v.id "
+                        "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},

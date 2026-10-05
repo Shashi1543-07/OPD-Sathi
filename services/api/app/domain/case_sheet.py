@@ -69,6 +69,7 @@ class RedFlag(StrictModel):
     level: Literal["priority", "urgent"]
     source: Literal["tile", "rule", "llm", "nurse"]
     evidence: Text
+    reason_en: Text | None = None
 
 
 class Routing(StrictModel):

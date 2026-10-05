@@ -111,17 +111,17 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 
 ## Phase 6 — Red flags and department routing
 
-- [ ] 6.1 Implement multilingual text normalization and test Unicode/script variants.
-- [ ] 6.2 Define validated red-flag rules with required examples and draft review status.
-- [ ] 6.3 Implement deterministic rule matching, negation, conditions, and urgency ordering.
-- [ ] 6.4 Add English, Hindi, Marathi, and Hinglish starter rules.
-- [ ] 6.5 Implement explainable department routing and test cases.
-- [ ] 6.6 Integrate rule evaluation, event deduplication, queue reprioritization, and neutral patient messages.
-- [ ] 6.7 Add staff alert delivery, acknowledgement, escalation, sound toggle, and banner.
-- [ ] 6.8 Create labelled synthetic red-flag/routing evaluation datasets with fixed splits.
-- [ ] 6.9 Add evaluation commands/reports; tune on dev only and report test results.
-- [ ] 6.10 Replace routing stub and add staff override control.
-- [ ] Gate: meet red-flag recall (including 60/60 must-catch), precision, negation, routing, alert latency, privacy, examples, and coverage thresholds.
+- [x] 6.1 Implement multilingual text normalization and test Unicode/script variants.
+- [x] 6.2 Define validated red-flag rules with required examples and draft review status.
+- [x] 6.3 Implement deterministic rule matching, negation, conditions, and urgency ordering.
+- [x] 6.4 Add English, Hindi, Marathi, and Hinglish starter rules.
+- [x] 6.5 Implement explainable department routing and test cases.
+- [x] 6.6 Integrate rule evaluation, event deduplication, queue reprioritization, and neutral patient messages.
+- [x] 6.7 Add staff alert delivery, acknowledgement, escalation, sound toggle, and banner.
+- [x] 6.8 Create labelled synthetic red-flag/routing evaluation datasets with fixed splits.
+- [x] 6.9 Add evaluation commands/reports; tune on dev only and report test results.
+- [x] 6.10 Replace routing stub and add staff override control.
+- [x] Gate: test-split recall 100%, must-catch 60/60, precision 100%, negation 50/50, routing 96/96, staff alert p95 12.56 ms, red-flag/routing domain coverage 100%. See the [Phase 6 report](docs/phase-reports/phase-06.md); clinician and native-speaker sign-off remains pending.
 
 ## Phase 7 — Doctor/nurse consoles and PDF
 

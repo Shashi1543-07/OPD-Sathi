@@ -1,6 +1,6 @@
 # Phase 05 — Queue, token, and live position
 
-**Status:** Phase 5 implementation is on `phase-05-queue`. Unit, static, frontend, mocked browser, and local PostgreSQL/Redis gates pass. The live checks below use synthetic IDs and the local Compose stack. GitHub CI remains a separate merge gate. Phase 6 has not started.
+**Status:** Phase 5 was merged into `phase-01-ui-foundation` in PR #3. This report records the Phase 5 implementation and local synthetic checks as they were run; Phase 6 is tracked separately in [phase-06.md](phase-06.md).
 
 ## 1. In plain words
 
@@ -73,4 +73,4 @@ Follow the [Phase 5 manual plan](../phase-plans/phase-05.md). Complete one synth
 
 ## 8. Next phase preview
 
-Phase 6 adds evaluated red-flag matching and reviewed department-routing behavior. Phase 5 local implementation and live-service gates are complete; merge remains gated on successful GitHub CI.
+Phase 6 adds synthetic-evaluated red-flag matching and department routing. Clinical and native-speaker review remains required before real-patient use.

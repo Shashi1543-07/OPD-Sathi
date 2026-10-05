@@ -57,8 +57,19 @@ eval:
 eval-interview:
 	PYTHONPATH=$(API_DIR) python eval/interview/evaluate.py
 
-eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live:
+eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live:
 	@echo "$@ is not available until its implementation phase."
+
+eval-redflags:
+	PYTHONPATH=$(API_DIR) $(PYTHON) services/api/scripts/validate_redflag_rules.py
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/redflags/generate_dataset.py
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/routing/generate_dataset.py
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/routing/evaluate.py
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/redflags/evaluate.py
+
+eval-routing:
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/routing/generate_dataset.py
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/routing/evaluate.py
 
 prompts-audio load chaos scan backup restore screenshots:
 	@echo "$@ is added in a later implementation phase."

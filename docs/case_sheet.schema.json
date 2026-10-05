@@ -278,6 +278,19 @@
           "maxLength": 500,
           "title": "Evidence",
           "type": "string"
+        },
+        "reason_en": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason En"
         }
       },
       "required": [

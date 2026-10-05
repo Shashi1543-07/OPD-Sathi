@@ -181,7 +181,7 @@ def test_route_matrix_denies_anonymous_and_wrong_roles():
                 yield from iter_routes(nested_router.routes)
 
     protected = [
-        (method.upper(), path)
+        (method.upper(), path, route)
         for route in iter_routes(app.routes)
         for method in route.methods
         for path in (route.path,)
@@ -195,24 +195,39 @@ def test_route_matrix_denies_anonymous_and_wrong_roles():
     }
     assert PUBLIC_ROUTES <= registered
     assert protected
-    candidate_roles = ("nurse", "patient", "kiosk")
-    role_tokens = [
-        issue_access_token(subject=uuid4(), role=role, hospital_id=uuid4(), settings=settings)
-        for role in candidate_roles
-    ]
+    candidate_roles = ("nurse", "doctor", "admin", "patient", "kiosk")
+
+    def roles_for(route):
+        allowed = set()
+
+        def visit(dependencies):
+            for dependency in dependencies:
+                call = dependency.call
+                if getattr(call, "__name__", "") == "role_dependency" and call.__closure__:
+                    allowed.update(
+                        item
+                        for cell in call.__closure__
+                        for item in cell.cell_contents
+                        if isinstance(item, str)
+                    )
+                visit(dependency.dependencies)
+
+        visit(route.dependant.dependencies)
+        return allowed
+
     with TestClient(app) as client:
-        for method, path in protected:
+        for method, path, route in protected:
             anonymous = client.request(method, path)
             assert anonymous.status_code == 401, (method, path, anonymous.text)
-            wrong_roles = [
-                client.request(method, path, headers={"Authorization": f"Bearer {token}"})
-                for token in role_tokens
-            ]
-            assert any(response.status_code == 403 for response in wrong_roles), (
-                method,
-                path,
-                [response.status_code for response in wrong_roles],
+            allowed = roles_for(route)
+            wrong_role = next((role for role in candidate_roles if role not in allowed), None)
+            if wrong_role is None:
+                continue
+            token = issue_access_token(
+                subject=uuid4(), role=wrong_role, hospital_id=uuid4(), settings=settings
             )
+            response = client.request(method, path, headers={"Authorization": f"Bearer {token}"})
+            assert response.status_code == 403, (method, path, response.text)
 
 
 def test_readiness_reports_healthy_dependencies():

@@ -1,0 +1,185 @@
+- id: RF_DS_TILE
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Patient selected a danger-sign help tile.
+  conditions:
+    tile_any: [DS_CHEST, DS_BREATH, DS_BLEED, DS_FIT, DS_INJURY, DS_PREG, DS_STROKE, DS_POISON]
+- id: RF_CHEST_PAIN_ASSOC
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Chest discomfort with another concerning symptom was reported.
+  all_groups:
+    - any:
+        en: [chest pain, chest pressure, chest tightness]
+        hi: [सीने में दर्द, छाती में दर्द, सीने में जकड़न]
+        mr: [छातीत दुखणे, छातीत वेदना, छातीत दडपण]
+        hinglish: [seene mein dard, chhati me dard, chest me dard]
+    - any:
+        en: [sweating, breathless, shortness of breath, left arm pain, jaw pain, nausea, faint]
+        hi: [पसीना, सांस फूलना, सांस लेने में तकलीफ, बांह में दर्द, जबड़े में दर्द, उल्टी जैसा, बेहोश]
+        mr: [घाम, दम लागणे, श्वास घेण्यास त्रास, हात दुखणे, जबडा दुखणे, मळमळ, चक्कर]
+        hinglish: [pasina, saans phoolna, saans lene me dikkat, baaye haath dard, jabde me dard, ulti jaisa, behosh]
+- id: RF_CHEST_PAIN
+  level: priority
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Chest pain or pressure was reported.
+  all_groups:
+    - any:
+        en: [chest pain, chest pressure, chest tightness]
+        hi: [सीने में दर्द, छाती में दर्द, सीने में जकड़न]
+        mr: [छातीत दुखणे, छातीत वेदना, छातीत दडपण]
+        hinglish: [seene mein dard, chhati me dard, chest me dard]
+- id: RF_BREATH_SEVERE
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Severe difficulty breathing was reported.
+  all_groups:
+    - any:
+        en: [cannot breathe, cannot speak full sentences, severe breathlessness, blue lips]
+        hi: [सांस नहीं ले पा रहा, बोल नहीं पा रहा, बहुत सांस फूलना, होंठ नीले]
+        mr: [श्वास घेता येत नाही, बोलता येत नाही, खूप दम लागतो, ओठ निळे]
+        hinglish: [saans nahi aa rahi, bol nahi pa raha, bahut saans phoolna, hoth neele]
+- id: RF_STROKE_SIGNS
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: A sudden neurological change was reported.
+  all_groups:
+    - any:
+        en: [face drooping, one sided weakness, slurred speech, sudden vision loss, sudden severe headache]
+        hi: [चेहरा टेढ़ा, एक तरफ कमजोरी, बोली लड़खड़ाना, अचानक दिखना बंद, अचानक तेज सिरदर्द]
+        mr: [चेहरा वाकडा, एका बाजूला अशक्तपणा, बोलणे अडखळणे, अचानक दिसणे बंद, अचानक तीव्र डोकेदुखी]
+        hinglish: [chehra tedha, ek taraf kamzori, bolne me dikkat, achanak dikhna band, achanak tez sir dard]
+- id: RF_BLEEDING_HEAVY
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Heavy bleeding or blood in vomit or stool was reported.
+  all_groups:
+    - any:
+        en: [heavy bleeding, bleeding heavily, vomiting blood, blood in stool, black stool, coughing blood]
+        hi: [बहुत खून बहना, खून की उल्टी, मल में खून, काला मल, खून की खांसी]
+        mr: [खूप रक्तस्राव, रक्ताची उलटी, शौचात रक्त, काळी शौच, रक्ताची खोकला]
+        hinglish: [bahut khoon behna, khoon ki ulti, stool me khoon, kala stool, khoon wali khansi]
+- id: RF_PREGNANCY_DANGER
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: A concerning symptom was reported during pregnancy.
+  conditions:
+    pregnant: true
+  all_groups:
+    - any:
+        en: [vaginal bleeding, severe abdominal pain, fits, baby not moving, reduced baby movement]
+        hi: [योनि से खून, पेट में तेज दर्द, दौरा, बच्चा नहीं हिल रहा, बच्चे की हलचल कम]
+        mr: [योनीतून रक्तस्राव, पोटात तीव्र वेदना, झटका, बाळ हलत नाही, बाळाची हालचाल कमी]
+        hinglish: [pregnancy me bleeding, pet me tez dard, fits, baby nahi hil raha, baby movement kam]
+- id: RF_CHILD_FEVER
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Fever was reported for a child under one year; staff review is needed.
+  conditions:
+    max_age: 0
+  all_groups:
+    - any:
+        en: [fever, high temperature]
+        hi: [बुखार, तेज तापमान]
+        mr: [ताप, अंग गरम]
+        hinglish: [bukhar, tez fever]
+- id: RF_CHILD_FEVER_ASSOC
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Fever with a concerning symptom was reported for a child under five; staff review is needed.
+  conditions:
+    max_age: 4
+  all_groups:
+    - any:
+        en: [fever, high temperature]
+        hi: [बुखार, तेज तापमान]
+        mr: [ताप, अंग गरम]
+        hinglish: [bukhar, tez fever]
+    - any:
+        en: [fits, seizure, not feeding, very sleepy]
+        hi: [दौरा, खाना नहीं खा रहा, बहुत सुस्त]
+        mr: [झटका, खात नाही, खूप सुस्त]
+        hinglish: [daura, khana nahi kha raha, bahut sust]
+- id: RF_SEIZURE_FAINT
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Seizure, loss of consciousness, or fainting was reported.
+  all_groups:
+    - any:
+        en: [seizure, fits, unconscious, fainted, passed out]
+        hi: [दौरा, बेहोश, होश खोना]
+        mr: [झटका, बेशुद्ध, शुद्ध हरपली]
+        hinglish: [daura, behosh, hosh kho diya, chakkar se gir gaya]
+- id: RF_SELF_HARM
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: A statement about self-harm needs private staff follow-up.
+  visible_to_patient: false
+  all_groups:
+    - any:
+        en: [want to die, kill myself, harm myself, self harm, suicidal thoughts, thoughts of suicide]
+        hi: [मर जाना चाहता, खुद को मारना, खुद को नुकसान, आत्महत्या के विचार]
+        mr: [मरावेसे वाटते, स्वतःला मारणे, स्वतःला इजा, आत्महत्येचे विचार]
+        hinglish: [mar jana chahta, khud ko marna, khud ko nuksan, suicide ke vichar]
+- id: RF_TRAUMA_MAJOR
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: A serious injury or head injury symptom was reported.
+  all_groups:
+    - any:
+        en: [road accident, fell from height, head injury with vomiting, deep wound, major accident]
+        hi: [सड़क दुर्घटना, ऊंचाई से गिरा, सिर की चोट और उल्टी, गहरा घाव]
+        mr: [रस्ते अपघात, उंचावरून पडले, डोक्याला मार आणि उलटी, खोल जखम]
+        hinglish: [road accident, unchai se gira, sar ki chot aur ulti, gehra ghaav]
+- id: RF_ALLERGY_SEVERE
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Swelling or hives with breathing difficulty was reported.
+  all_groups:
+    - any:
+        en: [throat swelling and breathing trouble, face swelling and breathless, hives with breathing trouble]
+        hi: [गले में सूजन और सांस की तकलीफ, चेहरे की सूजन और सांस फूलना, दाने और सांस की तकलीफ]
+        mr: [घशाला सूज आणि श्वासाचा त्रास, चेहऱ्याला सूज आणि दम, पुरळ आणि श्वासाचा त्रास]
+        hinglish: [gale me sujan aur saans ki dikkat, chehre me sujan aur saans phoolna, dane aur saans ki dikkat]
+- id: RF_POISON_BITE
+  level: urgent
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Possible poisoning, overdose, or venomous bite was reported.
+  all_groups:
+    - any:
+        en: [poison swallowed, overdose, snake bite, scorpion sting, insect bite with swelling]
+        hi: [जहर पी लिया, दवा की ज्यादा मात्रा, सांप ने काटा, बिच्छू ने डंक मारा]
+        mr: [विष प्यायले, औषधाचा जास्त डोस, साप चावला, विंचू चावला]
+        hinglish: [zeher pi liya, dawa overdose, saanp ne kata, bichchu ne kata]
+- id: RF_SEVERE_PAIN
+  level: priority
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: The patient rated pain at 9 or 10 out of 10.
+  conditions:
+    severity_min: 9
+- id: RF_HIGH_FEVER
+  level: priority
+  status: draft_needs_clinician_review
+  reviewed_by: null
+  reason_en: Very high fever was reported; staff review is needed.
+  all_groups:
+    - any:
+        en: [fever 104, temperature 104, very high fever]
+        hi: [१०४ बुखार, बहुत तेज बुखार]
+        mr: [१०४ ताप, खूप जास्त ताप]
+        hinglish: [104 fever, bahut tez bukhar]
