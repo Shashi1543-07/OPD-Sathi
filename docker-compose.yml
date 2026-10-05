@@ -64,6 +64,8 @@ services:
       APP_ENV: ${APP_ENV:-development}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      APP_DATA_KEY: ${APP_DATA_KEY:?Set APP_DATA_KEY}
+      APP_HMAC_KEY: ${APP_HMAC_KEY:?Set APP_HMAC_KEY}
       DATABASE_URL: postgresql+asyncpg://osa_app:${OSA_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
       WORKER_DATABASE_URL: postgresql+asyncpg://osa_worker:${OSA_WORKER_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
       MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:${OSA_MIGRATOR_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
@@ -92,6 +94,8 @@ services:
     command: ["python", "-m", "app.workers.main"]
     environment:
       <<: *app_environment
+      APP_DATA_KEY: ""
+      APP_HMAC_KEY: ""
     depends_on:
       postgres:
         condition: service_healthy

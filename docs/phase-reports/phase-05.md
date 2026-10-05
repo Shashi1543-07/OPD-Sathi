@@ -1,6 +1,6 @@
 # Phase 05 — Queue, token, and live position
 
-**Status:** Phase 5 implementation is on `phase-05-queue`. Unit, static, frontend, and mocked browser gates pass locally. Live PostgreSQL/Redis concurrency, rebuild/recovery, and latency gates remain unmeasured because this checkout has no usable local database credentials or Docker access. Phase 6 has not started.
+**Status:** Phase 5 implementation is on `phase-05-queue`. Unit, static, frontend, mocked browser, and local PostgreSQL/Redis gates pass. The live checks below use synthetic IDs and the local Compose stack. GitHub CI remains a separate merge gate. Phase 6 has not started.
 
 ## 1. In plain words
 
@@ -28,16 +28,16 @@ Confirm → Token → Waiting line → Call → Consultation → Complete
 | Worked order | C, B, D, A | C, B, D, A | Pass |
 | Score/property/starvation tests | 25 table cases; 500 generated examples; starvation case | 25 table cases; 500 Hypothesis examples; 46-minute routine outranks new priority | Pass |
 | Queue-domain coverage | at least 95% | 100% (105/105 statements) | Pass |
-| Redis operation tests | Atomic enqueue, reprioritize, remove, sequence deltas | Unit tests cover each Lua wrapper; real Redis integration is pending | Partial |
-| Concurrent allocation | 1,000 unique tokens/positions | Not measured against PostgreSQL + Redis | Pending |
-| Flush and rebuild | Same database-derived order | Rebuild code and fake-connection test produce C, B, D, A; real Redis/PostgreSQL check pending | Partial |
-| Redis-outage relay | Recovery after Redis returns | Relay retry/recovery covered with a simulated Redis outage; live service recovery pending | Partial |
-| Enqueue latency | p95 ≤80 ms | Not measured | Pending |
-| Status throughput/latency | 500 req/s, p95 ≤100 ms | Not measured | Pending |
-| Realtime delivery | p95 ≤200 ms | Not measured | Pending |
+| Redis operation tests | Atomic enqueue, reprioritize, remove, sequence deltas | Real Redis integration test: **1 passed** | Pass |
+| Concurrent allocation | 1,000 unique tokens/positions | **1,000 concurrent allocation tasks; 1,000 unique token numbers and positions** on local PostgreSQL + Redis | Pass |
+| Flush and rebuild | Same database-derived order | Rebuilt **20,018** queued rows; compared all Redis queue members with database-derived scores; **0 mismatches** | Pass |
+| Redis-outage relay | Recovery after Redis returns | Worker retry against an unavailable Redis endpoint left the synthetic outbox event pending; retry through live Redis processed it; temporary event removed | Pass |
+| Enqueue latency | p95 ≤80 ms | **11.58 ms p95**, 1,000 Redis enqueues, up to 50 concurrent operations | Pass |
+| Status throughput/latency | 500 req/s, p95 ≤100 ms | **548.2 req/s**, **3.74 ms p95**, 550 successful cached status requests | Pass |
+| Realtime delivery | p95 ≤200 ms | **0.33 ms p95** over 200 live Redis status pub/sub messages | Pass |
 | Browser path | Token card, patient status, staff call | 5 Playwright checks pass: 3 language flows, patient status, staff call | Pass |
 
-The local shell could not reach WSL (`Wsl/Service/CreateInstance/E_ACCESSDENIED`), and the checked-in development database URL fails password authentication. The current environment therefore cannot supply a trustworthy live-service or performance result. No latency or live concurrency claim is inferred from unit tests.
+The local Docker image initially lacked migrations `0004` and `0005`; rebuilding it from this checkout and upgrading the database applied `0005_queue` successfully. Compose now passes the data and HMAC keys to the API while keeping them out of the worker environment. Measurements are local synthetic development results, not production capacity claims. The status test used the two-second Redis cache path, and the realtime measurement covers Redis pub/sub delivery rather than a full browser-to-browser SSE measurement.
 
 ## 4. Commands and checks
 
@@ -49,7 +49,7 @@ Final local regression evidence:
 - Frontend: **16 Vitest tests passed**; TypeScript typecheck, ESLint, and locale parity (218 keys per language across four namespaces) passed.
 - Production frontend build passed: JavaScript bundle **403.62 kB** (**128.26 kB gzip**).
 - Playwright: **5 passed** across Phase 4 English/Hindi/Marathi flows plus Phase 5 patient status and staff queue paths. Synthetic screenshots are included below.
-- Real database migration, token-allocation load, outbox-on-real-Redis recovery, 500 req/s status load, and latency benchmarks remain pending usable service credentials.
+- Real PostgreSQL migration, Redis queue integration, 1,000-token allocation, full queue rebuild order, retry/recovery, enqueue latency, 500+ req/s status load, and Redis pub/sub latency were measured against the local Compose services.
 
 ## 5. Screenshots and artifacts
 
@@ -69,8 +69,8 @@ Follow the [Phase 5 manual plan](../phase-plans/phase-05.md). Complete one synth
 
 - The department choice and danger-tile urgency are temporary Phase 5 defaults, not clinician-reviewed routing rules. Phase 6 will replace them.
 - Phase 4 questions, translations, consent, and danger-tile content remain pending clinician/native-speaker review. This remains a history-collection tool, not a diagnosis system.
-- The live PostgreSQL/Redis and performance gates are not passed or waived; they need a usable configured development stack before Phase 5 can close.
+- The Phase 5 local live-service gates pass on synthetic data. GitHub CI must still complete successfully before merging the Phase 5 branch.
 
 ## 8. Next phase preview
 
-Phase 6 adds evaluated red-flag matching and reviewed department-routing behavior. Phase 5 stays open until its live concurrency, rebuild/recovery, and performance measurements are recorded.
+Phase 6 adds evaluated red-flag matching and reviewed department-routing behavior. Phase 5 local implementation and live-service gates are complete; merge remains gated on successful GitHub CI.
