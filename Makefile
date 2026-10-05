@@ -24,8 +24,11 @@ web:
 migrate:
 	$(COMPOSE) run --rm --build api alembic -c /app/alembic.ini upgrade head
 
-seed seed-bulk demo-seed:
-	@echo "Seed operations are implemented in the data-model and demo phases."
+seed demo-seed:
+	cd $(API_DIR) && $(PYTHON) -m app.cli seed-demo
+
+seed-bulk:
+	cd $(API_DIR) && $(PYTHON) -m app.cli seed-bulk --visits 100000
 
 types:
 	$(PYTHON) $(API_DIR)/scripts/write_openapi.py

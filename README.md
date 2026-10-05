@@ -4,7 +4,7 @@ OPD Saathi is a multilingual, voice-first patient history-taking and queue syste
 
 ## Project status
 
-Phase 0 — Foundations and tooling and Phase 1 — UI foundation and language selection are complete. Phase 2 — Identity, audit, and rate limiting is implemented on `phase-02-identity-security`; its local gate evidence is in the [Phase 2 report](docs/phase-reports/phase-02.md). Target-version GitHub CI remains pending before approval to start Phase 3. See the [Phase 2 plan](docs/phase-plans/phase-02.md), [project checklist](OPD_Saathi_TODO.md), [phase reports](docs/phase-reports/), and [build playbook](AGENT_PLAYBOOK.md).
+Phase 0, Phase 1, and Phase 2 are complete. Phase 2 was merged into `phase-01-ui-foundation` as `900d0ef`; all six GitHub checks passed. Phase 3 (data model, encryption, seeds, and pagination) is implemented on `phase-03-data-model`; local backend, PostgreSQL, frontend, and coverage gates pass. GitHub CI and merge are pending. See the [Phase 3 report](docs/phase-reports/phase-03.md), [Phase 3 plan](docs/phase-plans/phase-03.md), [project checklist](OPD_Saathi_TODO.md), [phase reports](docs/phase-reports/), and [build playbook](AGENT_PLAYBOOK.md). Phase 4 has not started and remains gated on approval.
 
 ## Development setup
 
@@ -25,6 +25,10 @@ The Phase 0 setup steps were run against a clean checkout of `phase-00-foundatio
 ### Phase 2 staff and kiosk bootstrap
 
 After applying migrations, run `python -m app.cli create-admin`. The operator prompt creates a synthetic hospital and its first administrator; it prints the hospital ID needed by the `/staff` sign-in form. To add a kiosk, run `python -m app.cli create-kiosk --hospital-id <hospital-id> --label "Demo kiosk"` and use the printed one-time code once with `POST /kiosks/activate`. The app stores only digests of refresh and activation secrets. The signed-in administrator can inspect the append-only audit feed at `GET /audit`; `make demo-ratelimit` sends 11 synthetic failed login requests to demonstrate the 429 response.
+
+### Phase 3 synthetic demo data
+
+Set persistent, private `APP_DATA_KEY` and `APP_HMAC_KEY` values (base64-encoded 32-byte keys), plus `DEMO_ADMIN_PASSWORD` and `DEMO_STAFF_PASSWORD` (at least 12 characters) in the ignored `.env` before starting the API. Keep the same encryption keys across restarts; changing them makes existing encrypted patient fields unreadable. After `make migrate`, run `make seed` to provision the fictional Nagpur hospital, its departments, staff, and kiosks. The CLI prints newly created administrator/staff credentials and kiosk activation codes once; store those securely. Run `make seed-bulk` to add 100,000 reproducible synthetic visits. Never use real patient information in this demo.
 
 ## Safety and data
 

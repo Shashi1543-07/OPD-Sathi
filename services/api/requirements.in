@@ -20,3 +20,4 @@ bandit
 pip-audit
 PyJWT
 argon2-cffi
+cryptography

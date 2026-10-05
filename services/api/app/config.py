@@ -1,5 +1,7 @@
 """Typed application settings sourced from environment variables."""
 
+import base64
+import binascii
 from functools import lru_cache
 
 from pydantic import model_validator
@@ -21,6 +23,8 @@ class Settings(BaseSettings):
     jwt_issuer: str = "opd-saathi"
     jwt_audience: str = "opd-saathi-api"
     cursor_hmac_key: str = "development-only-cursor-key-change-before-deploy"
+    app_data_key: str = ""
+    app_hmac_key: str = ""
     access_token_minutes: int = 10
     refresh_token_hours: int = 8
     kiosk_token_hours: int = 12
@@ -46,6 +50,19 @@ class Settings(BaseSettings):
             raise ValueError("production JWT_SECRET must contain at least 32 random bytes")
         if self.app_env == "production" and len(self.cursor_hmac_key.encode("utf-8")) < 32:
             raise ValueError("production CURSOR_HMAC_KEY must contain at least 32 random bytes")
+        if self.app_env == "production":
+            for setting_name, encoded in (
+                ("APP_DATA_KEY", self.app_data_key),
+                ("APP_HMAC_KEY", self.app_hmac_key),
+            ):
+                try:
+                    key = base64.b64decode(encoded, validate=True)
+                except (binascii.Error, ValueError) as exc:
+                    raise ValueError(
+                        f"production {setting_name} must be base64-encoded 32-byte key material"
+                    ) from exc
+                if len(key) != 32:
+                    raise ValueError(f"production {setting_name} must decode to exactly 32 bytes")
         if not self.jwt_kid or len(self.jwt_kid) > 64:
             raise ValueError("JWT_KID must contain between 1 and 64 characters")
         if self.max_request_body_bytes < 1024:
@@ -60,6 +77,24 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.web_origin.split(",") if origin.strip()]
+
+    @property
+    def app_data_key_bytes(self) -> bytes:
+        return _decode_key(self.app_data_key, "APP_DATA_KEY")
+
+    @property
+    def app_hmac_key_bytes(self) -> bytes:
+        return _decode_key(self.app_hmac_key, "APP_HMAC_KEY")
+
+
+def _decode_key(encoded: str, name: str) -> bytes:
+    try:
+        key = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(f"{name} must be base64-encoded 32-byte key material") from exc
+    if len(key) != 32:
+        raise ValueError(f"{name} must decode to exactly 32 bytes")
+    return key
 
 
 @lru_cache

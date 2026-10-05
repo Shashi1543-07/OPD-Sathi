@@ -1,3 +1,4 @@
+import base64
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -114,6 +115,8 @@ def test_production_hsts_and_streaming_body_limit():
             app_env="production",
             jwt_secret="p" * 40,
             cursor_hmac_key="c" * 40,
+            app_data_key=base64.b64encode(b"d" * 32).decode(),
+            app_hmac_key=base64.b64encode(b"h" * 32).decode(),
             max_request_body_bytes=1024,
         )
     )
