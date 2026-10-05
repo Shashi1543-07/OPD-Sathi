@@ -709,7 +709,7 @@ async def confirm_summary(
                 "status": "queued",
             },
         )
-    except Exception:
+    except RedisError:
         # The committed outbox row is retried by the relay.
         pass
     position: int | None

@@ -133,6 +133,9 @@
 .ui-button--kiosk {
   text-decoration: none;
 }
+.kiosk-preview-link {
+  min-height: 64px;
+}
 .kiosk-footer {
   align-items: center;
   border-top: 1px solid var(--border);

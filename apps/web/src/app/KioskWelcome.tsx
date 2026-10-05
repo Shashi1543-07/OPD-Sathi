@@ -71,7 +71,7 @@ export function KioskWelcome() {
           {error && <p role="alert">{error}</p>}
           {import.meta.env.DEV && (
             <div>
-              <Link className="ui-button ui-button--secondary" to="/kiosk/preview/s2">
+              <Link className="ui-button ui-button--secondary kiosk-preview-link" to="/kiosk/preview/s2">
                 {t("startPreview", { ns: "kiosk" })}
               </Link>
               <p>{t("previewNotice", { ns: "kiosk" })}</p>

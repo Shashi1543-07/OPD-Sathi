@@ -7,7 +7,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from redis.exceptions import RedisError
-from sqlalchemy import bindparam, column, select, table, text, tuple_, update
+from sqlalchemy import bindparam, column, func, select, table, text, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import Settings
@@ -427,22 +427,55 @@ class QueueRepository:
     async def queued_visits(
         self, *, hospital_id: UUID, department_id: UUID | None = None
     ) -> list[dict[str, Any]]:
-        department_filter = "AND v.department_id = :department_id " if department_id else ""
-        query_params: dict[str, Any] = {"hospital_id": hospital_id}
-        if department_id:
-            query_params["department_id"] = department_id
-        result = await self.connection.execute(
-            text(
-                "SELECT v.id AS visit_id, v.department_id, v.status, v.urgency, v.urgency_reasons, "
-                "v.age_years, v.pregnant, v.token_label, v.token_number, v.queued_at, "
-                "v.called_at, v.consult_started_at, v.consult_ended_at, v.assigned_doctor_id "
-                "FROM visits v WHERE v.hospital_id = :hospital_id AND v.status IN "
-                "('queued', 'called', 'in_consult') "
-                + department_filter
-                + "ORDER BY v.queued_at, v.id"
-            ),
-            query_params,
+        visits = table(
+            "visits",
+            *[
+                column(name)
+                for name in (
+                    "id",
+                    "hospital_id",
+                    "department_id",
+                    "status",
+                    "urgency",
+                    "urgency_reasons",
+                    "age_years",
+                    "pregnant",
+                    "token_label",
+                    "token_number",
+                    "queued_at",
+                    "called_at",
+                    "consult_started_at",
+                    "consult_ended_at",
+                    "assigned_doctor_id",
+                )
+            ],
         )
+        statement = (
+            select(
+                visits.c.id.label("visit_id"),
+                visits.c.department_id,
+                visits.c.status,
+                visits.c.urgency,
+                visits.c.urgency_reasons,
+                visits.c.age_years,
+                visits.c.pregnant,
+                visits.c.token_label,
+                visits.c.token_number,
+                visits.c.queued_at,
+                visits.c.called_at,
+                visits.c.consult_started_at,
+                visits.c.consult_ended_at,
+                visits.c.assigned_doctor_id,
+            )
+            .where(
+                visits.c.hospital_id == hospital_id,
+                visits.c.status.in_(("queued", "called", "in_consult")),
+            )
+            .order_by(visits.c.queued_at, visits.c.id)
+        )
+        if department_id is not None:
+            statement = statement.where(visits.c.department_id == department_id)
+        result = await self.connection.execute(statement)
         return [dict(row) for row in result.mappings().all()]
 
     async def queue_estimate_inputs(
@@ -506,26 +539,30 @@ class QueueRepository:
         if row is None:
             raise LookupError("visit not found")
         require_transition(row["status"], target)
+        visits = table(
+            "visits",
+            column("hospital_id"),
+            column("id"),
+            column("status"),
+            column("called_at"),
+            column("consult_started_at"),
+            column("consult_ended_at"),
+            column("assigned_doctor_id"),
+        )
+        values: dict[str, Any] = {"status": target}
         timestamp_column = {
             "called": "called_at",
             "in_consult": "consult_started_at",
             "done": "consult_ended_at",
         }.get(target)
-        timestamp_sql = f", {timestamp_column} = now()" if timestamp_column else ""
-        doctor_sql = ", assigned_doctor_id = :actor_id" if target == "in_consult" else ""
+        if timestamp_column is not None:
+            values[timestamp_column] = func.now()
+        if target == "in_consult":
+            values["assigned_doctor_id"] = actor_id
         await self.connection.execute(
-            text(
-                "UPDATE visits SET status = :target"
-                + timestamp_sql
-                + doctor_sql
-                + " WHERE hospital_id = :hospital_id AND id = :visit_id"
-            ),
-            {
-                "target": target,
-                "actor_id": actor_id,
-                "hospital_id": hospital_id,
-                "visit_id": visit_id,
-            },
+            update(visits)
+            .where(visits.c.hospital_id == hospital_id, visits.c.id == visit_id)
+            .values(**values)
         )
         if target in {"cancelled", "no_show", "done"}:
             event = {
