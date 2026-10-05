@@ -76,6 +76,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [x] 3.9 Measure and save queue query plans at 100,000 visits; `ix_visits_queue` p95 was 1.99 ms locally.
 - [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
+
 Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-reports/phase-03.md) and [manual demo steps](docs/phase-plans/phase-03.md). Wait for review of GitHub checks and approval before starting Phase 4.
 
 ## Phase 4 — Deterministic interview and case sheet (no AI)
@@ -90,7 +91,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 4.8 Wire kiosk S2–S7 for touch-only flow and safe idle reset.
 - [ ] 4.9 Create 30 golden interviews (10 per language) and evaluation command.
 - [ ] 4.10 Add multilingual end-to-end flows, danger-tile, back/skip, and accessibility checks.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: 30/30 golden interviews; engine/property and Playwright checks pass; time/tap/input safety limits pass; interview domain coverage meets threshold.
 
 ## Phase 5 — Queue, token, and live position
 
@@ -104,7 +105,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 5.8 Add staff queue actions and authenticated WebSocket snapshot/delta protocol.
 - [ ] 5.9 Wire token/QR/print slip, patient live status, and staff queue UI.
 - [ ] 5.10 Add synthetic queue simulator.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: scoring/order, starvation, concurrency, rebuild/recovery, and queue latency/realtime thresholds pass; queue domain coverage meets threshold.
 
 ## Phase 6 — Red flags and department routing
 
@@ -118,7 +119,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 6.8 Create labelled synthetic red-flag/routing evaluation datasets with fixed splits.
 - [ ] 6.9 Add evaluation commands/reports; tune on dev only and report test results.
 - [ ] 6.10 Replace routing stub and add staff override control.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: meet red-flag recall (including 60/60 must-catch), precision, negation, routing, alert latency, privacy, examples, and coverage thresholds.
 
 ## Phase 7 — Doctor/nurse consoles and PDF
 
@@ -131,7 +132,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 7.7 Add audited multilingual PDF export and text-content tests.
 - [ ] 7.8 Complete loading/empty/error states and print styles.
 - [ ] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: complete role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage thresholds.
 
 ## Phase 8 — Voice input
 
@@ -144,7 +145,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 8.7 Fall back to touch/typing within three seconds on provider failure.
 - [ ] 8.8 Add consent-based evaluation plan/audio (ignored and deleted after use) plus Mock CI evaluation.
 - [ ] 8.9 Add protocol/provider/Playwright tests.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: fallback and protocol tests pass; report live WER/keyword/latency numbers if provider key is available; confirm no audio stored by default.
 
 ## Phase 9 — AI layer: smart questions, extraction, second opinion
 
@@ -160,7 +161,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 9.10 Add generic-only cache, per-hospital enable flag, token limits, and metrics.
 - [ ] 9.11 Create extraction/adversarial datasets and mock/live evaluation commands.
 - [ ] 9.12 Show source/confidence on staff sheets; avoid AI-specific patient UI.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: meet extraction F1, hallucination, 0/100 safety leaks, red-flag/routing, latency/fallback, and PII thresholds.
 
 ## Phase 10 — Read-back, TTS, and patient confirmation
 
@@ -171,7 +172,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 10.5 Add confirm/change flow, rerun safety/routing on edits, and nurse-help timeout.
 - [ ] 10.6 Show confirmation time and corrections in the staff view.
 - [ ] 10.7 Add multilingual golden, manifest, change/timeout/TTS/offline Playwright tests.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: all prompt audio covered, read-back ≤90 words, confirmation flows work, offline fixed audio makes zero network requests, and timestamps persist.
 
 ## Phase 11 — Notifications and analytics (optional if time is short)
 
@@ -180,7 +181,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 11.3 Add periodic analytics rollups and summary/timeseries endpoints.
 - [ ] 11.4 Build admin charts, visible time-saved assumption, and streamed CSV.
 - [ ] 11.5 Test deduplication, opt-in, retries, analytics accuracy/performance, and accessibility.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: exactly-once/opt-in/dead-letter/analytics/performance/accessibility thresholds pass.
 
 ## Phase 12 — Offline PWA and document upload (upload is stretch)
 
@@ -192,7 +193,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 12.6 (Stretch) Add secure MinIO upload with size/type validation, EXIF removal, optional malware scan.
 - [ ] 12.7 (Stretch) Extract document fields as unconfirmed, confidence-labelled suggestions.
 - [ ] 12.8 Test offline/reconnect/replay/restart and, if built, upload/extraction safety.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: exactly one visit despite duplicate/interrupted replay, offline danger message <1 second, installable PWA; stretch gates apply only if upload is built.
 
 ## Phase 13 — Hardening, performance, and scale readiness
 
@@ -207,7 +208,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 13.9 Add tracing, metrics, dashboards, and alert rules.
 - [ ] 13.10 Run backup/restore drill and document recovery targets.
 - [ ] 13.11 Add retention/anonymization/deletion, privacy/safety/scaling docs, and Kubernetes skeleton.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: zero high/critical findings, no fuzz 5xx, all security/load/soak/chaos/restore/N+1/retention thresholds pass; record machine details.
 
 ## Phase 14 — Demo polish and documentation
 
@@ -218,7 +219,7 @@ Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-
 - [ ] 14.5 Capture screenshots under `docs/screenshots/`.
 - [ ] 14.6 Run and summarize full regression and short load run.
 - [ ] 14.7 Tag/build/smoke-test release artifacts as described by the playbook.
-- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+- [ ] Gate: full regression green, demo-safe mode works offline, human completes demo twice, docs complete, and all pending clinical review items are listed.
 
 ## Demo and delivery checklist
 
