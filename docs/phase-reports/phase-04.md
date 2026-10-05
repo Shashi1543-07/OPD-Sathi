@@ -1,6 +1,6 @@
-# Phase 04 — Deterministic interview and case sheet (2026-10-06, local worktree)
+# Phase 04 — Deterministic interview and case sheet (2026-10-06, `phase-04-deterministic-interview`, code commit `ab1b023`)
 
-**Status:** Local implementation and gates pass. This worktree has uncommitted Phase 4 changes; remote CI and explicit human approval remain pending. Base commit at handoff: `3bca3c3`.
+**Status:** Local implementation and gates pass. Remote CI and explicit human approval remain pending. Base commit at handoff: `3bca3c3`.
 
 ## 1. In plain words
 
@@ -80,7 +80,7 @@ Follow the [Phase 4 manual demo](../phase-plans/phase-04.md). Use only synthetic
 - The confirmation endpoint deliberately returns a placeholder; token allocation and queue registration belong to Phase 5.
 - Consent, questions, triggers, and danger tiles are drafts pending clinician and native-speaker review. No clinical sign-off is implied by software tests.
 - The local suite emits one existing Starlette/httpx deprecation warning. GitHub CI was not run from this local worktree.
-- The worktree contains in-progress changes from the prior agent, including refreshed Phase 1 screenshots; those files were preserved. Nothing was committed to avoid bundling unrelated pre-existing changes.
+- The prior agent's Phase 4 work and the refreshed Phase 1 screenshots in its worktree were committed together as `ab1b023` on the Phase 4 branch.
 
 ## 8. Next phase preview
 
