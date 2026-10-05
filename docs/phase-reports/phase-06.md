@@ -1,4 +1,4 @@
-# Phase 06 — Red flags and department routing (6 October 2026, branch `phase-06-redflags-routing`)
+# Phase 06 — Red flags and department routing (6 October 2026, branch `phase-06-redflags-routing`, implementation commit `3e5fcf3`)
 
 **Status:** Implementation and local automated gates pass on `phase-06-redflags-routing`. Clinical and Hindi/Marathi native-speaker review remains pending before real-patient use. The implementation was started from the merged Phase 5 base; this branch has not been pushed or merged.
 
