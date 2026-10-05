@@ -4,13 +4,13 @@ OPD Saathi is a multilingual, voice-first patient history-taking and queue syste
 
 ## Project status
 
-Phase 0 — Foundations and tooling is in progress. See [the phase checklist](OPD_Saathi_TODO.md) and [the build playbook](AGENT_PLAYBOOK.md). The source playbook was provided as `OPD_Saathi_Agent_Playbook.md` and is copied to the canonical name required by the repository layout.
+Phase 0 — Foundations and tooling is awaiting confirmation of the GitHub Actions run for commit `b5cd827`. See [the phase checklist](OPD_Saathi_TODO.md), [the Phase 0 report](docs/phase-reports/phase-00.md), and [the build playbook](AGENT_PLAYBOOK.md). The source playbook was provided as `OPD_Saathi_Agent_Playbook.md` and is copied to the canonical name required by the repository layout.
 
 ## Development setup
 
 The supported local setup is Linux, macOS, or Windows with WSL2 and Docker. On Windows, use a WSL2 Linux distribution with Docker Desktop's WSL integration. Required runtimes are Python 3.12 and Node.js 24 LTS.
 
-Environment check on 5 October 2026: Windows host; Node.js 20.19.5 and npm 10.8.2 are globally available. The official Node.js 24.21.0 LTS Windows archive is also downloaded, SHA-256 verified, and unpacked under the ignored `.uvtooling` directory for this workspace. Python 3.12.15 was provisioned locally under `.uvtooling`; Docker is not installed or on PATH, and WSL2 reports access denied while enumerating distributions. Use Node.js 24 LTS for the project; set up Docker Desktop with WSL integration and an accessible WSL2 Linux distribution before attempting the full Compose gate.
+Environment check on 5 October 2026: Windows host; Ubuntu is installed as a WSL 2 distribution. From Ubuntu, Docker Desktop 4.93.0 (Engine 29.8.1, Compose 5.5.1), Python 3.12.15, Node.js 24.21.0, npm 11.19.0, and GNU Make are verified. Compose services, migrations, API readiness, and the `make test` target passed. The fresh-checkout setup took 31 seconds with the toolchain installed and dependency/image caches warm. A local development `.env` with random credentials has been created and verified ignored by Git. The remaining Phase 0 gate is confirmation of green GitHub Actions for `b5cd827`.
 
 1. Copy `.env.example` to `.env` and replace every local placeholder with private development values. Never commit `.env`.
 2. Create and activate a Python 3.12 virtual environment, then install the backend lock: `python -m venv .venv`; activate it; `pip install --require-hashes -r services/api/requirements.lock.txt`.
@@ -20,7 +20,7 @@ Environment check on 5 October 2026: Windows host; Node.js 20.19.5 and npm 10.8.
 6. Run the API with `make api` and the web app with `make web` in separate terminals.
 7. Visit `http://localhost:8000/docs`, `http://localhost:8000/readyz`, and `http://localhost:5173`.
 
-The exact setup steps will be refined and verified against a fresh clone before Phase 0 passes.
+The setup steps were run against a clean checkout of `phase-00-foundations`; see the Phase 0 report for the measured scope and results.
 
 ## Safety and data
 

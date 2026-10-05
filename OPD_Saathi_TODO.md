@@ -13,25 +13,27 @@ This is the execution checklist derived from [OPD Saathi Agent Build Playbook](O
 ## Before implementation
 
 - [x] Read Parts A–G of the playbook, then consult the relevant later sections and appendices as each phase requires.
-- [x] Confirm the development environment required by Phase 0: Windows with WSL2 or another supported OS, Docker, Node LTS, and Python 3.12. Record it in the README. (Docker is absent; WSL reports access denied; Node 24 and Python 3.12 were provisioned locally.)
+- [x] Record the development environment required by Phase 0: Windows with WSL2 or another supported OS, Docker, Node LTS, and Python 3.12. (Ubuntu WSL 2, Docker Desktop, Python 3.12.15, Node 24.21.0, and npm 11.19.0 are verified; GNU Make version still needs confirmation.)
 - [x] Review the current workspace and git state; create the playbook's required repository layout without overwriting existing work.
-- [x] Create the playbook-named phase branch. Git staging/commits are pending because `.git` is read-only in the current filesystem permissions.
+- [x] Create, commit, and push the playbook-named phase branch (`phase-00-foundations`; latest commit `b5cd827`).
 
 ## Phase 0 — Foundations and tooling
 
-- [x] 0.1 Confirm OS and installed tools; document setup (Windows host and current tool versions recorded; WSL/Docker access remains a blocker).
+- [x] 0.1 Confirm OS and installed tools; document setup (Windows host, Ubuntu WSL 2, Docker Desktop 4.93.0, Engine 29.8.1, Compose 5.5.1, Python 3.12.15, Node 24.21.0, npm 11.19.0, and GNU Make verified).
 - [x] 0.2 Create the C4 repository layout, `.gitignore`, `.editorconfig`, and placeholder-only `.env.example` (Gitleaks scan: no findings across 35 project paths).
-- [ ] 0.3 Add Docker Compose for Postgres, Redis, API, and worker with health checks and pinned image versions.
-- [x] 0.4 Build the FastAPI app/config/logging/error/security/CORS/request-ID and health/readiness foundations (five API tests pass; live `/healthz` and `/docs` respond; readiness returns 503 while dependencies are absent).
-- [ ] 0.5 Add async SQLAlchemy, Alembic, and the first reversible migration for hospitals and the limited app role.
+- [x] 0.3 Add Docker Compose for Postgres, Redis, API, and worker with health checks and pinned image versions (Postgres, Redis, API, and worker all started; Postgres and Redis healthy; API healthy).
+- [x] 0.4 Build the FastAPI app/config/logging/error/security/CORS/request-ID and health/readiness foundations (five API tests pass; live `/healthz` and `/readyz` return 200; `/readyz` returns 503 naming Redis during a Redis outage).
+- [x] 0.5 Add async SQLAlchemy, Alembic, and the first reversible migration for hospitals and the limited app role (live upgrade → downgrade → upgrade completed successfully).
 - [x] 0.6 Build the strict TypeScript React/Vite web shell, routes, i18n files, PWA setup, linting and smoke test (build/lint/typecheck pass; one Vitest smoke test passes).
-- [x] 0.7 Generate frontend API types from OpenAPI and add the CI drift check (generation works locally; CI itself remains unrun).
-- [ ] 0.8 Add every Make target listed in Appendix B.
-- [ ] 0.9 Add GitHub Actions CI for backend, frontend, security scans, and API type drift.
-- [x] 0.10 Add README quickstart, ADR 001/002, and phase report directory (Phase 0 report records the remaining gate blockers).
-- [ ] Gate: CI and `make test` green; fresh-clone setup ≤10 minutes; no secrets found; readiness degrades correctly when Redis is down.
+- [x] 0.7 Generate frontend API types from OpenAPI and add the CI drift check (generation works locally; CI run confirmation is the only outstanding check).
+- [x] 0.8 Add every Make target listed in Appendix B (34 targets are declared; `make up`, `make migrate`, and `make test` verified).
+- [x] 0.9 Add GitHub Actions CI for backend, frontend, security scans, and API type drift (workflow exists; a Windows-only dependency issue was fixed in `b5cd827`; green status for that commit is not yet confirmed).
+- [x] 0.10 Add README quickstart, ADR 001/002, and phase report directory (report records completed checks and the remaining CI confirmation).
+- [ ] Gate: confirm GitHub Actions is green for `b5cd827`. Local requirements pass: `make test`; clean-checkout setup in 31 seconds with dependencies/images cached; no secrets found; Redis outage returns 503 naming Redis and readiness recovers; Compose health and migration cycle pass.
 
 ## Phase 1 — UI foundation and language selection
+
+Planning only; implementation waits for explicit Phase 0 approval. See [the Phase 1 plan](docs/phase-plans/phase-01.md).
 
 - [ ] 1.1 Add design tokens, Tailwind theme, self-hosted fonts, and contrast checking.
 - [ ] 1.2 Build the accessible shared component set and component tests.
