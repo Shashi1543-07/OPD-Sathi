@@ -1,7 +1,7 @@
 # Phase 02 — Identity, audit, and rate limiting (2026-10-05)
 
 **Branch:** `phase-02-identity-security`
-**Commit:** pending at report creation; recorded in the follow-up documentation commit.
+**Commit:** 7f03b11 (Phase 2 implementation commit).
 
 ## 1. In plain words
 
