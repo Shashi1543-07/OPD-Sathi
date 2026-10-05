@@ -67,9 +67,10 @@ The 16-second figure is the four-seconds-per-answer script applied to the four a
 ## 5. Screenshots and artifacts
 
 - Browser scenarios: [`apps/web/e2e/phase-04.spec.ts`](../../apps/web/e2e/phase-04.spec.ts)
+- Summary preview: [`docs/screenshots/phase-04/summary-en.png`](../screenshots/phase-04/summary-en.png)
 - Golden interviews: [`eval/interview/golden/interviews.jsonl`](../../eval/interview/golden/interviews.jsonl)
 - Evaluation command: [`eval/interview/evaluate.py`](../../eval/interview/evaluate.py)
-- No Phase 4 screenshot artifact was captured in this handoff; the browser run used mocked API responses.
+- The summary image is from the Playwright path with mocked API responses; it contains synthetic example content.
 
 ## 6. How the human tests this phase
 

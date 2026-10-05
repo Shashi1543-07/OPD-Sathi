@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
@@ -166,6 +168,11 @@ for (const language of ["en", "hi", "mr"] as const) {
     await expect(page.getByRole("heading", { name: copy.summaryTitle })).toBeVisible();
     const accessibility = await new AxeBuilder({ page }).analyze();
     expect(accessibility.violations.filter((item) => ["critical", "serious"].includes(item.impact ?? ""))).toEqual([]);
+    if (language === "en") {
+      const screenshotDirectory = resolve(process.cwd(), "..", "..", "docs", "screenshots", "phase-04");
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.screenshot({ path: resolve(screenshotDirectory, "summary-en.png"), fullPage: true });
+    }
     await page.getByRole("button", { name: copy.confirm }).click();
     await expect(page.getByRole("heading", { name: /Your information is ready|आपकी जानकारी|तुमची माहिती/ })).toBeVisible();
   });
