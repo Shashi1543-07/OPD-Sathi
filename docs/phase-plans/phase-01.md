@@ -1,6 +1,6 @@
 # Phase 01 — UI foundation and language selection
 
-**Status: In progress; implementation and automated gates for Slices A–D are complete.** Phase 0 is complete (CI green on `462808d`) and implementation is on branch `phase-01-ui-foundation`. The component gallery review was approved; final human visual review of the completed screens is the remaining Phase 1 gate.
+**Status: Complete.** Slices A–D and automated gates passed on `phase-01-ui-foundation`; the human approved the completed screens and moved the project to Phase 2.
 
 ## Goal
 
@@ -88,4 +88,4 @@ Give OPD Saathi a calm, consistent visual foundation that works for first-time p
 5. Completed: implement Slice B, translations, session language state, pseudo-locale, and development component gallery; run its checks.
 6. Completed: user reviewed `/dev/components` and approved continuing with Slice C.
 7. Completed: implement Slices C and D, run the screen matrix, audit, Lighthouse checks, and save review screenshots.
-8. Current: request final visual review of the completed kiosk previews, staff login, patient status, phone layout, and 200% zoom before Phase 2.
+8. Completed: user approved Phase 1 and authorized Phase 2.

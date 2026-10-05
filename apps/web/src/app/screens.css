@@ -312,6 +312,9 @@
   grid-template-columns: 240px minmax(0, 1fr);
   min-height: 100vh;
 }
+.staff-app[data-authenticated="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
 .staff-sidebar {
   background: #0b2545;
   color: white;

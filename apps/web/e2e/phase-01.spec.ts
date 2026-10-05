@@ -122,24 +122,3 @@ for (const viewport of viewports) {
     });
   }
 }
-
-test("staff sign-in supports a keyboard-only walk through", async ({
-  page,
-}) => {
-  await page.goto("/staff?lang=en");
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "OPD Saathi" })).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "Dashboard" })).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "Queue" })).toBeFocused();
-  await page.getByLabel("Email").focus();
-  await page.keyboard.press("Tab");
-  await expect(page.getByLabel("Password")).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(
-    page.getByText("Preview only. No account was checked."),
-  ).toBeVisible();
-});

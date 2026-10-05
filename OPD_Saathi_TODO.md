@@ -33,7 +33,7 @@ This is the execution checklist derived from [OPD Saathi Agent Build Playbook](O
 
 ## Phase 1 — UI foundation and language selection
 
-Implementation and automated checks for Slices A–D are complete on `phase-01-ui-foundation`. Final human visual review of the screens is the remaining gate; see [the Phase 1 plan](docs/phase-plans/phase-01.md) and [the Phase 1 report](docs/phase-reports/phase-01.md).
+Phase 1 is complete on `phase-01-ui-foundation` with the human visual review approved. Phase 2 implementation is underway on `phase-02-identity-security`; see [the Phase 1 report](docs/phase-reports/phase-01.md) and [the Phase 2 plan](docs/phase-plans/phase-02.md).
 
 - [x] 1.1 Add design tokens, Tailwind theme, self-hosted fonts, responsive foundations, and contrast checking (12 documented text pairs pass at 4.5:1 or above).
 - [x] 1.2 Build the accessible shared component set and component tests (9 Vitest tests pass).
@@ -45,21 +45,23 @@ Implementation and automated checks for Slices A–D are complete on `phase-01-u
 - [x] 1.8 Precache app shell and fonts only.
 - [x] 1.9 Add Playwright screenshots, axe, tap-target, pseudo-locale, and keyboard checks (94 passed; 81 screenshots saved).
 - [x] 1.10 Configure Lighthouse performance/accessibility/best-practices/CLS checks (6 runs passed; zero high/critical npm audit findings).
-- [ ] Gate: meet all Phase 1 contrast, accessibility, tap-target, Lighthouse, layout, locale, and bundle-size thresholds in the playbook; complete the human visual review.
+- [x] Gate: Phase 1 contrast, accessibility, tap-target, Lighthouse, layout, locale, and bundle-size thresholds pass; human visual review approved.
 
 ## Phase 2 — Identity, audit, and rate limiting
 
-- [ ] 2.1 Add user/kiosk/token/audit migrations, immutable audit permissions, and tenant RLS.
-- [ ] 2.2 Implement Argon2id and JWT security with the required attack/failure tests.
-- [ ] 2.3 Apply per-request hospital RLS context and prove tenant isolation.
-- [ ] 2.4 Implement login/refresh/logout, refresh rotation/reuse handling, and lockout.
-- [ ] 2.5 Add role/kiosk/patient auth dependencies and full route-matrix test.
-- [ ] 2.6 Add Redis sliding-window rate limiting, headers, and defined outage behavior.
-- [ ] 2.7 Implement one-time kiosk activation and kiosk JWT.
-- [ ] 2.8 Add immutable audit helper and admin audit endpoint.
-- [ ] 2.9 Wire typed frontend auth, protected routes, refresh, login, and logout flows.
-- [ ] 2.10 Finalize CSP/security headers, microphone policy, and request size limits.
-- [ ] Gate: all routes covered by auth matrix; token and tenant-isolation tests pass; audit rows cannot be edited/deleted by app role; rate limiting works; coverage/security thresholds met.
+Phase 2 implementation is complete on `phase-02-identity-security`; local gate evidence is in the [Phase 2 report](docs/phase-reports/phase-02.md). Wait for explicit approval before starting Phase 3.
+
+- [x] 2.1 Add user/kiosk/token/audit migrations, immutable audit permissions, and tenant RLS (migrations 0002–0003 applied locally; app role cannot update audit rows).
+- [x] 2.2 Implement Argon2id and JWT security with the required attack/failure tests (12 security tests pass; core security coverage 98%).
+- [x] 2.3 Apply per-request hospital RLS context and prove tenant isolation (two-tenant PostgreSQL integration test passes, including no-scope and secret-hash lookups).
+- [x] 2.4 Implement login/refresh/logout, refresh rotation/reuse handling, and lockout (PostgreSQL lifecycle tests pass).
+- [x] 2.5 Add role/kiosk/patient auth dependencies and full route-matrix test (all registered routes covered).
+- [x] 2.6 Add Redis sliding-window rate limiting, headers, and defined outage behavior (Redis Lua test, 429 headers, fail-closed and fallback tests pass).
+- [x] 2.7 Implement one-time kiosk activation and kiosk JWT (wrong and reused activation tests pass).
+- [x] 2.8 Add immutable audit helper and admin audit endpoint (app role update/delete denied; pagination and events verified).
+- [x] 2.9 Wire typed frontend auth, protected routes, refresh, login, and logout flows (16 Vitest tests; 4 Phase 2 Playwright tests pass).
+- [x] 2.10 Finalize CSP/security headers, microphone policy, and request size limits.
+- [x] Gate: route-matrix, JWT, tenant-isolation, append-only audit, rate-limit, module coverage, Bandit, web, and dependency-audit checks pass locally. Target-version GitHub CI and reversible migration job remain pending external execution.
 
 ## Phase 3 — Data model, seeds, and pagination
 

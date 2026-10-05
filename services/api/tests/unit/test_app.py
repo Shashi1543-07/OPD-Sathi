@@ -1,6 +1,10 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from app.config import Settings
+from app.core.auth import PUBLIC_ROUTES
+from app.core.security import issue_access_token
 from app.main import create_app
 
 
@@ -65,10 +69,33 @@ def test_problem_json_and_request_id():
         raise HTTPException(status_code=404, detail="Not found")
 
     with TestClient(app) as client:
-        response = client.get("/test-error", headers={"X-Request-ID": "phase0-check"})
+        token = issue_access_token(
+            subject=uuid4(), role="admin", hospital_id=uuid4(), settings=Settings()
+        )
+        response = client.get(
+            "/test-error",
+            headers={"X-Request-ID": "phase0-check", "Authorization": f"Bearer {token}"},
+        )
     assert response.status_code == 404
     assert response.headers["content-type"].startswith("application/problem+json")
     assert response.json()["request_id"] == "phase0-check"
+
+
+def test_validation_errors_do_not_echo_credentials():
+    app = create_app(Settings())
+    password = "synthetic-secret-that-must-not-appear-" + "x" * 1025
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/login",
+            json={
+                "hospital_id": str(uuid4()),
+                "email": "invalid-email",
+                "password": password,
+            },
+        )
+    assert response.status_code == 422
+    assert password not in response.text
+    assert "input" not in response.json()["errors"][0]
 
 
 def test_security_headers():
@@ -78,6 +105,104 @@ def test_security_headers():
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["referrer-policy"] == "no-referrer"
     assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["permissions-policy"] == "microphone=(self)"
+
+
+def test_production_hsts_and_streaming_body_limit():
+    app = create_app(
+        Settings(
+            app_env="production",
+            jwt_secret="p" * 40,
+            cursor_hmac_key="c" * 40,
+            max_request_body_bytes=1024,
+        )
+    )
+    with TestClient(app) as client:
+        response = client.get("/healthz")
+        oversized = client.post("/auth/login", content=b"x" * 1025)
+        openapi = client.get("/openapi.json")
+    assert response.headers["strict-transport-security"] == "max-age=63072000; includeSubDomains"
+    assert oversized.status_code == 413
+    assert oversized.json()["code"] == "REQUEST_TOO_LARGE"
+    assert openapi.status_code == 404
+
+
+def test_login_rate_limiting_fails_closed_when_redis_is_unavailable():
+    from redis.exceptions import RedisError
+
+    class UnavailableRedis(FakeRedis):
+        async def eval(self, *_args):
+            raise RedisError("redis unavailable")
+
+    app = create_app(
+        Settings(),
+        engine_factory=lambda _url: FakeEngine(),
+        redis_factory=lambda _url, **_kwargs: UnavailableRedis(),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/auth/login",
+            json={
+                "hospital_id": str(uuid4()),
+                "email": "synthetic@example.test",
+                "password": "synthetic-test-password",
+            },
+        )
+    assert response.status_code == 503
+    assert response.json()["code"] == "DEPENDENCY_UNAVAILABLE"
+
+
+def test_refresh_cookie_is_secure_outside_local_development():
+    from fastapi import Response
+
+    from app.api.v1.auth import _set_refresh_cookie
+
+    response = Response()
+    _set_refresh_cookie(response, Settings(app_env="test"), "synthetic-refresh-token")
+    cookie_header = response.headers["set-cookie"].lower()
+    assert "secure" in cookie_header
+    assert "httponly" in cookie_header
+    assert "samesite=strict" in cookie_header
+
+
+def test_route_matrix_denies_anonymous_and_wrong_roles():
+    settings = Settings()
+    app = create_app(settings)
+
+    def iter_routes(routes):
+        for route in routes:
+            if getattr(route, "methods", None):
+                yield route
+            nested_router = getattr(route, "original_router", None)
+            if nested_router is not None:
+                yield from iter_routes(nested_router.routes)
+
+    protected = [
+        (method.upper(), path)
+        for route in iter_routes(app.routes)
+        for method in route.methods
+        for path in (route.path,)
+        if method != "OPTIONS" and (method.upper(), path) not in PUBLIC_ROUTES
+    ]
+    registered = {
+        (method.upper(), route.path)
+        for route in iter_routes(app.routes)
+        for method in route.methods
+        if method != "OPTIONS"
+    }
+    assert PUBLIC_ROUTES <= registered
+    assert protected
+    admin_token = issue_access_token(
+        subject=uuid4(), role="nurse", hospital_id=uuid4(), settings=settings
+    )
+    with TestClient(app) as client:
+        for method, path in protected:
+            anonymous = client.request(method, path)
+            wrong_role = client.request(
+                method, path, headers={"Authorization": f"Bearer {admin_token}"}
+            )
+            assert anonymous.status_code == 401, (method, path, anonymous.text)
+            assert wrong_role.status_code == 403, (method, path, wrong_role.text)
 
 
 def test_readiness_reports_healthy_dependencies():

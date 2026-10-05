@@ -55,14 +55,15 @@ describe("Phase 1 preview screens", () => {
     ).toHaveLength(8);
   });
 
-  it("provides a demo-only staff login and safe submit message", async () => {
-    const user = userEvent.setup();
+  it("shows the connected staff login form", async () => {
     renderRoute("/staff", <StaffShell />);
+    expect(await screen.findByLabelText("Hospital ID")).toBeRequired();
+    expect(screen.getByLabelText("Email")).toBeRequired();
+    expect(screen.getByLabelText("Password")).toBeRequired();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
     expect(
-      screen.getByText(/do not enter a real password/i),
+      screen.getByText(/password is sent securely/i),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(screen.getByText(/no account was checked/i)).toBeInTheDocument();
   });
 
   it("shows only the fictional status token on /s/demo", () => {
