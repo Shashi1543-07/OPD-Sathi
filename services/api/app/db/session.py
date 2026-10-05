@@ -32,8 +32,8 @@ async def set_secret_lookup_scope(
     if setting not in {"app.refresh_token_hash", "app.kiosk_activation_hash"}:
         raise ValueError("unsupported secret lookup scope")
     await connection.execute(
-        text(f"SELECT set_config('{setting}', :secret_hash, true)"),
-        {"secret_hash": secret_hash},
+        text("SELECT set_config(:setting, :secret_hash, true)"),
+        {"setting": setting, "secret_hash": secret_hash},
     )
 
 
