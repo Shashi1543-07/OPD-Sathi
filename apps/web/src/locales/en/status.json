@@ -1,0 +1,10 @@
+{
+  "queueStatus": "Queue status",
+  "yourTurn": "Your turn",
+  "peopleAhead": "People ahead",
+  "statusUpdated": "Updated just now",
+  "tokenLabel": "Sample queue token",
+  "estimatedWait": "Sample estimated wait",
+  "statusUnavailable": "Demo status is unavailable",
+  "demoOnly": "Only the fictional /s/demo preview is available in this phase."
+}

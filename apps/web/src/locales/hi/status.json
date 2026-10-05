@@ -1,0 +1,10 @@
+{
+  "queueStatus": "कतार की स्थिति",
+  "yourTurn": "आपकी बारी",
+  "peopleAhead": "आगे के लोग",
+  "statusUpdated": "अभी अपडेट हुआ",
+  "tokenLabel": "नमूना कतार टोकन",
+  "estimatedWait": "नमूना अनुमानित प्रतीक्षा",
+  "statusUnavailable": "डेमो स्थिति उपलब्ध नहीं है",
+  "demoOnly": "इस चरण में केवल काल्पनिक /s/demo पूर्वावलोकन उपलब्ध है।"
+}

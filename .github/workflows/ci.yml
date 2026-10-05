@@ -59,6 +59,7 @@ jobs:
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -67,8 +68,19 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test -- --reporter=dot
+      - run: npm run e2e
       - run: npm run build
+      - run: npm run lighthouse:ci
       - run: npm run check-locales
+      - run: npm run check-contrast
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase-1-visual-quality-results
+          path: |
+            docs/screenshots/phase-01/
+            apps/web/playwright-report/
+            apps/web/.lighthouseci/
       - run: python services/api/scripts/write_openapi.py
         working-directory: .
       - run: npm run types

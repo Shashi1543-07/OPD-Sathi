@@ -1,6 +1,6 @@
 # Phase 01 — UI foundation and language selection
 
-**Status: Prepared, not started.** This is planning work only. Begin implementation on `phase-01-ui-foundation` only after the Phase 0 gate passes and the human explicitly approves Phase 0.
+**Status: In progress; implementation and automated gates for Slices A–D are complete.** Phase 0 is complete (CI green on `462808d`) and implementation is on branch `phase-01-ui-foundation`. The component gallery review was approved; final human visual review of the completed screens is the remaining Phase 1 gate.
 
 ## Goal
 
@@ -81,7 +81,11 @@ Give OPD Saathi a calm, consistent visual foundation that works for first-time p
 
 ## First implementation session after approval
 
-1. Verify a clean worktree and the Phase 0 approval; create/check out `phase-01-ui-foundation`.
-2. Re-read the detailed F1–F9 requirements and inspect the current app shell.
-3. Implement Slice A only, including contrast script and tests, then run frontend checks.
-4. Show the token/font result and report measured contrast before moving to Slice B.
+1. Completed: verify a clean worktree and Phase 0 approval; create/check out `phase-01-ui-foundation`.
+2. Completed: re-read the detailed F1–F9 requirements and inspect the current app shell.
+3. Completed: implement Slice A, including the contrast script, and run frontend checks.
+4. Completed: user visually reviewed the Slice A shell and approved moving to Slice B.
+5. Completed: implement Slice B, translations, session language state, pseudo-locale, and development component gallery; run its checks.
+6. Completed: user reviewed `/dev/components` and approved continuing with Slice C.
+7. Completed: implement Slices C and D, run the screen matrix, audit, Lighthouse checks, and save review screenshots.
+8. Current: request final visual review of the completed kiosk previews, staff login, patient status, phone layout, and 200% zoom before Phase 2.

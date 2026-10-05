@@ -1,1 +1,107 @@
-/* Design tokens are introduced in Phase 1. */
+@theme inline {
+  --color-navy-900: var(--navy-900);
+  --color-slate-600: var(--slate-600);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-tint: var(--primary-tint);
+  --color-urgent: var(--urgent);
+  --color-urgent-tint: var(--urgent-tint);
+  --color-priority: var(--priority);
+  --color-priority-tint: var(--priority-tint);
+  --color-routine: var(--routine);
+  --color-routine-tint: var(--routine-tint);
+  --color-info: var(--info);
+  --font-sans: var(--font-family-sans);
+  --radius-card: var(--radius-card-value);
+  --radius-kiosk-button: var(--radius-kiosk-button-value);
+  --shadow-card: var(--shadow-card-value);
+  --text-kiosk: var(--font-size-kiosk);
+  --text-kiosk-headline: var(--font-size-kiosk-headline);
+  --text-kiosk-subheadline: var(--font-size-kiosk-subheadline);
+  --font-weight-kiosk-button: var(--font-weight-kiosk-button-value);
+  --text-staff: var(--font-size-staff);
+  --text-staff-table: var(--font-size-staff-table);
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+  --spacing-12: var(--space-12);
+  --spacing-16: var(--space-16);
+  --breakpoint-kiosk: 80rem;
+  --breakpoint-tablet: 48rem;
+  --breakpoint-staff: 85.375rem;
+}
+
+:root {
+  color-scheme: light;
+
+  --navy-900: #0b2545;
+  --slate-600: #475569;
+  --bg: #f7fafa;
+  --surface: #ffffff;
+  --border: #d5e0e3;
+  --primary: #0f766e;
+  --primary-tint: #f0fdfa;
+  --urgent: #b91c1c;
+  --urgent-tint: #fee2e2;
+  --priority: #b45309;
+  --priority-tint: #fef3c7;
+  --routine: #15803d;
+  --routine-tint: #dcfce7;
+  --info: #1d4ed8;
+
+  /* Accessible label colors for tinted urgency surfaces. */
+  --urgent-ink: #991b1b;
+  --priority-ink: #78350f;
+  --routine-ink: #14532d;
+
+  --font-family-sans:
+    "Inter Variable", "Noto Sans Devanagari Variable", system-ui, sans-serif;
+  --font-size-kiosk: 1.25rem;
+  --font-size-kiosk-headline: 2.5rem;
+  --font-size-kiosk-subheadline: 1.875rem;
+  --font-size-kiosk-button: 1.5rem;
+  --font-weight-kiosk-button-value: 600;
+  --font-size-staff: 0.9375rem;
+  --font-size-staff-table: 0.875rem;
+  --line-height-latin: 1.5;
+  --line-height-devanagari: 1.7;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-card-value: 0.75rem;
+  --radius-kiosk-button-value: 1rem;
+  --radius-chip: 9999px;
+  --shadow-card-value:
+    0 1px 2px rgb(11 37 69 / 6%), 0 8px 24px rgb(11 37 69 / 8%);
+
+  --motion-fast: 150ms;
+  --motion-standard: 250ms;
+  --motion-ease: ease-out;
+  --focus-width: 3px;
+  --focus-gap: 2px;
+  --kiosk-target-min: 4rem;
+  --staff-target-min: 2.75rem;
+
+  font-family: var(--font-family-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  color: var(--navy-900);
+  background: var(--bg);
+}
+
+:lang(hi),
+:lang(mr) {
+  line-height: var(--line-height-devanagari);
+}

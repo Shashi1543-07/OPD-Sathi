@@ -13,9 +13,9 @@ This is the execution checklist derived from [OPD Saathi Agent Build Playbook](O
 ## Before implementation
 
 - [x] Read Parts A–G of the playbook, then consult the relevant later sections and appendices as each phase requires.
-- [x] Record the development environment required by Phase 0: Windows with WSL2 or another supported OS, Docker, Node LTS, and Python 3.12. (Ubuntu WSL 2, Docker Desktop, Python 3.12.15, Node 24.21.0, and npm 11.19.0 are verified; GNU Make version still needs confirmation.)
+- [x] Record the development environment required by Phase 0: Windows with WSL2 or another supported OS, Docker, Node LTS, and Python 3.12. (Ubuntu WSL 2, Docker Desktop, Python 3.12.15, Node 24.21.0, npm 11.19.0, and GNU Make are verified.)
 - [x] Review the current workspace and git state; create the playbook's required repository layout without overwriting existing work.
-- [x] Create, commit, and push the playbook-named phase branch (`phase-00-foundations`; latest commit `b5cd827`).
+- [x] Create, commit, and push the Phase 0 branch (`phase-00-foundations`; latest CI-green commit `462808d`).
 
 ## Phase 0 — Foundations and tooling
 
@@ -25,26 +25,26 @@ This is the execution checklist derived from [OPD Saathi Agent Build Playbook](O
 - [x] 0.4 Build the FastAPI app/config/logging/error/security/CORS/request-ID and health/readiness foundations (five API tests pass; live `/healthz` and `/readyz` return 200; `/readyz` returns 503 naming Redis during a Redis outage).
 - [x] 0.5 Add async SQLAlchemy, Alembic, and the first reversible migration for hospitals and the limited app role (live upgrade → downgrade → upgrade completed successfully).
 - [x] 0.6 Build the strict TypeScript React/Vite web shell, routes, i18n files, PWA setup, linting and smoke test (build/lint/typecheck pass; one Vitest smoke test passes).
-- [x] 0.7 Generate frontend API types from OpenAPI and add the CI drift check (generation works locally; CI run confirmation is the only outstanding check).
+- [x] 0.7 Generate frontend API types from OpenAPI and add the CI drift check (CI passed on `462808d`).
 - [x] 0.8 Add every Make target listed in Appendix B (34 targets are declared; `make up`, `make migrate`, and `make test` verified).
-- [x] 0.9 Add GitHub Actions CI for backend, frontend, security scans, and API type drift (workflow exists; a Windows-only dependency issue was fixed in `b5cd827`; green status for that commit is not yet confirmed).
-- [x] 0.10 Add README quickstart, ADR 001/002, and phase report directory (report records completed checks and the remaining CI confirmation).
-- [ ] Gate: confirm GitHub Actions is green for `b5cd827`. Local requirements pass: `make test`; clean-checkout setup in 31 seconds with dependencies/images cached; no secrets found; Redis outage returns 503 naming Redis and readiness recovers; Compose health and migration cycle pass.
+- [x] 0.9 Add GitHub Actions CI for backend, frontend, security scans, and API type drift (CI passed on `462808d`; Linux `pywin32` installation issue fixed in `b5cd827`).
+- [x] 0.10 Add README quickstart, ADR 001/002, and phase report directory.
+- [x] Gate: CI green on `462808d`; `make test`; clean-checkout setup ≤10 minutes; no secrets found; Redis outage returns 503 naming Redis and readiness recovers; Compose health and migration cycle pass.
 
 ## Phase 1 — UI foundation and language selection
 
-Planning only; implementation waits for explicit Phase 0 approval. See [the Phase 1 plan](docs/phase-plans/phase-01.md).
+Implementation and automated checks for Slices A–D are complete on `phase-01-ui-foundation`. Final human visual review of the screens is the remaining gate; see [the Phase 1 plan](docs/phase-plans/phase-01.md) and [the Phase 1 report](docs/phase-reports/phase-01.md).
 
-- [ ] 1.1 Add design tokens, Tailwind theme, self-hosted fonts, and contrast checking.
-- [ ] 1.2 Build the accessible shared component set and component tests.
-- [ ] 1.3 Add the dev component gallery with all states and languages.
-- [ ] 1.4 Add i18n namespaces, session language state, pseudo-locale, and missing-key CI check.
-- [ ] 1.5 Build the kiosk shell, idle reset, accessibility controls, and audio prompt stub.
-- [ ] 1.6 Style welcome/language screen and fake-data previews for S2–S7.
-- [ ] 1.7 Build staff shell/login preview and mock patient status page.
-- [ ] 1.8 Precache app shell and fonts only.
-- [ ] 1.9 Add Playwright screenshots, axe, tap-target, pseudo-locale, and keyboard checks.
-- [ ] 1.10 Configure Lighthouse CI.
+- [x] 1.1 Add design tokens, Tailwind theme, self-hosted fonts, responsive foundations, and contrast checking (12 documented text pairs pass at 4.5:1 or above).
+- [x] 1.2 Build the accessible shared component set and component tests (9 Vitest tests pass).
+- [x] 1.3 Add the dev component gallery with component states, all three languages, and pseudo-locale.
+- [x] 1.4 Add i18n namespaces, in-memory session language state, pseudo-locale, and missing-key checker (73 keys across four namespaces pass parity).
+- [x] 1.5 Build the kiosk shell, idle reset, accessibility controls, and audio prompt stub.
+- [x] 1.6 Style welcome/language screen and fake-data previews for S2–S7.
+- [x] 1.7 Build staff shell/login preview and mock patient status page.
+- [x] 1.8 Precache app shell and fonts only.
+- [x] 1.9 Add Playwright screenshots, axe, tap-target, pseudo-locale, and keyboard checks (94 passed; 81 screenshots saved).
+- [x] 1.10 Configure Lighthouse performance/accessibility/best-practices/CLS checks (6 runs passed; zero high/critical npm audit findings).
 - [ ] Gate: meet all Phase 1 contrast, accessibility, tap-target, Lighthouse, layout, locale, and bundle-size thresholds in the playbook; complete the human visual review.
 
 ## Phase 2 — Identity, audit, and rate limiting

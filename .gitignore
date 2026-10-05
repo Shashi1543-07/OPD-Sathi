@@ -26,6 +26,7 @@ apps/web/dist/
 apps/web/coverage/
 apps/web/playwright-report/
 apps/web/test-results/
+apps/web/.lighthouseci/
 
 # Local and generated data
 data/
