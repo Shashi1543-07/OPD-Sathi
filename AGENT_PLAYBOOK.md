@@ -1442,6 +1442,7 @@ Secrets are never committed. `.env.example` contains placeholders only. Generate
 | `REFRESH_TOKEN_HOURS` | `8` | Staff refresh token |
 | `KIOSK_TOKEN_HOURS` | `12` | Kiosk token |
 | `PATIENT_SESSION_HOURS` | `2` | Patient session token |
+| `MAX_REQUEST_BODY_BYTES` | `1048576` | Maximum bytes accepted in one HTTP request body |
 | `APP_DATA_KEY` | base64 of 32 bytes | AES-256-GCM key for fields |
 | `APP_HMAC_KEY` | base64 of 32 bytes | Phone lookup hash |
 | `CURSOR_HMAC_KEY` | base64 of 32 bytes | Signs pagination cursors |

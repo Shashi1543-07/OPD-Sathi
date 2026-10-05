@@ -18,3 +18,5 @@ ruff
 mypy
 bandit
 pip-audit
+PyJWT
+argon2-cffi

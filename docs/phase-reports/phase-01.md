@@ -4,7 +4,7 @@
 
 **Branch:** `phase-01-ui-foundation` (created from CI-green Phase 0 commit `462808d`)
 
-**Status: In progress; Slices A–D implementation and automated checks are complete.** The user reviewed the Slice A shell and the Slice B component gallery and approved continuing. Final visual sign-off for the completed kiosk, staff, and status screens remains open.
+**Status: Complete.** Slices A–D implementation and automated checks passed. The user approved the completed screens and authorized Phase 2.
 
 ## Slice A delivered
 
@@ -64,6 +64,6 @@ The user reviewed the component gallery screenshot and approved continuing with 
 - Production JS entry: 119.22 KB gzip, within the 250 KB budget.
 - The Lighthouse CI wrapper was replaced by a small runner using the current Lighthouse package after the wrapper introduced high-severity transitive advisories. The same six route/run checks and thresholds are preserved; the resulting dependency audit is clean.
 
-## Final human review requested
+## Final human review
 
-Please inspect the saved screenshots and, if useful, run the app with `npm run dev -- --host 0.0.0.0` from `apps/web`. Review `/kiosk`, `/kiosk/preview/s2` through `/s7`, `/staff`, and `/s/demo` at kiosk, tablet, and phone sizes; check text at 200% zoom. The 81 screenshots are in `docs/screenshots/phase-01/`. Hindi and Marathi copy still needs native-speaker review. Once you approve the visuals, Phase 1 can close and Phase 2 planning can begin; Phase 2 will implement identity, audit logging, tenant isolation, and rate limiting.
+The user reviewed the completed screens and approved moving to Phase 2. The 81 matrix screenshots remain available in `docs/screenshots/phase-01/`. Hindi and Marathi copy still needs native-speaker review before demo approval.

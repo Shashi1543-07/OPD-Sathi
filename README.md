@@ -4,7 +4,7 @@ OPD Saathi is a multilingual, voice-first patient history-taking and queue syste
 
 ## Project status
 
-Phase 0 — Foundations and tooling is complete. Phase 1 — UI foundation and language selection has its A–D implementation and automated checks complete on `phase-01-ui-foundation`; final human visual review remains before Phase 2. See [the phase checklist](OPD_Saathi_TODO.md), [phase reports](docs/phase-reports/), [the Phase 1 plan](docs/phase-plans/phase-01.md), and [the build playbook](AGENT_PLAYBOOK.md). The source playbook was provided as `OPD_Saathi_Agent_Playbook.md` and is copied to the canonical name required by the repository layout.
+Phase 0 — Foundations and tooling and Phase 1 — UI foundation and language selection are complete. Phase 2 — Identity, audit, and rate limiting is implemented on `phase-02-identity-security`; its local gate evidence is in the [Phase 2 report](docs/phase-reports/phase-02.md). Target-version GitHub CI remains pending before approval to start Phase 3. See the [Phase 2 plan](docs/phase-plans/phase-02.md), [project checklist](OPD_Saathi_TODO.md), [phase reports](docs/phase-reports/), and [build playbook](AGENT_PLAYBOOK.md).
 
 ## Development setup
 
@@ -21,6 +21,10 @@ Environment check on 5 October 2026: Windows host; Ubuntu is installed as a WSL 
 7. Visit `http://localhost:8000/docs`, `http://localhost:8000/readyz`, and `http://localhost:5173`.
 
 The Phase 0 setup steps were run against a clean checkout of `phase-00-foundations`; see the [Phase 0 report](docs/phase-reports/phase-00.md) for the measured scope and results.
+
+### Phase 2 staff and kiosk bootstrap
+
+After applying migrations, run `python -m app.cli create-admin`. The operator prompt creates a synthetic hospital and its first administrator; it prints the hospital ID needed by the `/staff` sign-in form. To add a kiosk, run `python -m app.cli create-kiosk --hospital-id <hospital-id> --label "Demo kiosk"` and use the printed one-time code once with `POST /kiosks/activate`. The app stores only digests of refresh and activation secrets. The signed-in administrator can inspect the append-only audit feed at `GET /audit`; `make demo-ratelimit` sends 11 synthetic failed login requests to demonstrate the 429 response.
 
 ## Safety and data
 

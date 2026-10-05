@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import redis.asyncio as redis
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,9 +16,19 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
+from app.api.v1 import audit as audit_api
+from app.api.v1 import auth as auth_api
 from app.config import Settings, get_settings
-from app.core.errors import http_exception_handler, problem, validation_exception_handler
+from app.core.auth import authentication_gate
+from app.core.errors import (
+    ApiProblemError,
+    api_problem_exception_handler,
+    http_exception_handler,
+    problem,
+    validation_exception_handler,
+)
 from app.core.logging import configure_logging
+from app.core.ratelimit import InMemorySlidingWindow
 from app.db.session import create_engine, ping_database
 
 logger = structlog.get_logger(__name__)
@@ -52,7 +62,54 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault(
             "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"
         )
+        response.headers.setdefault("Permissions-Policy", "microphone=(self)")
+        if request.app.state.settings.app_env == "production":
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+            )
         return response
+
+
+class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
+    """Reject oversized request bodies before parsing them into endpoint models."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        limit = request.app.state.settings.max_request_body_bytes
+        raw_length = request.headers.get("content-length")
+        if raw_length:
+            try:
+                if int(raw_length) > limit:
+                    return problem(
+                        request,
+                        status=413,
+                        code="REQUEST_TOO_LARGE",
+                        title="Request too large",
+                        detail="The request body exceeds the configured size limit.",
+                    )
+            except ValueError:
+                return problem(
+                    request,
+                    status=400,
+                    code="INVALID_CONTENT_LENGTH",
+                    title="Invalid request",
+                    detail="The request length is invalid.",
+                )
+        chunks: list[bytes] = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > limit:
+                return problem(
+                    request,
+                    status=413,
+                    code="REQUEST_TOO_LARGE",
+                    title="Request too large",
+                    detail="The request body exceeds the configured size limit.",
+                )
+            chunks.append(chunk)
+        request._body = b"".join(chunks)
+        request._stream_consumed = False
+        return await call_next(request)
 
 
 def create_app(
@@ -76,10 +133,18 @@ def create_app(
             await app.state.redis_state.aclose()
 
     app = FastAPI(
-        title="OPD Saathi API", version="0.1.0", docs_url=configured.docs_url, lifespan=lifespan
+        title="OPD Saathi API",
+        version="0.1.0",
+        docs_url=configured.docs_url,
+        openapi_url="/openapi.json" if configured.app_env != "production" else None,
+        lifespan=lifespan,
+        dependencies=[Depends(authentication_gate)],
     )
+    app.state.settings = configured
+    app.state.memory_limiter = InMemorySlidingWindow()
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(RequestBodyLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=configured.allowed_origins,
@@ -92,15 +157,22 @@ def create_app(
             "If-Match",
             "X-Request-ID",
         ],
-        expose_headers=["X-Request-ID", "Retry-After"],
+        expose_headers=[
+            "X-Request-ID",
+            "Retry-After",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+        ],
     )
     handler_type = Callable[[Request, Exception], Response | Awaitable[Response]]
-    app.add_exception_handler(
-        StarletteHTTPException, cast(handler_type, http_exception_handler)
-    )
+    app.add_exception_handler(StarletteHTTPException, cast(handler_type, http_exception_handler))
     app.add_exception_handler(
         RequestValidationError, cast(handler_type, validation_exception_handler)
     )
+    app.add_exception_handler(ApiProblemError, cast(handler_type, api_problem_exception_handler))
+
+    app.include_router(auth_api.router)
+    app.include_router(audit_api.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
