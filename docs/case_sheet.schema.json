@@ -1,13 +1,521 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://opd-saathi.local/schemas/case-sheet.schema.json",
-  "title": "OPD Saathi case sheet",
-  "description": "History-taking record. Not a diagnosis.",
-  "type": "object",
+  "$defs": {
+    "Duration": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "title": "Value",
+          "type": "number"
+        },
+        "unit": {
+          "enum": [
+            "minute",
+            "hour",
+            "day",
+            "week",
+            "month",
+            "year"
+          ],
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "Duration",
+      "type": "object"
+    },
+    "FieldMeta": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "patient_voice",
+            "patient_touch",
+            "patient_text",
+            "nurse",
+            "doctor",
+            "document"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source",
+        "confidence",
+        "confirmed"
+      ],
+      "title": "FieldMeta",
+      "type": "object"
+    },
+    "HPI": {
+      "additionalProperties": false,
+      "properties": {
+        "onset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Duration"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "location": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "character": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "severity_0_10": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity 0 10"
+        },
+        "aggravating": {
+          "items": {
+            "$ref": "#/$defs/TextPair"
+          },
+          "maxItems": 30,
+          "title": "Aggravating",
+          "type": "array"
+        },
+        "relieving": {
+          "items": {
+            "$ref": "#/$defs/TextPair"
+          },
+          "maxItems": 30,
+          "title": "Relieving",
+          "type": "array"
+        },
+        "radiation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "associated_symptoms": {
+          "items": {
+            "$ref": "#/$defs/TextPair"
+          },
+          "maxItems": 30,
+          "title": "Associated Symptoms",
+          "type": "array"
+        },
+        "pertinent_negatives": {
+          "items": {
+            "$ref": "#/$defs/TextPair"
+          },
+          "maxItems": 30,
+          "title": "Pertinent Negatives",
+          "type": "array"
+        }
+      },
+      "title": "HPI",
+      "type": "object"
+    },
+    "Medication": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 500,
+          "title": "Name",
+          "type": "string"
+        },
+        "dose": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dose"
+        },
+        "source": {
+          "enum": [
+            "patient_stated",
+            "document",
+            "nurse",
+            "doctor"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "Medication",
+      "type": "object"
+    },
+    "PastHistory": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "items": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "surgeries": {
+          "items": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Surgeries",
+          "type": "array"
+        }
+      },
+      "title": "PastHistory",
+      "type": "object"
+    },
+    "RedFlag": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Z0-9_]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "priority",
+            "urgent"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "tile",
+            "rule",
+            "llm",
+            "nurse"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "evidence": {
+          "maxLength": 500,
+          "title": "Evidence",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "level",
+        "source",
+        "evidence"
+      ],
+      "title": "RedFlag",
+      "type": "object"
+    },
+    "Routing": {
+      "additionalProperties": false,
+      "properties": {
+        "department_code": {
+          "maxLength": 32,
+          "minLength": 2,
+          "pattern": "^[A-Z0-9_]+$",
+          "title": "Department Code",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "reason_en": {
+          "maxLength": 500,
+          "title": "Reason En",
+          "type": "string"
+        },
+        "needs_nurse_confirmation": {
+          "title": "Needs Nurse Confirmation",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "department_code",
+        "confidence",
+        "reason_en",
+        "needs_nurse_confirmation"
+      ],
+      "title": "Routing",
+      "type": "object"
+    },
+    "SocialHistory": {
+      "additionalProperties": false,
+      "properties": {
+        "tobacco": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "alcohol": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "SocialHistory",
+      "type": "object"
+    },
+    "TextPair": {
+      "additionalProperties": false,
+      "properties": {
+        "text_original": {
+          "maxLength": 500,
+          "title": "Text Original",
+          "type": "string"
+        },
+        "text_en": {
+          "maxLength": 500,
+          "title": "Text En",
+          "type": "string"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        }
+      },
+      "required": [
+        "text_original",
+        "text_en"
+      ],
+      "title": "TextPair",
+      "type": "object"
+    },
+    "WomenHealth": {
+      "additionalProperties": false,
+      "properties": {
+        "pregnant": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pregnant"
+        },
+        "lmp": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lmp"
+        }
+      },
+      "title": "WomenHealth",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "type": "string", "const": "1.0" },
-    "status": { "type": "string", "const": "draft" }
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "en",
+        "hi",
+        "mr"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "chief_complaint": {
+      "$ref": "#/$defs/TextPair"
+    },
+    "hpi": {
+      "$ref": "#/$defs/HPI"
+    },
+    "past_history": {
+      "$ref": "#/$defs/PastHistory"
+    },
+    "medications": {
+      "items": {
+        "$ref": "#/$defs/Medication"
+      },
+      "maxItems": 30,
+      "title": "Medications",
+      "type": "array"
+    },
+    "allergies": {
+      "items": {
+        "$ref": "#/$defs/TextPair"
+      },
+      "maxItems": 30,
+      "title": "Allergies",
+      "type": "array"
+    },
+    "family_history": {
+      "items": {
+        "$ref": "#/$defs/TextPair"
+      },
+      "maxItems": 30,
+      "title": "Family History",
+      "type": "array"
+    },
+    "social": {
+      "$ref": "#/$defs/SocialHistory"
+    },
+    "women_health": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WomenHealth"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "red_flags": {
+      "items": {
+        "$ref": "#/$defs/RedFlag"
+      },
+      "maxItems": 30,
+      "title": "Red Flags",
+      "type": "array"
+    },
+    "routing": {
+      "$ref": "#/$defs/Routing"
+    },
+    "field_meta": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FieldMeta"
+      },
+      "title": "Field Meta",
+      "type": "object"
+    },
+    "disclaimer": {
+      "default": "Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis.",
+      "maxLength": 500,
+      "title": "Disclaimer",
+      "type": "string"
+    }
   },
-  "required": ["schema_version", "status"]
+  "required": [
+    "schema_version",
+    "language",
+    "chief_complaint",
+    "hpi",
+    "routing"
+  ],
+  "title": "CaseSheet",
+  "type": "object"
 }

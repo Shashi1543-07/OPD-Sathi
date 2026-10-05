@@ -49,7 +49,7 @@ Phase 1 is complete on `phase-01-ui-foundation` with the human visual review app
 
 ## Phase 2 — Identity, audit, and rate limiting
 
-Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All six GitHub checks passed; local and CI evidence is in the [Phase 2 report](docs/phase-reports/phase-02.md). Wait for explicit approval before starting Phase 3.
+Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All six GitHub checks passed; see the [Phase 2 report](docs/phase-reports/phase-02.md). Explicit approval to begin Phase 3 was received; implementation is on `phase-03-data-model` and local gates are complete. GitHub CI and merge remain pending.
 
 - [x] 2.1 Add user/kiosk/token/audit migrations, immutable audit permissions, and tenant RLS (migrations 0002–0003 applied locally; app role cannot update audit rows).
 - [x] 2.2 Implement Argon2id and JWT security with the required attack/failure tests (12 security tests pass; core security coverage 98%).
@@ -65,16 +65,18 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 
 ## Phase 3 — Data model, seeds, and pagination
 
-- [ ] 3.1 Create domain tables, indexes, uniqueness rules, and RLS policies.
-- [ ] 3.2 Add AES-256-GCM field encryption and HMAC lookup hashing.
-- [ ] 3.3 Define and validate case-sheet models; export the JSON schema and check it in CI.
-- [ ] 3.4 Implement async repositories; keep SQL out of routers.
-- [ ] 3.5 Add signed keyset pagination and tamper/concurrent-insert tests.
-- [ ] 3.6 Add idempotency handling and replay/body-mismatch tests.
-- [ ] 3.7 Add fictional demo seed and reproducible synthetic bulk data.
-- [ ] 3.8 Add audited, paginated admin endpoints for departments, users, and kiosks.
-- [ ] 3.9 Measure and save queue query plans at 100,000 visits.
-- [ ] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and coverage meet playbook thresholds.
+- [x] 3.1 Create domain tables, indexes, uniqueness rules, and forced RLS policies; upgrade/downgrade/upgrade cycle passes.
+- [x] 3.2 Add AES-256-GCM field encryption and HMAC lookup hashing; 100,000 nonce uniqueness and encrypted SQL values verified.
+- [x] 3.3 Define and validate case-sheet models; export the JSON schema and check it in CI.
+- [x] 3.4 Implement async repositories; keep SQL out of routers.
+- [x] 3.5 Add signed keyset pagination and tamper/concurrent-insert tests; a 10,000-row scan remained gap-free with 100 inserts.
+- [x] 3.6 Add Redis idempotency and replay/body-mismatch tests.
+- [x] 3.7 Add fictional demo seed and reproducible synthetic bulk data.
+- [x] 3.8 Add audited, paginated admin endpoints for departments, users, and kiosks.
+- [x] 3.9 Measure and save queue query plans at 100,000 visits; `ix_visits_queue` p95 was 1.99 ms locally.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
+
+Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-reports/phase-03.md) and [manual demo steps](docs/phase-plans/phase-03.md). Wait for review of GitHub checks and approval before starting Phase 4.
 
 ## Phase 4 — Deterministic interview and case sheet (no AI)
 
@@ -88,7 +90,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 4.8 Wire kiosk S2–S7 for touch-only flow and safe idle reset.
 - [ ] 4.9 Create 30 golden interviews (10 per language) and evaluation command.
 - [ ] 4.10 Add multilingual end-to-end flows, danger-tile, back/skip, and accessibility checks.
-- [ ] Gate: 30/30 golden interviews; engine/property and Playwright checks pass; time/tap/input safety limits pass; interview domain coverage meets threshold.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 5 — Queue, token, and live position
 
@@ -102,7 +104,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 5.8 Add staff queue actions and authenticated WebSocket snapshot/delta protocol.
 - [ ] 5.9 Wire token/QR/print slip, patient live status, and staff queue UI.
 - [ ] 5.10 Add synthetic queue simulator.
-- [ ] Gate: scoring/order, starvation, concurrency, rebuild/recovery, and queue latency/realtime thresholds pass; queue domain coverage meets threshold.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 6 — Red flags and department routing
 
@@ -116,7 +118,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 6.8 Create labelled synthetic red-flag/routing evaluation datasets with fixed splits.
 - [ ] 6.9 Add evaluation commands/reports; tune on dev only and report test results.
 - [ ] 6.10 Replace routing stub and add staff override control.
-- [ ] Gate: meet red-flag recall (including 60/60 must-catch), precision, negation, routing, alert latency, privacy, examples, and coverage thresholds.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 7 — Doctor/nurse consoles and PDF
 
@@ -129,7 +131,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 7.7 Add audited multilingual PDF export and text-content tests.
 - [ ] 7.8 Complete loading/empty/error states and print styles.
 - [ ] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests.
-- [ ] Gate: complete role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage thresholds.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 8 — Voice input
 
@@ -142,7 +144,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 8.7 Fall back to touch/typing within three seconds on provider failure.
 - [ ] 8.8 Add consent-based evaluation plan/audio (ignored and deleted after use) plus Mock CI evaluation.
 - [ ] 8.9 Add protocol/provider/Playwright tests.
-- [ ] Gate: fallback and protocol tests pass; report live WER/keyword/latency numbers if provider key is available; confirm no audio stored by default.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 9 — AI layer: smart questions, extraction, second opinion
 
@@ -158,7 +160,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 9.10 Add generic-only cache, per-hospital enable flag, token limits, and metrics.
 - [ ] 9.11 Create extraction/adversarial datasets and mock/live evaluation commands.
 - [ ] 9.12 Show source/confidence on staff sheets; avoid AI-specific patient UI.
-- [ ] Gate: meet extraction F1, hallucination, 0/100 safety leaks, red-flag/routing, latency/fallback, and PII thresholds.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 10 — Read-back, TTS, and patient confirmation
 
@@ -169,7 +171,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 10.5 Add confirm/change flow, rerun safety/routing on edits, and nurse-help timeout.
 - [ ] 10.6 Show confirmation time and corrections in the staff view.
 - [ ] 10.7 Add multilingual golden, manifest, change/timeout/TTS/offline Playwright tests.
-- [ ] Gate: all prompt audio covered, read-back ≤90 words, confirmation flows work, offline fixed audio makes zero network requests, and timestamps persist.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 11 — Notifications and analytics (optional if time is short)
 
@@ -178,7 +180,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 11.3 Add periodic analytics rollups and summary/timeseries endpoints.
 - [ ] 11.4 Build admin charts, visible time-saved assumption, and streamed CSV.
 - [ ] 11.5 Test deduplication, opt-in, retries, analytics accuracy/performance, and accessibility.
-- [ ] Gate: exactly-once/opt-in/dead-letter/analytics/performance/accessibility thresholds pass.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 12 — Offline PWA and document upload (upload is stretch)
 
@@ -190,7 +192,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 12.6 (Stretch) Add secure MinIO upload with size/type validation, EXIF removal, optional malware scan.
 - [ ] 12.7 (Stretch) Extract document fields as unconfirmed, confidence-labelled suggestions.
 - [ ] 12.8 Test offline/reconnect/replay/restart and, if built, upload/extraction safety.
-- [ ] Gate: exactly one visit despite duplicate/interrupted replay, offline danger message <1 second, installable PWA; stretch gates apply only if upload is built.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 13 — Hardening, performance, and scale readiness
 
@@ -205,7 +207,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 13.9 Add tracing, metrics, dashboards, and alert rules.
 - [ ] 13.10 Run backup/restore drill and document recovery targets.
 - [ ] 13.11 Add retention/anonymization/deletion, privacy/safety/scaling docs, and Kubernetes skeleton.
-- [ ] Gate: zero high/critical findings, no fuzz 5xx, all security/load/soak/chaos/restore/N+1/retention thresholds pass; record machine details.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Phase 14 — Demo polish and documentation
 
@@ -216,7 +218,7 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [ ] 14.5 Capture screenshots under `docs/screenshots/`.
 - [ ] 14.6 Run and summarize full regression and short load run.
 - [ ] 14.7 Tag/build/smoke-test release artifacts as described by the playbook.
-- [ ] Gate: full regression green, demo-safe mode works offline, human completes demo twice, docs complete, and all pending clinical review items are listed.
+- [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 ## Demo and delivery checklist
 

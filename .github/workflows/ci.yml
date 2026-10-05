@@ -47,6 +47,7 @@ jobs:
       - run: pip install --require-hashes -r services/api/requirements.lock.txt
       - run: ruff check services/api/app services/api/tests services/api/scripts
       - run: mypy --strict services/api/app
+      - run: PYTHONPATH=services/api python services/api/scripts/write_case_sheet_schema.py --check
       - run: alembic -c services/api/alembic.ini upgrade head && alembic -c services/api/alembic.ini downgrade base && alembic -c services/api/alembic.ini upgrade head
         env:
           MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:ci-osa-migrator-password@localhost:5432/osa
@@ -57,6 +58,7 @@ jobs:
           TEST_MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:ci-osa-migrator-password@localhost:5432/osa
           REDIS_STATE_URL: redis://localhost:6379/0
           REDIS_CACHE_URL: redis://localhost:6379/1
+      - run: coverage report --include='services/api/app/core/*,services/api/app/domain/*' --fail-under=95
 
   frontend:
     runs-on: ubuntu-latest
