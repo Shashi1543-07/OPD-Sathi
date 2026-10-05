@@ -1,0 +1,20 @@
+fastapi
+gunicorn
+uvicorn-worker
+uvicorn[standard]
+pydantic-settings
+structlog
+sqlalchemy[asyncio]
+asyncpg
+alembic
+redis
+
+# Test and development tooling
+httpx
+pytest
+pytest-asyncio
+pytest-cov
+ruff
+mypy
+bandit
+pip-audit

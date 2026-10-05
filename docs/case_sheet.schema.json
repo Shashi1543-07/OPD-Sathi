@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opd-saathi.local/schemas/case-sheet.schema.json",
+  "title": "OPD Saathi case sheet",
+  "description": "History-taking record. Not a diagnosis.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "status": { "type": "string", "const": "draft" }
+  },
+  "required": ["schema_version", "status"]
+}

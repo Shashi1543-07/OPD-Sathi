@@ -1,0 +1,2 @@
+# CI-only Linux scanner. Semgrep does not provide Windows wheels.
+semgrep
