@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useLanguageStore } from "../languageStore";
 import {
   Button,
@@ -9,6 +9,7 @@ import {
   IdleWarningDialog,
 } from "../components/ui";
 import { AudioPrompt } from "../components/ui/AudioPrompt";
+import { intake } from "../lib/intake";
 import "./screens.css";
 
 const IDLE_MS = 60_000;
@@ -19,6 +20,7 @@ export function KioskShell() {
   const language = useLanguageStore((state) => state.language);
   const setLanguage = useLanguageStore((state) => state.setLanguage);
   const navigate = useNavigate();
+  const location = useLocation();
   const [warning, setWarning] = useState(false);
   const [largeText, setLargeText] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
@@ -31,6 +33,7 @@ export function KioskShell() {
     setIdleKey((key) => key + 1);
   }, []);
   const resetSession = useCallback(() => {
+    void intake.cancel();
     setWarning(false);
     setLargeText(false);
     setHighContrast(false);
@@ -88,7 +91,7 @@ export function KioskShell() {
           </div>
         </div>
         <div className="kiosk-tools">
-          <div
+          {location.pathname === "/kiosk" && <div
             className="kiosk-language-selector"
             role="group"
             aria-label={t("chooseLanguage", { ns: "kiosk" })}
@@ -108,7 +111,7 @@ export function KioskShell() {
                 {label}
               </button>
             ))}
-          </div>
+          </div>}
           <Button
             variant="secondary"
             onClick={() => setLargeText((current) => !current)}
@@ -126,7 +129,7 @@ export function KioskShell() {
               : t("highContrast", { ns: "kiosk" })}
           </Button>
           <HelpButton onClick={() => setHelpOpen(true)} />
-          <AudioPrompt language={language} promptId="ui.welcome" />
+          {location.pathname === "/kiosk" && <AudioPrompt language={language} promptId="ui.welcome" />}
         </div>
       </header>
       <Outlet />

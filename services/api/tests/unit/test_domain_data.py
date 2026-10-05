@@ -122,8 +122,7 @@ def test_cursor_round_trip_and_tamper_rejection() -> None:
     "payload",
     [
         b'{"unexpected":"field"}',
-        b'{"created_at":"2026-10-05T12:00:00",'
-        b'"id":"00000000-0000-4000-8000-000000000000"}',
+        b'{"created_at":"2026-10-05T12:00:00","id":"00000000-0000-4000-8000-000000000000"}',
     ],
 )
 def test_cursor_rejects_bad_fields_and_naive_time(payload: bytes) -> None:

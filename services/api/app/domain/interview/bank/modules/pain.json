@@ -1,0 +1,16 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "pain",
+      "module": "pain",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Where do you notice the discomfort?",
+        "hi": "आपको यह तकलीफ़ कहाँ महसूस होती है?",
+        "mr": "तुम्हाला हा त्रास कुठे जाणवतो?"
+      }
+    }
+  ]
+}

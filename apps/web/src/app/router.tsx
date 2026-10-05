@@ -5,6 +5,7 @@ import { KioskWelcome } from "./KioskWelcome";
 import { KioskPreview } from "./KioskPreview";
 import { StaffShell } from "./StaffShell";
 import { PatientStatus } from "./PatientStatus";
+import { KioskIntake } from "./KioskIntake";
 
 export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/kiosk" replace /> },
@@ -13,6 +14,7 @@ export const router = createBrowserRouter([
     element: <KioskShell />,
     children: [
       { index: true, element: <KioskWelcome /> },
+      { path: "intake", element: <KioskIntake /> },
       ...(import.meta.env.DEV
         ? [{ path: "preview/:step", element: <KioskPreview /> }]
         : []),

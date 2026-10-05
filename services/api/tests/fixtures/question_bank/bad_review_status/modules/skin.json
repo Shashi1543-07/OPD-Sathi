@@ -1,0 +1,16 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "skin",
+      "module": "skin",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "What changes have you noticed on your skin?",
+        "hi": "त्वचा पर आपने क्या बदलाव देखा है?",
+        "mr": "त्वचेवर तुम्हाला कोणते बदल दिसले आहेत?"
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "mobility",
+      "module": "mobility",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "How has this affected your usual movement or activities?",
+        "hi": "इससे आपकी रोज़ की गतिविधियों या चलने-फिरने पर क्या असर पड़ा है?",
+        "mr": "यामुळे तुमच्या रोजच्या हालचाली किंवा कामांवर काय परिणाम झाला आहे?"
+      }
+    }
+  ]
+}

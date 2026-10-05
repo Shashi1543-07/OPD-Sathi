@@ -47,6 +47,9 @@ async function parseAuth(response: Response): Promise<AuthResponse> {
 }
 
 export const staffAuth = {
+  get accessToken() {
+    return accessToken;
+  },
   get user() {
     return currentUser;
   },

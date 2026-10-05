@@ -1,0 +1,35 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "tiles": {
+    "chest_pain": {
+      "en": "Chest discomfort",
+      "hi": "सीने में तकलीफ़",
+      "mr": "छातीत त्रास"
+    },
+    "breathing_difficulty": {
+      "en": "Trouble breathing",
+      "hi": "साँस लेने में परेशानी",
+      "mr": "श्वास घेण्यास त्रास"
+    },
+    "heavy_bleeding": {
+      "en": "Heavy bleeding",
+      "hi": "बहुत ज़्यादा खून बहना",
+      "mr": "खूप रक्तस्राव होणे"
+    },
+    "fainting": {
+      "en": "Fainting or unable to stay awake",
+      "hi": "बेहोशी या जागते रहने में परेशानी",
+      "mr": "बेशुद्ध पडणे किंवा जागे राहता न येणे"
+    },
+    "sudden_weakness": {
+      "en": "Sudden weakness or difficulty speaking",
+      "hi": "अचानक कमज़ोरी या बोलने में परेशानी",
+      "mr": "अचानक अशक्तपणा किंवा बोलण्यात त्रास"
+    },
+    "seizure": {
+      "en": "A seizure happening now",
+      "hi": "अभी दौरा पड़ना",
+      "mr": "आत्ता झटका येणे"
+    }
+  }
+}

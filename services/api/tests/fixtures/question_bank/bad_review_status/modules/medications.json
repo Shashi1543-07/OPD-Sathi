@@ -1,0 +1,16 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "medications",
+      "module": "medications",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Are you currently taking any medicines you want the staff to know about?",
+        "hi": "क्या आप कोई दवा लेते हैं जिसके बारे में कर्मचारियों को बताना चाहेंगे?",
+        "mr": "तुम्ही कोणती औषधे घेत असाल तर कर्मचाऱ्यांना सांगू इच्छिता का?"
+      }
+    }
+  ]
+}

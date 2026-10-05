@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
@@ -19,6 +19,8 @@ from starlette.responses import Response
 from app.api.v1 import admin as admin_api
 from app.api.v1 import audit as audit_api
 from app.api.v1 import auth as auth_api
+from app.api.v1 import intake as intake_api
+from app.api.v1 import queue as queue_api
 from app.config import Settings, get_settings
 from app.core.auth import authentication_gate
 from app.core.errors import (
@@ -128,6 +130,26 @@ def create_app(
         app.state.engine = engine_factory(configured.database_url)
         app.state.redis_state = redis_factory(configured.redis_state_url, decode_responses=True)
         try:
+            queue_registry = f"osa:{configured.app_env}:qregistry"
+            if configured.worker_database_url and not await app.state.redis_state.sismember(
+                queue_registry, "ready"
+            ):
+                lock_key = f"osa:{configured.app_env}:qrebuild-lock"
+                acquired = await app.state.redis_state.set(lock_key, "api-startup", nx=True, ex=60)
+                if acquired:
+                    from app.workers.main import rebuild_all
+
+                    try:
+                        worker_engine = create_async_engine(configured.worker_database_url)
+                        try:
+                            async with worker_engine.begin() as connection:
+                                await rebuild_all(
+                                    connection, app.state.redis_state, settings=configured
+                                )
+                        finally:
+                            await worker_engine.dispose()
+                    finally:
+                        await app.state.redis_state.delete(lock_key)
             yield
         finally:
             await app.state.engine.dispose()
@@ -175,6 +197,8 @@ def create_app(
     app.include_router(auth_api.router)
     app.include_router(audit_api.router)
     app.include_router(admin_api.router)
+    app.include_router(intake_api.router)
+    app.include_router(queue_api.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:

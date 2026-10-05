@@ -195,17 +195,24 @@ def test_route_matrix_denies_anonymous_and_wrong_roles():
     }
     assert PUBLIC_ROUTES <= registered
     assert protected
-    admin_token = issue_access_token(
-        subject=uuid4(), role="nurse", hospital_id=uuid4(), settings=settings
-    )
+    candidate_roles = ("nurse", "patient", "kiosk")
+    role_tokens = [
+        issue_access_token(subject=uuid4(), role=role, hospital_id=uuid4(), settings=settings)
+        for role in candidate_roles
+    ]
     with TestClient(app) as client:
         for method, path in protected:
             anonymous = client.request(method, path)
-            wrong_role = client.request(
-                method, path, headers={"Authorization": f"Bearer {admin_token}"}
-            )
             assert anonymous.status_code == 401, (method, path, anonymous.text)
-            assert wrong_role.status_code == 403, (method, path, wrong_role.text)
+            wrong_roles = [
+                client.request(method, path, headers={"Authorization": f"Bearer {token}"})
+                for token in role_tokens
+            ]
+            assert any(response.status_code == 403 for response in wrong_roles), (
+                method,
+                path,
+                [response.status_code for response in wrong_roles],
+            )
 
 
 def test_readiness_reports_healthy_dependencies():

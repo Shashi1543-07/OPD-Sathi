@@ -29,7 +29,11 @@ async def set_secret_lookup_scope(
     connection: AsyncConnection, *, setting: str, secret_hash: str
 ) -> None:
     """Allow one constant-time secret-hash lookup before tenant scope is known."""
-    if setting not in {"app.refresh_token_hash", "app.kiosk_activation_hash"}:
+    if setting not in {
+        "app.refresh_token_hash",
+        "app.kiosk_activation_hash",
+        "app.status_token_hash",
+    }:
         raise ValueError("unsupported secret lookup scope")
     await connection.execute(
         text("SELECT set_config(:setting, :secret_hash, true)"),

@@ -1,0 +1,16 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "family_history",
+      "module": "family_history",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Is there family health information you want the staff to know?",
+        "hi": "क्या परिवार की सेहत के बारे में कोई जानकारी है जो आप बताना चाहेंगे?",
+        "mr": "कुटुंबाच्या आरोग्याबद्दल काही माहिती कर्मचाऱ्यांना सांगू इच्छिता का?"
+      }
+    }
+  ]
+}

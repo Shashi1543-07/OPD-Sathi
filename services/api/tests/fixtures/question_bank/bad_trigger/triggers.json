@@ -1,0 +1,88 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "always": [
+    "general_context",
+    "past_history",
+    "medications",
+    "allergies"
+  ],
+  "max_triggered_modules": 5,
+  "keywords": {
+    "pain": [
+      "pain",
+      "ache",
+      "sore",
+      "दर्द",
+      "दर्दनाक",
+      "तकलीफ़",
+      "वेदना",
+      "दुखणे",
+      "कळ"
+    ],
+    "fever": [
+      ""
+    ],
+    "respiratory": [
+      "breath",
+      "breathing",
+      "cough",
+      "साँस",
+      "श्वास",
+      "खाँसी",
+      "खोकला",
+      "धाप",
+      "दम"
+    ],
+    "digestive": [
+      "stomach",
+      "abdomen",
+      "vomit",
+      "पेट",
+      "उल्टी",
+      "मितली",
+      "पोट",
+      "मळमळ",
+      "ओकारी"
+    ],
+    "skin": [
+      "skin",
+      "rash",
+      "itch",
+      "त्वचा",
+      "खुजली",
+      "खाज",
+      "पुरळ",
+      "रॅश"
+    ],
+    "urinary": [
+      "urine",
+      "urinary",
+      "?????",
+      "पेशाब",
+      "मूत्र",
+      "लघवी",
+      "जळजळ"
+    ],
+    "mobility": [
+      "walk",
+      "walking",
+      "move",
+      "चलना",
+      "चलने",
+      "जोड़",
+      "जोड़ों",
+      "चालणे",
+      "सांधे"
+    ],
+    "sleep_energy": [
+      "sleep",
+      "tired",
+      "fatigue",
+      "नींद",
+      "थकान",
+      "झोप",
+      "थकवा",
+      "दमणूक"
+    ]
+  }
+}

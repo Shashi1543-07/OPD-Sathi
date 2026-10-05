@@ -1,0 +1,16 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "digestive",
+      "module": "digestive",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "What changes have you noticed with eating or digestion?",
+        "hi": "खाने या पाचन में आपने क्या बदलाव देखा है?",
+        "mr": "खाण्यात किंवा पचनात तुम्हाला काय बदल जाणवला आहे?"
+      }
+    }
+  ]
+}

@@ -54,11 +54,17 @@ e2e:
 eval:
 	@echo "Evaluation suites are added with their corresponding feature phases."
 
-eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live:
+eval-interview:
+	PYTHONPATH=$(API_DIR) python eval/interview/evaluate.py
+
+eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live:
 	@echo "$@ is not available until its implementation phase."
 
-prompts-audio simulate-queue load chaos scan backup restore screenshots:
+prompts-audio load chaos scan backup restore screenshots:
 	@echo "$@ is added in a later implementation phase."
+
+simulate-queue:
+	cd $(API_DIR) && N=$(or $(N),50) URGENT=$(or $(URGENT),10) $(PYTHON) scripts/simulate_queue.py
 
 demo-ratelimit:
 	PYTHONPATH=$(API_DIR) $(PYTHON) $(API_DIR)/scripts/demo_ratelimit.py

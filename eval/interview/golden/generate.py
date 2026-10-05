@@ -1,0 +1,92 @@
+"""Regenerate the deterministic golden case sheets after reviewed schema changes."""
+
+import json
+from pathlib import Path
+
+from app.domain.interview.engine import apply_answer, build_case_sheet, next_question, start
+
+OUTPUT = Path(__file__).with_name("interviews.jsonl")
+COMPLAINTS = {
+    "en": [
+        "fever for three days",
+        "pain in my arm",
+        "cough and breathing concern",
+        "stomach discomfort",
+        "skin rash",
+        "trouble sleeping",
+        "pain when walking",
+        "urine discomfort",
+        "fever and headache",
+        "general concern",
+    ],
+    "hi": [
+        "तीन दिन से बुखार",
+        "बाँह में दर्द",
+        "खाँसी और साँस की परेशानी",
+        "पेट में तकलीफ़",
+        "त्वचा पर खुजली",
+        "नींद की परेशानी",
+        "चलने में दर्द",
+        "पेशाब में जलन",
+        "बुखार और सिरदर्द",
+        "सेहत की परेशानी",
+    ],
+    "mr": [
+        "तीन दिवसांपासून ताप",
+        "हातात दुखणे",
+        "खोकला आणि श्वासाचा त्रास",
+        "पोटात त्रास",
+        "त्वचेवर पुरळ",
+        "झोपेचा त्रास",
+        "चालताना वेदना",
+        "लघवी करताना जळजळ",
+        "ताप आणि डोकेदुखी",
+        "आरोग्याची तक्रार",
+    ],
+}
+
+
+def main() -> None:
+    cases: list[str] = []
+    for language, complaints in COMPLAINTS.items():
+        for index, complaint in enumerate(complaints):
+            state = start(language, red_flag_ids=("chest_pain",) if index == 2 else ())
+            answers: list[dict[str, object]] = []
+            while (question := next_question(state)) is not None:
+                if question.id == "chief_concern":
+                    answer: str | int | None = complaint
+                    skip = False
+                elif question.id == "duration":
+                    answer = f"{index + 1} days"
+                    skip = False
+                elif question.input == "scale":
+                    answer = index % 11
+                    skip = False
+                elif question.optional and index % 3 == 0:
+                    answer = None
+                    skip = True
+                else:
+                    answer = f"Golden answer {index + 1}"
+                    skip = False
+                answers.append({"question_id": question.id, "answer": answer, "skip": skip})
+                state = apply_answer(state, question.id, answer, skip=skip)
+            cases.append(
+                json.dumps(
+                    {
+                        "language": language,
+                        "complaint": complaint,
+                        "red_flag_ids": state.red_flag_ids,
+                        "answers": answers,
+                        "expected_case_sheet": build_case_sheet(state),
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT.write_text("\n".join(cases) + "\n", encoding="utf-8")
+    print(f"Wrote {len(cases)} golden interviews to {OUTPUT}")
+
+
+if __name__ == "__main__":
+    main()

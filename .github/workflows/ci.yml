@@ -44,9 +44,12 @@ jobs:
           POSTGRES_DB: osa
           OSA_APP_PASSWORD: ci-osa-app-password
           OSA_MIGRATOR_PASSWORD: ci-osa-migrator-password
+          OSA_WORKER_PASSWORD: ci-osa-worker-password
       - run: pip install --require-hashes -r services/api/requirements.lock.txt
       - run: ruff check services/api/app services/api/tests services/api/scripts
       - run: mypy --strict services/api/app
+      - run: PYTHONPATH=services/api python services/api/scripts/validate_question_bank.py
+      - run: PYTHONPATH=services/api python eval/interview/evaluate.py
       - run: PYTHONPATH=services/api python services/api/scripts/write_case_sheet_schema.py --check
       - run: alembic -c services/api/alembic.ini upgrade head && alembic -c services/api/alembic.ini downgrade base && alembic -c services/api/alembic.ini upgrade head
         env:

@@ -77,35 +77,37 @@ Phase 2 is complete and merged into `phase-01-ui-foundation` as `900d0ef`. All s
 - [x] Gate: reversible migrations, encrypted data/no plaintext leakage, RLS, concurrent pagination, query latency, and 98% combined `app/core` + `app/domain` coverage pass locally. GitHub CI is pending.
 
 
-Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-reports/phase-03.md) and [manual demo steps](docs/phase-plans/phase-03.md). Wait for review of GitHub checks and approval before starting Phase 4.
+Phase 3 implementation is complete locally. See the [Phase 3 report](docs/phase-reports/phase-03.md) and [manual demo steps](docs/phase-plans/phase-03.md). Phase 4 implementation and local gates are recorded in the [Phase 4 report](docs/phase-reports/phase-04.md); remote CI and human phase approval remain pending.
 
 ## Phase 4 — Deterministic interview and case sheet (no AI)
 
-- [ ] 4.1 Implement multilingual consent capture and enforce consent before intake actions.
-- [ ] 4.2 Add validated identity and danger-sign capture; record danger events.
-- [ ] 4.3 Add the multilingual question bank, modules, triggers, and CI validator.
-- [ ] 4.4 Implement/test the pure deterministic interview engine (maximum 12 questions).
-- [ ] 4.5 Persist interview state and turns; make answer submission idempotent and sanitize input.
-- [ ] 4.6 Build draft case sheet/read-back using deterministic templates.
-- [ ] 4.7 Record patient confirmation and temporary token response.
-- [ ] 4.8 Wire kiosk S2–S7 for touch-only flow and safe idle reset.
-- [ ] 4.9 Create 30 golden interviews (10 per language) and evaluation command.
-- [ ] 4.10 Add multilingual end-to-end flows, danger-tile, back/skip, and accessibility checks.
-- [ ] Gate: 30/30 golden interviews; engine/property and Playwright checks pass; time/tap/input safety limits pass; interview domain coverage meets threshold.
+- [x] 4.1 Implement multilingual consent capture and enforce consent before intake actions.
+- [x] 4.2 Add validated identity and danger-sign capture; record danger events.
+- [x] 4.3 Add the multilingual question bank, modules, triggers, and CI validator.
+- [x] 4.4 Implement/test the pure deterministic interview engine (maximum 12 questions).
+- [x] 4.5 Persist interview state and turns; make answer submission idempotent and sanitize input.
+- [x] 4.6 Build draft case sheet/read-back using deterministic templates.
+- [x] 4.7 Record patient confirmation and temporary token response.
+- [x] 4.8 Wire kiosk S2–S7 for touch-only flow and safe idle reset.
+- [x] 4.9 Create 30 golden interviews (10 per language) and evaluation command.
+- [x] 4.10 Add multilingual end-to-end flows, danger-tile, back/skip, and accessibility checks.
+- [x] Gate: 30/30 golden interviews; engine/property and Playwright checks pass; time/tap/input safety limits pass; interview domain coverage meets threshold. See the measured evidence and remaining human review in the Phase 4 report.
 
 ## Phase 5 — Queue, token, and live position
 
-- [ ] 5.1 Implement and test queue scoring, including worked example C, B, D, A.
-- [ ] 5.2 Allocate unique daily department tokens, including database fallback when Redis is down.
-- [ ] 5.3 Add atomic Redis queue operations and live delta publishing.
-- [ ] 5.4 Add idempotent outbox relay and Redis outage recovery.
-- [ ] 5.5 Implement queue rebuild from the database.
-- [ ] 5.6 Replace stub confirmation with token/queue creation and temporary routing defaults.
-- [ ] 5.7 Add patient status, SSE, ETA, micro-cache, and visit state machine.
-- [ ] 5.8 Add staff queue actions and authenticated WebSocket snapshot/delta protocol.
-- [ ] 5.9 Wire token/QR/print slip, patient live status, and staff queue UI.
-- [ ] 5.10 Add synthetic queue simulator.
+- [x] 5.1 Implement and test queue scoring, including worked example C, B, D, A.
+- [x] 5.2 Allocate unique daily department tokens, including database fallback when Redis is down.
+- [x] 5.3 Add atomic Redis queue operations and live delta publishing.
+- [x] 5.4 Add idempotent outbox relay and Redis outage recovery.
+- [x] 5.5 Implement queue rebuild from the database.
+- [x] 5.6 Replace stub confirmation with token/queue creation and temporary routing defaults.
+- [x] 5.7 Add patient status, SSE, ETA, micro-cache, and visit state machine.
+- [x] 5.8 Add staff queue actions and authenticated WebSocket snapshot/delta protocol.
+- [x] 5.9 Wire token/QR/print slip, patient live status, and staff queue UI.
+- [x] 5.10 Add synthetic queue simulator.
 - [ ] Gate: scoring/order, starvation, concurrency, rebuild/recovery, and queue latency/realtime thresholds pass; queue domain coverage meets threshold.
+
+Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](docs/phase-reports/phase-05.md). Its live-service concurrency, rebuild/recovery, and performance measurements still need configured PostgreSQL and Redis.
 
 ## Phase 6 — Red flags and department routing
 

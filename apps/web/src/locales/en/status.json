@@ -3,8 +3,18 @@
   "yourTurn": "Your turn",
   "peopleAhead": "People ahead",
   "statusUpdated": "Updated just now",
-  "tokenLabel": "Sample queue token",
-  "estimatedWait": "Sample estimated wait",
-  "statusUnavailable": "Demo status is unavailable",
-  "demoOnly": "Only the fictional /s/demo preview is available in this phase."
+  "tokenLabel": "Your queue token",
+  "estimatedWait": "Estimated wait",
+  "statusUnavailable": "We could not load this queue status.",
+  "demoOnly": "The fictional status card is a preview.",
+  "loading": "Loading queue status…",
+  "reconnecting": "Reconnecting; live updates will resume automatically.",
+  "state": {
+    "waiting": "Please wait for your turn.",
+    "called": "Please go to the staff desk.",
+    "in_consult": "Your visit is in progress.",
+    "done": "Your visit is complete.",
+    "no_show": "Please ask staff for help.",
+    "cancelled": "Please ask staff for help."
+  }
 }

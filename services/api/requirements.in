@@ -8,12 +8,14 @@ sqlalchemy[asyncio]
 asyncpg
 alembic
 redis
+arq
 
 # Test and development tooling
 httpx
 pytest
 pytest-asyncio
 pytest-cov
+hypothesis
 ruff
 mypy
 bandit

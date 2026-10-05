@@ -1,0 +1,16 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "allergies",
+      "module": "allergies",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Is there anything you have been told you are allergic to?",
+        "hi": "क्या आपको किसी चीज़ से एलर्जी बताई गई है?",
+        "mr": "तुम्हाला कोणत्या गोष्टीची अॅलर्जी असल्याचे सांगितले आहे का?"
+      }
+    }
+  ]
+}
