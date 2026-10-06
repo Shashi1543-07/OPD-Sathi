@@ -1,6 +1,7 @@
 """Audited case sheet reads and optimistic-concurrency doctor edits."""
 
 import re
+from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -43,6 +44,8 @@ class CaseSheetResponse(BaseModel):
     visit_id: UUID
     version: int
     case_sheet: CaseSheet
+    confirmed_by_patient: bool = False
+    confirmed_at: datetime | None = None
 
 
 class TranscriptTurn(BaseModel):
@@ -149,7 +152,13 @@ async def get_case_sheet(
         )
     version = int(saved["version"])
     response.headers["ETag"] = f'"{version}"'
-    return CaseSheetResponse(visit_id=visit_id, version=version, case_sheet=saved["data"])
+    return CaseSheetResponse(
+        visit_id=visit_id,
+        version=version,
+        case_sheet=saved["data"],
+        confirmed_by_patient=saved.get("confirmed_by_patient") is True,
+        confirmed_at=saved.get("confirmed_at"),
+    )
 
 
 @router.get("/visits/{visit_id}/case-sheet.pdf", response_class=StarletteResponse)
@@ -300,7 +309,13 @@ async def patch_case_sheet(
             },
         )
     response.headers["ETag"] = f'"{new_version}"'
-    return CaseSheetResponse(visit_id=visit_id, version=new_version, case_sheet=updated)
+    return CaseSheetResponse(
+        visit_id=visit_id,
+        version=new_version,
+        case_sheet=updated,
+        confirmed_by_patient=saved.get("confirmed_by_patient") is True,
+        confirmed_at=saved.get("confirmed_at"),
+    )
 
 
 @router.get("/visits/{visit_id}/transcript", response_model=TranscriptResponse)

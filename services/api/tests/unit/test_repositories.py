@@ -21,9 +21,12 @@ def make_test_settings() -> Settings:
 
 
 class Result:
-    def __init__(self, *, rows: list[dict[str, object]] | None = None, scalar=None):
+    def __init__(
+        self, *, rows: list[dict[str, object]] | None = None, scalar=None, rowcount: int = 0
+    ):
         self.rows = rows or []
         self.value = scalar
+        self.rowcount = rowcount
 
     def mappings(self) -> Result:
         return self
@@ -39,14 +42,21 @@ class Result:
 
 
 class Connection:
-    def __init__(self, *, rows: list[dict[str, object]] | None = None, scalar=None):
+    def __init__(
+        self,
+        *,
+        rows: list[dict[str, object]] | None = None,
+        scalar=None,
+        rowcount: int = 0,
+    ):
         self.rows = rows or []
         self.value = scalar
+        self.rowcount = rowcount
         self.calls: list[tuple[object, object]] = []
 
     async def execute(self, query: object, params: object = None) -> Result:
         self.calls.append((query, params))
-        return Result(rows=self.rows, scalar=self.value)
+        return Result(rows=self.rows, scalar=self.value, rowcount=self.rowcount)
 
     async def scalar(self, *_args: object, **_kwargs: object):
         return self.value
@@ -166,7 +176,13 @@ async def test_case_sheet_repository_round_trips_encrypted_data_and_checks_versi
     )
     connection.rows = [{"id": sheet_id, "data": {"ciphertext": ciphertext}, "version": 2}]
     loaded = await repo.get(hospital_id=hospital_id, visit_id=visit_id, for_update=True)
-    assert loaded == {"id": sheet_id, "data": data, "version": 2}
+    assert loaded == {
+        "id": sheet_id,
+        "data": data,
+        "version": 2,
+        "confirmed_by_patient": False,
+        "confirmed_at": None,
+    }
 
     connection.value = 3
     assert (
@@ -190,3 +206,18 @@ async def test_case_sheet_repository_round_trips_encrypted_data_and_checks_versi
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_case_sheet_confirmation_is_timestamped_and_idempotently_reported() -> None:
+    hospital_id, visit_id = uuid4(), uuid4()
+    connection = Connection(rowcount=1)
+    repository = CaseSheetRepository(connection, make_test_settings())
+    assert await repository.confirm(hospital_id=hospital_id, visit_id=visit_id) is True
+    sql = str(connection.calls[0][0])
+    assert "confirmed_by_patient = true" in sql
+    assert "confirmed_at = now()" in sql
+    assert connection.calls[0][1] == {"hospital_id": hospital_id, "visit_id": visit_id}
+
+    connection.rowcount = 0
+    assert await repository.confirm(hospital_id=hospital_id, visit_id=visit_id) is False

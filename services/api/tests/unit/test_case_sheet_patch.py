@@ -52,6 +52,7 @@ def test_patch_updates_validated_fields_and_doctor_provenance() -> None:
         "source": "doctor",
         "confidence": 1.0,
         "confirmed": True,
+        "ai_assisted": False,
     }
     assert paths == ["/chief_complaint/text_original", "/hpi/associated_symptoms/-"]
     assert current == valid_sheet()

@@ -12,6 +12,7 @@ import {
 } from "../lib/intake";
 import { useLanguageStore } from "../languageStore";
 import { QRCodeSVG } from "qrcode.react";
+import { AudioPrompt, ReadBackAudioButton } from "../components/AudioPrompt";
 import {
   CaptureError,
   startMicrophoneCapture,
@@ -59,8 +60,10 @@ export function KioskIntake() {
   const stopCapture = useRef<StopCapture | null>(null);
   const hasVoiceTranscript = useRef(false);
   const voiceFallbackTimer = useRef<number | undefined>(undefined);
+  const summaryIdleTimer = useRef<number | undefined>(undefined);
   const [caseSheet, setCaseSheet] = useState<CaseSheet>();
   const [readback, setReadback] = useState("");
+  const [needsAssistance, setNeedsAssistance] = useState(false);
   const [queueToken, setQueueToken] = useState<{
     token: string;
     statusUrl: string;
@@ -143,6 +146,30 @@ export function KioskIntake() {
     },
     [],
   );
+
+  useEffect(() => {
+    if (stage !== "summary" || needsAssistance) return;
+    const schedule = () => {
+      if (summaryIdleTimer.current !== undefined)
+        window.clearTimeout(summaryIdleTimer.current);
+      summaryIdleTimer.current = window.setTimeout(() => {
+        void intake
+          .needsAssistance()
+          .then(() => setNeedsAssistance(true))
+          .catch(() => setNeedsAssistance(true));
+      }, 90_000);
+    };
+    const resetOnActivity = () => schedule();
+    schedule();
+    window.addEventListener("pointerdown", resetOnActivity);
+    window.addEventListener("keydown", resetOnActivity);
+    return () => {
+      if (summaryIdleTimer.current !== undefined)
+        window.clearTimeout(summaryIdleTimer.current);
+      window.removeEventListener("pointerdown", resetOnActivity);
+      window.removeEventListener("keydown", resetOnActivity);
+    };
+  }, [stage, needsAssistance]);
 
   function clearVoiceFallbackTimer() {
     if (voiceFallbackTimer.current !== undefined) {
@@ -352,6 +379,12 @@ export function KioskIntake() {
             <p className="eyebrow">{t("screenS2", { ns: "kiosk" })}</p>
             <h1>{t("consentContinue", { ns: "kiosk" })}</h1>
             <p lang={consent.language}>{consent.text}</p>
+            <AudioPrompt
+              id="consent"
+              language={consent.language}
+              label={t("readAloud", { ns: "kiosk" })}
+              volumeLabel={t("volume", { ns: "kiosk" })}
+            />
             <div className="welcome-actions">
               <button
                 className="ui-button ui-button--primary ui-button--kiosk"
@@ -524,6 +557,12 @@ export function KioskIntake() {
             <p className="eyebrow">{t("screenS5", { ns: "kiosk" })}</p>
             <h1>{t("questionTitle", { ns: "kiosk" })}</h1>
             <p lang={consent.language}>{currentQuestion.prompt}</p>
+            <AudioPrompt
+              id={`question.${currentQuestion.id}`}
+              language={consent.language}
+              label={t("readAloud", { ns: "kiosk" })}
+              volumeLabel={t("volume", { ns: "kiosk" })}
+            />
             {currentQuestion.input === "scale" ? (
               <FacesScale
                 value={typeof answer === "number" ? answer : undefined}
@@ -634,6 +673,10 @@ export function KioskIntake() {
             <div className="kiosk-readback">
               <h2>{t("readbackLabel", { ns: "kiosk" })}</h2>
               <p lang={consent.language}>{readback}</p>
+              <ReadBackAudioButton
+                label={t("readAloud", { ns: "kiosk" })}
+                volumeLabel={t("volume", { ns: "kiosk" })}
+              />
             </div>
             <dl className="kiosk-summary">
               <dt>{t("summaryConcern", { ns: "kiosk" })}</dt>
@@ -700,6 +743,9 @@ export function KioskIntake() {
                 </button>
               ))}
             </div>
+            {needsAssistance && (
+              <p role="status">{t("needsAssistance", { ns: "kiosk" })}</p>
+            )}
             <button
               className="ui-button ui-button--primary ui-button--kiosk"
               type="button"

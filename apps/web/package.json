@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:pwa": "playwright test --config playwright.pwa.config.ts",
     "lighthouse:ci": "node scripts/check-lighthouse.mjs",
     "types": "openapi-typescript ../../services/api/openapi.json -o src/lib/api-types.ts",
     "check-locales": "node scripts/check-locales.mjs",

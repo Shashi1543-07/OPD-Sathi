@@ -79,6 +79,12 @@ class Routing(StrictModel):
     needs_nurse_confirmation: bool
 
 
+class PatientConfirmation(StrictModel):
+    confirmed_by_patient: bool = False
+    corrections: Annotated[list[str], Field(max_length=100)] = Field(default_factory=list)
+    needs_assistance: bool = False
+
+
 class FieldMeta(StrictModel):
     source: Literal["patient_voice", "patient_touch", "patient_text", "nurse", "doctor", "document"]
     confidence: Confidence
@@ -100,6 +106,7 @@ class CaseSheet(StrictModel):
     red_flags: Annotated[list[RedFlag], Field(max_length=30)] = Field(default_factory=list)
     routing: Routing
     field_meta: dict[str, FieldMeta] = Field(default_factory=dict)
+    patient_confirmation: PatientConfirmation = Field(default_factory=PatientConfirmation)
     disclaimer: Text = (
         "Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis."
     )

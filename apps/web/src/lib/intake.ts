@@ -226,6 +226,20 @@ export const intake = {
       method: "POST",
       headers: { "Idempotency-Key": crypto.randomUUID() },
     }),
+  readbackAudio: async () => {
+    const session = getPatientSession();
+    if (!session) throw new Error("No active patient session");
+    const response = await fetch(
+      `${apiOrigin}/intake/sessions/${session.visit_id}/readback-audio`,
+      { headers: { Authorization: `Bearer ${session.patient_access_token}` }, cache: "no-store" },
+    );
+    if (!response.ok) throw new Error("Read-back audio is unavailable");
+    return response.blob();
+  },
+  needsAssistance: () =>
+    patientRequest<{ needs_assistance: boolean }>("/needs-assistance", {
+      method: "POST",
+    }),
   cancel: async () => {
     const session = getPatientSession();
     if (session)

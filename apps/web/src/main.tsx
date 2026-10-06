@@ -7,6 +7,9 @@ import "@fontsource-variable/noto-sans-devanagari/wght.css";
 import "./i18n";
 import { router } from "./app/router";
 import "./styles.css";
+import { registerSW } from "virtual:pwa-register";
+
+registerSW({ immediate: true });
 
 const queryClient = new QueryClient();
 

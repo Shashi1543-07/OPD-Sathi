@@ -16,6 +16,7 @@ from app.ai.department_classifier import classify_department, combine_department
 from app.ai.extraction import extract_case_sheet_patch, merge_enriched_case_sheet
 from app.ai.prompts.builders import QuestionCandidate
 from app.ai.question_choice import select_question_id
+from app.ai.readback import build_readback
 from app.ai.redflag_opinion import combine_redflag_opinions, second_opinion_flags
 from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
@@ -463,17 +464,7 @@ def _question_payload(question_id: str, language: Language) -> dict[str, Any]:
 
 
 def _readback(data: dict[str, Any]) -> str:
-    language = data["language"]
-    complaint = data["chief_complaint"]["text_original"]
-    templates = {
-        "en": (
-            f"You told us: {complaint}. Please review this summary and change anything "
-            "that is incorrect."
-        ),
-        "hi": f"आपने हमें बताया: {complaint}। कृपया इस सारांश को देखें और गलत जानकारी बदलें।",
-        "mr": f"तुम्ही आम्हाला सांगितले: {complaint}. कृपया हा सारांश तपासा आणि चुकीची माहिती बदला.",
-    }
-    return templates[language]
+    return build_readback(data)
 
 
 async def _finish_interview(
@@ -1245,6 +1236,11 @@ async def correct_interview_answer(
         )
         if state.get("phase") == "summary":
             data = _patient_case_sheet(data, flags, route_result)
+            corrections = list(state.get("corrected_question_ids", []))
+            if payload.question_id not in corrections:
+                corrections.append(payload.question_id)
+            confirmation = data.setdefault("patient_confirmation", {})
+            confirmation["corrections"] = corrections
             await CaseSheetRepository(connection, request.app.state.settings).save(
                 hospital_id=hospital_id, visit_id=visit_id, data=data
             )
@@ -1256,12 +1252,24 @@ async def correct_interview_answer(
     )
     state["interview"] = updated.model_dump(mode="json")
     state["corrections"] = int(state.get("corrections", 0)) + 1
+    corrected_question_ids = list(state.get("corrected_question_ids", []))
+    if payload.question_id not in corrected_question_ids:
+        corrected_question_ids.append(payload.question_id)
+    state["corrected_question_ids"] = corrected_question_ids
     await request.app.state.redis_state.set(
         key,
         json.dumps(state, separators=(",", ":")),
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
     if state.get("phase") == "summary":
+        _schedule_case_sheet_enrichment(
+            request,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            baseline=data,
+            transcript=str(payload.answer),
+            language=updated.language,
+        )
         return {
             "complete": True,
             "case_sheet": data,
@@ -1278,6 +1286,97 @@ async def correct_interview_answer(
     return await _question_response(
         request, hospital_id=hospital_id, visit_id=visit_id, state=state
     )
+
+
+@router.get("/sessions/{visit_id}/readback-audio")
+async def generate_readback_audio(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> Response:
+    """Generate patient-specific read-back speech in memory and never cache or persist it."""
+    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=True)
+    state = _read_state(
+        await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
+    )
+    if state.get("phase") != "summary":
+        raise _error(409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first.")
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        saved = await CaseSheetRepository(connection, request.app.state.settings).get(
+            hospital_id=hospital_id, visit_id=visit_id
+        )
+        if saved is None:
+            raise _error(
+                409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first."
+            )
+        copy = build_readback(saved["data"])
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="patient",
+            actor_id=visit_id,
+            action="intake.readback_audio.generated",
+            resource_type="case_sheet",
+            resource_id=saved["id"],
+            meta={"provider": request.app.state.tts_provider.name},
+        )
+    try:
+        clip = await request.app.state.tts_provider.synthesize(
+            copy, str(saved["data"].get("language", "en"))
+        )
+    except Exception as exc:
+        raise _error(
+            503,
+            "TTS_UNAVAILABLE",
+            "Read-back audio unavailable",
+            "Read-back text remains available.",
+        ) from exc
+    return Response(
+        content=clip.content,
+        media_type=clip.media_type,
+        headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
+    )
+
+
+@router.post("/sessions/{visit_id}/needs-assistance")
+async def flag_patient_needs_assistance(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, bool]:
+    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=True)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        repository = CaseSheetRepository(connection, request.app.state.settings)
+        saved = await repository.get(hospital_id=hospital_id, visit_id=visit_id, for_update=True)
+        if saved is None:
+            raise _error(
+                409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first."
+            )
+        data = saved["data"]
+        confirmation = data.setdefault("patient_confirmation", {})
+        confirmation["needs_assistance"] = True
+        await repository.save(hospital_id=hospital_id, visit_id=visit_id, data=data)
+        await connection.execute(
+            text(
+                "UPDATE visits SET needs_assistance = true "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="patient",
+            actor_id=visit_id,
+            action="intake.patient_needs_assistance",
+            resource_type="visit",
+            resource_id=visit_id,
+        )
+    return {"needs_assistance": True}
 
 
 @router.post("/sessions/{visit_id}/confirm")
@@ -1319,6 +1418,12 @@ async def confirm_summary(
             include_department=True,
         )
         case_data = _patient_case_sheet(saved["data"], flags, route_result)
+        confirmation = case_data.setdefault("patient_confirmation", {})
+        confirmation["confirmed_by_patient"] = True
+        confirmation["corrections"] = list(state.get("corrected_question_ids", []))
+        for metadata in case_data.get("field_meta", {}).values():
+            if isinstance(metadata, dict):
+                metadata["confirmed"] = True
         if route_result.department_code != "NURSE_TRIAGE":
             routed = (
                 (

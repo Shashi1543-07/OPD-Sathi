@@ -820,6 +820,14 @@
 .staff-route-confirm {
   grid-column: 1 / -1;
 }
+.staff-assistance-flag {
+  background: #fff4cf;
+  border-radius: 999px;
+  color: #6b4d00;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 3px 8px;
+}
 .staff-queue-load-more {
   display: block;
   margin: 14px auto;
@@ -956,6 +964,23 @@
   gap: 8px;
   grid-column: 1 / -1;
 }
+.audio-prompt {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0;
+}
+.audio-volume {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: 0.85rem;
+  gap: 8px;
+}
+.audio-volume input {
+  width: 110px;
+}
 .consult-source {
   align-items: center;
   color: var(--text-muted);
@@ -971,6 +996,27 @@
 .consult-ai-note {
   color: var(--text-muted);
   font-size: 0.78rem;
+}
+.consult-confirmed,
+.consult-assistance {
+  border-radius: 8px;
+  font-size: 0.86rem;
+  margin: 8px 0;
+  padding: 8px 10px;
+}
+.consult-confirmed {
+  background: color-mix(in srgb, var(--success, #147d64) 10%, transparent);
+}
+.consult-unconfirmed {
+  background: #fff4cf;
+  border-radius: 8px;
+  color: #6b4d00;
+  margin: 8px 0;
+  padding: 8px 10px;
+}
+.consult-assistance {
+  background: #fff4cf;
+  color: #6b4d00;
 }
 .consult-ai-assisted {
   border: 1px solid var(--border);

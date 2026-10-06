@@ -585,6 +585,11 @@ export function StaffQueueBoard() {
                     </div>
                     <div className="staff-queue-cell">
                       <UrgencyBadge level={item.urgency} />
+                      {item.needs_assistance && (
+                        <span className="staff-assistance-flag">
+                          {t("patientNeedsAssistance")}
+                        </span>
+                      )}
                       <span>
                         {waited === null
                           ? "Wait time unavailable"

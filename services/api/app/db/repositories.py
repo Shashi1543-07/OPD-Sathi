@@ -409,6 +409,7 @@ class QueueRepository:
                     "consult_started_at",
                     "consult_ended_at",
                     "assigned_doctor_id",
+                    "needs_assistance",
                 )
             ],
         )
@@ -432,6 +433,7 @@ class QueueRepository:
                 visits.c.consult_started_at,
                 visits.c.consult_ended_at,
                 visits.c.assigned_doctor_id,
+                visits.c.needs_assistance,
                 case_sheets.c.data.label("case_sheet_data"),
                 patients.c.sex,
             )
@@ -616,12 +618,12 @@ class CaseSheetRepository:
     ) -> dict[str, Any] | None:
         statement = (
             text(
-                "SELECT id, data, version FROM case_sheets "
+                "SELECT id, data, version, confirmed_by_patient, confirmed_at FROM case_sheets "
                 "WHERE hospital_id = :hospital_id AND visit_id = :visit_id FOR UPDATE"
             )
             if for_update
             else text(
-                "SELECT id, data, version FROM case_sheets "
+                "SELECT id, data, version, confirmed_by_patient, confirmed_at FROM case_sheets "
                 "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
             )
         )
@@ -650,6 +652,8 @@ class CaseSheetRepository:
             "id": row["id"],
             "data": json.loads(plaintext),
             "version": row["version"],
+            "confirmed_by_patient": row.get("confirmed_by_patient", False),
+            "confirmed_at": row.get("confirmed_at"),
         }
 
     async def replace_if_version(
@@ -689,8 +693,9 @@ class CaseSheetRepository:
     async def confirm(self, *, hospital_id: UUID, visit_id: UUID) -> bool:
         result = await self.connection.execute(
             text(
-                "UPDATE case_sheets SET confirmed_at = now() "
-                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+                "UPDATE case_sheets SET confirmed_by_patient = true, confirmed_at = now() "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                "AND confirmed_by_patient = false"
             ),
             {"hospital_id": hospital_id, "visit_id": visit_id},
         )
@@ -813,9 +818,7 @@ class IntakeRepository:
         self.connection = connection
         self.settings = settings
 
-    async def active_nurse_department(
-        self, *, hospital_id: UUID, nurse_id: UUID
-    ) -> UUID | None:
+    async def active_nurse_department(self, *, hospital_id: UUID, nurse_id: UUID) -> UUID | None:
         department_id = await self.connection.scalar(
             text(
                 "SELECT d.id FROM users u JOIN departments d "

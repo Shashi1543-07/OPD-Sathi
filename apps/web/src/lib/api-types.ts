@@ -89,6 +89,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/ai-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ai Settings */
+        get: operations["get_ai_settings_admin_ai_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Ai Settings */
+        patch: operations["patch_ai_settings_admin_ai_settings_patch"];
+        trace?: never;
+    };
     "/admin/{resource}": {
         parameters: {
             query?: never;
@@ -343,6 +361,43 @@ export interface paths {
         head?: never;
         /** Correct Interview Answer */
         patch: operations["correct_interview_answer_intake_sessions__visit_id__interview_answers_patch"];
+        trace?: never;
+    };
+    "/intake/sessions/{visit_id}/readback-audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Generate Readback Audio
+         * @description Generate patient-specific read-back speech in memory and never cache or persist it.
+         */
+        get: operations["generate_readback_audio_intake_sessions__visit_id__readback_audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/sessions/{visit_id}/needs-assistance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Flag Patient Needs Assistance */
+        post: operations["flag_patient_needs_assistance_intake_sessions__visit_id__needs_assistance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/intake/sessions/{visit_id}/confirm": {
@@ -668,6 +723,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AISettingsPatch */
+        AISettingsPatch: {
+            /** Llm Enabled */
+            llm_enabled: boolean;
+        };
         /** AddOrReplace */
         AddOrReplace: {
             /**
@@ -728,6 +788,7 @@ export interface components {
             field_meta?: {
                 [key: string]: components["schemas"]["FieldMeta"];
             };
+            patient_confirmation?: components["schemas"]["PatientConfirmation"];
             /**
              * Disclaimer
              * @default Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis.
@@ -744,6 +805,13 @@ export interface components {
             /** Version */
             version: number;
             case_sheet: components["schemas"]["CaseSheet"];
+            /**
+             * Confirmed By Patient
+             * @default false
+             */
+            confirmed_by_patient: boolean;
+            /** Confirmed At */
+            confirmed_at?: string | null;
         };
         /** ConsentPayload */
         ConsentPayload: {
@@ -918,6 +986,21 @@ export interface components {
             conditions?: string[];
             /** Surgeries */
             surgeries?: string[];
+        };
+        /** PatientConfirmation */
+        PatientConfirmation: {
+            /**
+             * Confirmed By Patient
+             * @default false
+             */
+            confirmed_by_patient: boolean;
+            /** Corrections */
+            corrections?: string[];
+            /**
+             * Needs Assistance
+             * @default false
+             */
+            needs_assistance: boolean;
         };
         /** RedFlag */
         RedFlag: {
@@ -1192,6 +1275,63 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_settings_admin_ai_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
+    patch_ai_settings_admin_ai_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AISettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
                     };
                 };
             };
@@ -1765,6 +1905,70 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_readback_audio_intake_sessions__visit_id__readback_audio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    flag_patient_needs_assistance_intake_sessions__visit_id__needs_assistance_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
                     };
                 };
             };

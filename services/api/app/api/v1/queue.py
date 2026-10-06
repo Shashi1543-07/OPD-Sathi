@@ -327,6 +327,7 @@ async def staff_queue(
                     "position": index,
                     "queued_at": row["queued_at"].isoformat() if row["queued_at"] else None,
                     "routing": (row.get("case_sheet_data") or {}).get("routing"),
+                    "needs_assistance": row.get("needs_assistance") is True,
                 }
             )
     offset = (
@@ -896,6 +897,7 @@ async def staff_queue_socket(
                 "urgency": row["urgency"],
                 "status": row["status"],
                 "position": index + 1,
+                "needs_assistance": row.get("needs_assistance") is True,
             }
             for index, row in enumerate(rows)
         ]

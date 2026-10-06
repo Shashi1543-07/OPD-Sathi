@@ -21,6 +21,7 @@ from app.ai.providers.llm.factory import build_llm_provider
 from app.ai.providers.llm.gemini import GeminiProvider
 from app.ai.providers.llm.mock import MockLLM
 from app.ai.providers.stt.factory import build_stt_provider
+from app.ai.providers.tts.factory import build_tts_provider
 from app.api.v1 import admin as admin_api
 from app.api.v1 import audio as audio_api
 from app.api.v1 import audit as audit_api
@@ -139,6 +140,7 @@ def create_app(
         app.state.engine = engine_factory(configured.database_url)
         app.state.redis_state = redis_factory(configured.redis_state_url, decode_responses=True)
         app.state.llm_provider = build_llm_provider(configured, redis=app.state.redis_state)
+        app.state.tts_provider = build_tts_provider(configured)
         try:
             queue_registry = f"osa:{configured.app_env}:qregistry"
             if configured.worker_database_url and not await app.state.redis_state.sismember(
@@ -184,6 +186,7 @@ def create_app(
     app.state.llm_background_tasks = set()
     app.state.stt_provider = build_stt_provider(configured)
     app.state.llm_provider = MockLLM()
+    app.state.tts_provider = build_tts_provider(configured)
     app.state.memory_limiter = InMemorySlidingWindow()
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)

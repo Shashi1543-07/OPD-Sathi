@@ -9,6 +9,7 @@ export type QueueItem = {
   complaint: string;
   position: number;
   queued_at: string | null;
+  needs_assistance?: boolean;
   routing?: {
     department_code: string;
     needs_nurse_confirmation: boolean;

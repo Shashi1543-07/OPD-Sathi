@@ -26,7 +26,7 @@ export default defineConfig({
           },
         ],
       },
-      workbox: { globPatterns: ["index.html", "assets/**/*.{js,css,woff2}"] },
+      workbox: { globPatterns: ["index.html", "assets/**/*.{js,css,woff2}", "audio/**/*.{mp3,wav}"] },
     }),
   ],
   test: {

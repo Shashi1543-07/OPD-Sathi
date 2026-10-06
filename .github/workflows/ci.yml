@@ -50,6 +50,7 @@ jobs:
       - run: ruff check services/api/app services/api/tests services/api/scripts
       - run: mypy --strict services/api/app
       - run: PYTHONPATH=services/api python services/api/scripts/validate_question_bank.py
+      - run: make prompts-audio-check
       - run: PYTHONPATH=services/api python eval/interview/evaluate.py
       - run: make eval-redflags
       - run: make eval-extraction eval-adversarial eval-redflags-llm
@@ -90,6 +91,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test -- --reporter=dot
       - run: npm run e2e
+      - run: npm run e2e:pwa
       - run: npm run build
       - run: npm run lighthouse:ci
       - run: npm run check-locales

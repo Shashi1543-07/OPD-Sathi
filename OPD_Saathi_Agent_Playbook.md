@@ -223,7 +223,7 @@ Provider details change often. Before writing each adapter, fetch the current of
 | Sarvam speech to text (streaming) | WebSocket at `wss://api.sarvam.ai/speech-to-text/ws`; API key sent in the `Api-Subscription-Key` header; default model listed as `saaras:v3`; the FAQ at check time said streaming supports **Hindi and Marathi only** | `https://docs.sarvam.ai` (index: `/llms.txt`; an MCP server for coding agents is at `https://docs.sarvam.ai/_mcp/server`) |
 | Sarvam speech to text (REST) | `https://api.sarvam.ai/speech-to-text` for clips up to 30 seconds; a batch API for longer audio; invalid keys return HTTP 403, not 401 | same |
 | Gemini LLM | Docs listed `gemini-3.8-flash` and `gemini-3.5-flash-lite` as current Flash-class stable models, with structured (JSON) output supported | `https://ai.google.dev/gemini-api/docs/models` |
-| Sarvam text to speech | Not verified in this check — read the docs index first | `https://docs.sarvam.ai` |
+| Sarvam text to speech | REST `POST /text-to-speech`, API key in `api-subscription-key`, base language codes `en-IN` / `hi-IN` / `mr-IN`, 2,500-character limit, Bulbul v3, base64 audio output | `https://docs.sarvam.ai/api-reference/text-to-speech/convert` |
 
 **Consequences you must implement:**
 
@@ -1452,7 +1452,7 @@ Secrets are never committed. `.env.example` contains placeholders only. Generate
 | `GEMINI_API_KEY` | empty | Gemini |
 | `LLM_ENABLED` | `true` | Per-hospital switch |
 | `LLM_MAX_CALLS_PER_SESSION` | `30` | Cost and abuse cap |
-| `TTS_PROVIDER`, `TTS_MODEL` | `mock` | Text to speech |
+| `TTS_PROVIDER`, `TTS_MODEL` | `mock`, `bulbul:v3` | Text to speech (`mock`, `sarvam`, or `google`; Google uses Application Default Credentials) |
 | `STORE_AUDIO` | `false` | Keep raw audio (encrypted, 7 days) |
 | `READBACK_LLM` | `false` | LLM polish of the read-back |
 | `MAX_QUESTIONS` | `12` | Interview cap |

@@ -22,12 +22,17 @@ type TranscriptTurn = {
   text_english: string | null;
   stt_confidence: number | null;
 };
-type CaseSheetResult = { version: number; case_sheet: CaseSheet };
+type CaseSheetResult = {
+  version: number;
+  case_sheet: CaseSheet;
+  confirmed_by_patient: boolean;
+  confirmed_at: string | null;
+};
 
 const emptyText = "—";
 
 export function DoctorConsultation() {
-  const { t } = useTranslation("staff");
+  const { t, i18n } = useTranslation("staff");
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const visitId = searchParams.get("visit_id");
@@ -344,6 +349,14 @@ export function DoctorConsultation() {
       typeof data.hpi.severity_0_10 === "number",
     ),
   ];
+  const confirmedTime = sheet.confirmed_at
+    ? new Intl.DateTimeFormat(i18n.language, {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Kolkata",
+      }).format(new Date(sheet.confirmed_at))
+    : "";
+  const corrections = data.patient_confirmation?.corrections ?? [];
   const additionalFields = [
     ...associatedSymptoms.map((item, index) =>
       field(
@@ -423,6 +436,19 @@ export function DoctorConsultation() {
       <div className="consult-columns">
         <article className="consult-sheet">
           <h3>{t("caseSheetTitle")}</h3>
+          {sheet.confirmed_by_patient && confirmedTime ? (
+            <div className="consult-confirmed">
+              <p>{t("confirmedByPatientAt", { time: confirmedTime })}</p>
+              {corrections.length > 0 && (
+                <p>{t("correctionsRecorded", { corrections: corrections.join(", ") })}</p>
+              )}
+            </div>
+          ) : (
+            <p className="consult-unconfirmed">{t("patientConfirmationPending")}</p>
+          )}
+          {data.patient_confirmation?.needs_assistance && (
+            <p className="consult-assistance">{t("patientNeedsAssistance")}</p>
+          )}
           {Object.values(sheet.case_sheet.field_meta ?? {}).some(
             (metadata) => metadata.ai_assisted,
           ) && <p className="consult-ai-note">{t("aiAssistedNote")}</p>}

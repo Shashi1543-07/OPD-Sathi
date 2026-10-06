@@ -37,6 +37,11 @@ const sheet = {
       ai_assisted: true,
     },
   },
+  patient_confirmation: {
+    confirmed_by_patient: true,
+    corrections: ["duration"],
+    needs_assistance: false,
+  },
   disclaimer: "History only. Not a diagnosis.",
 };
 
@@ -102,6 +107,8 @@ describe("Phase 7.4 doctor consultation", () => {
             visit_id: "visit-1",
             version: 3,
             case_sheet: sheet,
+            confirmed_by_patient: true,
+            confirmed_at: "2026-10-06T04:30:00Z",
           }),
           { status: 200, headers: { ETag: '"3"' } },
         ),
@@ -143,6 +150,8 @@ describe("Phase 7.4 doctor consultation", () => {
     expect(screen.getByText("AI-assisted")).toBeVisible();
     expect(screen.getByText("Patient text")).toBeVisible();
     expect(screen.getByText("90%")).toBeVisible();
+    expect(screen.getByText(/^Confirmed by patient at/)).toBeVisible();
+    expect(screen.getByText("Patient corrections: duration")).toBeVisible();
     const editButtons = await screen.findAllByRole("button", { name: "Edit" });
     await userEvent.setup().click(editButtons[0]);
     fireEvent.change(screen.getByRole("textbox", { name: "Chief complaint" }), {
