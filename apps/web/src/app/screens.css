@@ -1014,11 +1014,30 @@
   }
 }
 @media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
   .consult-columns {
     grid-template-columns: 1fr;
   }
+  .doctor-consult,
+  .doctor-consult * {
+    visibility: visible;
+  }
+  .doctor-consult {
+    color: #111;
+    left: 0;
+    margin: 0;
+    max-width: none;
+    padding: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
   .consult-sheet,
   .consult-transcript {
+    background: white;
     border: 0;
     padding: 0;
   }
@@ -1026,6 +1045,17 @@
   .consult-field-actions,
   .consult-transcript {
     display: none !important;
+  }
+  .consult-dialog-backdrop {
+    display: none !important;
+  }
+  .consult-sheet h3,
+  .consult-sheet h4 {
+    break-after: avoid;
+  }
+  .consult-sheet section,
+  .consult-field {
+    break-inside: avoid;
   }
 }
 .staff-alert-controls {
@@ -1229,5 +1259,9 @@
   }
   .no-print {
     display: none !important;
+  }
+  .doctor-consult,
+  .doctor-consult * {
+    visibility: visible;
   }
 }

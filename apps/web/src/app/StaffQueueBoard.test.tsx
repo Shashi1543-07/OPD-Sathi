@@ -70,6 +70,44 @@ afterEach(() => {
 });
 
 describe("Phase 7.2 queue board", () => {
+  it("announces queue loading and distinguishes an empty department list", async () => {
+    let finishQueueRequest: ((value: Response) => void) | undefined;
+    vi.spyOn(staffAuth, "request").mockImplementation(async (path) => {
+      if (path.startsWith("/alerts")) return response({ items: [] });
+      return new Promise<Response>((resolve) => {
+        finishQueueRequest = resolve;
+      });
+    });
+
+    renderBoard();
+    expect(await screen.findByText("Loading the staff queue…")).toHaveAttribute(
+      "role",
+      "status",
+    );
+    finishQueueRequest?.(
+      response({ items: [], departments: [], next_cursor: null }),
+    );
+    expect(
+      await screen.findByText(
+        "No active departments are available for your account.",
+      ),
+    ).toHaveAttribute("role", "status");
+  });
+
+  it("shows a retryable alert state when the initial queue request fails", async () => {
+    vi.spyOn(staffAuth, "request").mockImplementation(async (path) => {
+      if (path.startsWith("/alerts")) return response({ items: [] });
+      throw new Error("Queue is temporarily unavailable.");
+    });
+
+    renderBoard();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Queue is temporarily unavailable.",
+    );
+    expect(screen.queryByText("Loading the staff queue…")).toBeNull();
+  });
+
   it("ignores stale sequence numbers, applies the next event, and resyncs on gaps", () => {
     expect(sequenceAction(8, 8)).toBe("ignore");
     expect(sequenceAction(8, 9)).toBe("apply");

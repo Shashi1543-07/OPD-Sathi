@@ -39,10 +39,10 @@ const sheet = {
   disclaimer: "History only. Not a diagnosis.",
 };
 
-function renderConsult() {
+function renderConsult(path = "/staff/consultations?visit_id=visit-1") {
   return render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={["/staff/consultations?visit_id=visit-1"]}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/staff/consultations" element={<DoctorConsultation />} />
         </Routes>
@@ -57,6 +57,41 @@ afterEach(() => {
 });
 
 describe("Phase 7.4 doctor consultation", () => {
+  it("shows an empty state when no queue visit is selected", async () => {
+    renderConsult("/staff/consultations");
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Choose a patient from the queue to open their consultation.",
+    );
+    expect(screen.getByRole("link", { name: "Back to queue" })).toBeVisible();
+  });
+
+  it("announces loading and provides retry after a case sheet read fails", async () => {
+    let failSheetRequest: ((value: Response) => void) | undefined;
+    vi.spyOn(staffAuth, "request").mockImplementation((path) => {
+      if (path.endsWith("/case-sheet")) {
+        return new Promise<Response>((resolve) => {
+          failSheetRequest = resolve;
+        });
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ visit_id: "visit-1", turns: [] }), {
+          status: 200,
+        }),
+      );
+    });
+
+    renderConsult();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Loading the case sheet…",
+    );
+    failSheetRequest?.(new Response(null, { status: 503 }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The case sheet or transcript could not be loaded.",
+    );
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+  });
+
   it("loads the case sheet and audited transcript and sends versioned edits", async () => {
     const request = vi.spyOn(staffAuth, "request");
     request

@@ -11,7 +11,7 @@
 5. [x] **7.5 Nurse console:** assisted registration, alert review, queue overrides, and no-show flow.
 6. [x] **7.6 Admin screens:** user, kiosk, and department management with activation secrets shown only once.
 7. [x] **7.7 PDF:** A4 multilingual case sheet through WeasyPrint, with the required history-only disclaimer; audit access and validate extracted text.
-8. [ ] **7.8 UI states:** loading, empty, error, and print states.
+8. [x] **7.8 UI states:** loading, empty, error, and print states.
 9. [ ] **7.9 Browser/access gates:** doctor, nurse, and admin flows; role access matrix; two-browser edit conflict; PDF content; axe and large-queue responsiveness.
 
 ### Step 7.1 verification
@@ -65,6 +65,13 @@
 - Verification on Ubuntu WSL with the locked Python 3.12 environment: PDF/API tests **7 passed**; `pdftotext` found the synthetic Hindi complaint, queue number, attention reason, and disclaimer; `pdfinfo` reported **1 A4 page (595.276 × 841.89 pt)**. After startup font warm-up, **25** synthetic renders measured **p50 64.94 ms, p95 79.93 ms, max 82.08 ms**, under the **1,500 ms p95** limit.
 - Frontend: **28 tests passed across 9 files**, TypeScript, ESLint, locale parity (**313 keys per language**), and production build passed. Bundle: **477.93 kB** JavaScript (**149.15 kB gzip**). Ruff and strict mypy passed (**51 source files**); `git diff --check` passed.
 - Screenshot: [synthetic A4 case sheet](../screenshots/phase-07/case-sheet-synthetic.png). PDF layout was rendered and visually inspected after the disclaimer fix.
+
+### Step 7.8 verification
+
+- Queue and doctor screens now expose distinct loading, empty, and error states to assistive technology. Queue rendering distinguishes a loading request, no active departments, and filters with no matching patients. Doctor loading and request errors include a retry action; opening consultations without a selected visit presents a return-to-queue prompt.
+- Added an A4 browser print layout for the doctor case sheet. Print media shows the case sheet and its disclaimer, hides navigation, edit controls, conflict overlay, and transcript, and avoids splitting individual fields across pages.
+- Verification: frontend **32 tests passed across 9 files**. Tests now exercise queue and doctor loading/empty/error states. TypeScript, ESLint, locale parity (**316 keys per language**), contrast checks (**12 pairs**), production build, and `git diff --check` passed. Production bundle: **478.99 kB** JavaScript (**149.43 kB gzip**).
+- Browser print visibility and the broader doctor/nurse/admin/accessibility/performance flows are measured in Step 7.9.
 
 ## Acceptance gate
 

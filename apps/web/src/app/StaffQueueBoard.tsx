@@ -61,6 +61,7 @@ export function StaffQueueBoard() {
   >({});
   const [routeReasons, setRouteReasons] = useState<Record<string, string>>({});
   const [loadingMore, setLoadingMore] = useState(false);
+  const [queueLoaded, setQueueLoaded] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(
     null,
@@ -120,6 +121,7 @@ export function StaffQueueBoard() {
       }
       setItems((current) => (append ? [...current, ...pageItems] : body.items));
       setNextCursor(body.next_cursor);
+      setQueueLoaded(true);
       setError("");
     },
     [departmentId, statusFilter],
@@ -527,11 +529,12 @@ export function StaffQueueBoard() {
         </section>
       )}
       {error && <p role="alert">{error}</p>}
-      {departments.length === 0 && !error && (
-        <p role="status">Loading departments…</p>
+      {!queueLoaded && !error && <p role="status">{t("loadingQueue")}</p>}
+      {queueLoaded && departments.length === 0 && !error && (
+        <p role="status">{t("noQueueDepartments")}</p>
       )}
       {departments.length > 0 && items.length === 0 && (
-        <p role="status">No patients match these queue filters.</p>
+        <p role="status">{t("noQueueMatches")}</p>
       )}
       {items.length > 0 && (
         <>
