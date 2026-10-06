@@ -416,6 +416,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/queue/{visit_id}/routing/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Routing
+         * @description Audit a nurse/admin decision to accept a low-confidence route suggestion.
+         */
+        post: operations["confirm_routing_queue__visit_id__routing_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/queue/call-next": {
         parameters: {
             query?: never;
@@ -512,6 +532,46 @@ export interface paths {
         put?: never;
         /** Cancel Visit */
         post: operations["cancel_visit_queue__visit_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open Alerts
+         * @description List red-flag events for the authenticated staff member's hospital.
+         */
+        get: operations["open_alerts_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/{alert_id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Alert
+         * @description Acknowledge one alert and leave an audit record.
+         */
+        post: operations["acknowledge_alert_alerts__alert_id__ack_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -655,6 +715,11 @@ export interface components {
             reason: string;
             /** Urgency */
             urgency?: ("routine" | "priority" | "urgent") | null;
+        };
+        /** RouteConfirmPayload */
+        RouteConfirmPayload: {
+            /** Reason */
+            reason: string;
         };
         /** UserCreate */
         UserCreate: {
@@ -1548,6 +1613,43 @@ export interface operations {
             };
         };
     };
+    confirm_routing_queue__visit_id__routing_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RouteConfirmPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     call_next_queue_call_next_post: {
         parameters: {
             query: {
@@ -1719,6 +1821,73 @@ export interface operations {
             header?: never;
             path: {
                 visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_alerts_alerts_get: {
+        parameters: {
+            query?: {
+                acknowledged?: boolean;
+                department_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_alert_alerts__alert_id__ack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
             };
             cookie?: never;
         };

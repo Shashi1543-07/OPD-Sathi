@@ -4,7 +4,7 @@ OPD Saathi is a multilingual, voice-first patient history-taking and queue syste
 
 ## Project status
 
-Phases 0 through 4 are implemented locally. Phase 5 adds token assignment, queue scoring, live patient status, and staff queue actions; its unit/static/browser checks pass, while live PostgreSQL/Redis concurrency and performance gates still need a configured local stack. Phase 3 remote CI/merge remains pending from its last review. Phase 4 questions and translations still need clinician and native-speaker review before any real-world use. See the [Phase 5 report](docs/phase-reports/phase-05.md) and [manual plan](docs/phase-plans/phase-05.md), [Phase 4 report](docs/phase-reports/phase-04.md), [project checklist](OPD_Saathi_TODO.md), and [build playbook](AGENT_PLAYBOOK.md).
+Phases 0 through 6 are implemented locally. Phase 6 adds draft red-flag rules, department routing, and department-scoped staff alerts; its local backend, evaluation, lint, type, and frontend gates pass. Phase 6 clinical and Hindi/Marathi native-speaker review remains pending, and the branch has not been pushed or merged. Phase 4 questions and translations also remain pending review before any real-world use. See the [Phase 6 report](docs/phase-reports/phase-06.md) and [manual plan](docs/phase-plans/phase-06.md), the [Phase 5 report](docs/phase-reports/phase-05.md), [project checklist](OPD_Saathi_TODO.md), and [build playbook](AGENT_PLAYBOOK.md).
 
 ## Development setup
 

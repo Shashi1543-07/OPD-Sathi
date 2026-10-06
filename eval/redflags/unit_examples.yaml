@@ -1,0 +1,128 @@
+RF_DS_TILE:
+  positive:
+    - {text: "", facts: {tile_ids: [DS_CHEST]}}
+    - {text: "", facts: {tile_ids: [DS_BREATH]}}
+    - {text: "", facts: {tile_ids: [DS_STROKE]}}
+  negative:
+    - {text: "", facts: {tile_ids: []}}
+    - {text: "No help tile selected.", facts: {tile_ids: []}}
+RF_CHEST_PAIN_ASSOC:
+  positive:
+    - {text: "chest pain and sweating"}
+    - {text: "seene mein dard aur pasina"}
+    - {text: "छातीत दुखणे आणि घाम"}
+  negative:
+    - {text: "chest pain but no sweating"}
+    - {text: "sweating without chest pain"}
+RF_CHEST_PAIN:
+  positive:
+    - {text: "chest pain"}
+    - {text: "सीने में दर्द"}
+    - {text: "छातीत दुखणे"}
+  negative:
+    - {text: "no chest pain"}
+    - {text: "pain in my leg"}
+RF_BREATH_SEVERE:
+  positive:
+    - {text: "cannot breathe"}
+    - {text: "सांस नहीं ले पा रहा"}
+    - {text: "श्वास घेता येत नाही"}
+  negative:
+    - {text: "no trouble breathing"}
+    - {text: "mild cough"}
+RF_STROKE_SIGNS:
+  positive:
+    - {text: "face drooping"}
+    - {text: "एक तरफ कमजोरी"}
+    - {text: "चेहरा वाकडा"}
+  negative:
+    - {text: "no face drooping"}
+    - {text: "old headache"}
+RF_BLEEDING_HEAVY:
+  positive:
+    - {text: "heavy bleeding"}
+    - {text: "खून की उल्टी"}
+    - {text: "शौचात रक्त"}
+  negative:
+    - {text: "no bleeding"}
+    - {text: "small old bruise"}
+RF_PREGNANCY_DANGER:
+  positive:
+    - {text: "vaginal bleeding", facts: {pregnant: true}}
+    - {text: "पेट में तेज दर्द", facts: {pregnant: true}}
+    - {text: "pregnancy me bleeding", facts: {pregnant: true}}
+  negative:
+    - {text: "vaginal bleeding", facts: {pregnant: false}}
+    - {text: "no bleeding", facts: {pregnant: true}}
+RF_CHILD_FEVER:
+  positive:
+    - {text: "fever", facts: {age: 0}}
+    - {text: "बुखार", facts: {age: 0}}
+    - {text: "ताप", facts: {age: 0}}
+  negative:
+    - {text: "fever", facts: {age: 10}}
+    - {text: "cough", facts: {age: 0}}
+RF_CHILD_FEVER_ASSOC:
+  positive:
+    - {text: "fever and fits", facts: {age: 4}}
+    - {text: "बुखार और खाना नहीं खा रहा", facts: {age: 3}}
+    - {text: "ताप आणि खूप सुस्त", facts: {age: 2}}
+  negative:
+    - {text: "fever and fits", facts: {age: 5}}
+    - {text: "fever", facts: {age: 2}}
+RF_SEIZURE_FAINT:
+  positive:
+    - {text: "seizure"}
+    - {text: "दौरा"}
+    - {text: "झटका"}
+  negative:
+    - {text: "no seizure"}
+    - {text: "mild dizziness"}
+RF_SELF_HARM:
+  positive:
+    - {text: "I want to die"}
+    - {text: "खुद को नुकसान"}
+    - {text: "स्वतःला इजा"}
+  negative:
+    - {text: "I do not want to die"}
+    - {text: "no self harm thoughts"}
+RF_TRAUMA_MAJOR:
+  positive:
+    - {text: "road accident"}
+    - {text: "ऊंचाई से गिरा"}
+    - {text: "रस्ते अपघात"}
+  negative:
+    - {text: "no accident"}
+    - {text: "small paper cut"}
+RF_ALLERGY_SEVERE:
+  positive:
+    - {text: "hives with breathing trouble"}
+    - {text: "चेहरे की सूजन और सांस फूलना"}
+    - {text: "घशाला सूज आणि श्वासाचा त्रास"}
+  negative:
+    - {text: "hives without breathing trouble"}
+    - {text: "mild seasonal rash"}
+RF_POISON_BITE:
+  positive:
+    - {text: "snake bite"}
+    - {text: "जहर पी लिया"}
+    - {text: "विंचू चावला"}
+  negative:
+    - {text: "no snake bite"}
+    - {text: "ordinary mosquito bite"}
+RF_SEVERE_PAIN:
+  positive:
+    - {text: "", facts: {severity: 9}}
+    - {text: "", facts: {severity: 10}}
+    - {text: "severe pain", facts: {severity: 9}}
+  negative:
+    - {text: "", facts: {severity: 8}}
+    - {text: "", facts: {severity: 0}}
+RF_HIGH_FEVER:
+  positive:
+    - {text: "fever 104"}
+    - {text: "१०४ बुखार"}
+    - {text: "bahut tez bukhar"}
+  negative:
+    - {text: "no fever"}
+    - {text: "fever 99"}

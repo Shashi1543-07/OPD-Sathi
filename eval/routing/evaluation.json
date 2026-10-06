@@ -1,0 +1,69 @@
+{
+  "dev": {
+    "cases": 224,
+    "correct": 224,
+    "top1_accuracy": 1.0,
+    "confusion_matrix": {
+      "DERM": {
+        "DERM": 28
+      },
+      "ENT": {
+        "ENT": 28
+      },
+      "GENMED": {
+        "GENMED": 24
+      },
+      "NURSE_TRIAGE": {
+        "NURSE_TRIAGE": 28
+      },
+      "OBG": {
+        "OBG": 28
+      },
+      "OPHTH": {
+        "OPHTH": 28
+      },
+      "ORTHO": {
+        "ORTHO": 24
+      },
+      "PAED": {
+        "PAED": 8
+      },
+      "SURG": {
+        "SURG": 28
+      }
+    },
+    "misses": []
+  },
+  "test": {
+    "cases": 96,
+    "correct": 96,
+    "top1_accuracy": 1.0,
+    "confusion_matrix": {
+      "DERM": {
+        "DERM": 12
+      },
+      "ENT": {
+        "ENT": 12
+      },
+      "GENMED": {
+        "GENMED": 12
+      },
+      "NURSE_TRIAGE": {
+        "NURSE_TRIAGE": 12
+      },
+      "OBG": {
+        "OBG": 12
+      },
+      "OPHTH": {
+        "OPHTH": 12
+      },
+      "ORTHO": {
+        "ORTHO": 12
+      },
+      "SURG": {
+        "SURG": 12
+      }
+    },
+    "misses": []
+  }
+}

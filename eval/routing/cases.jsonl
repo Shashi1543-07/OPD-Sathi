@@ -1,0 +1,320 @@
+{"id": "ROUTE-GENMED-en-00", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-en-01", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-en-02", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-en-03", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-en-04", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-en-05", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-en-06", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-en-07", "language": "en", "text": "fever and cough", "facts": {"age": 8}, "expected": "PAED", "split": "dev"}
+{"id": "ROUTE-GENMED-en-08", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-en-09", "language": "en", "text": "fever and cough", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hi-00", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-hi-01", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-hi-02", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-hi-03", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hi-04", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hi-05", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hi-06", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hi-07", "language": "hi", "text": "बुखार और खांसी", "facts": {"age": 8}, "expected": "PAED", "split": "dev"}
+{"id": "ROUTE-GENMED-hi-08", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hi-09", "language": "hi", "text": "बुखार और खांसी", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-mr-00", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-mr-01", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-mr-02", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-mr-03", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-mr-04", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-mr-05", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-mr-06", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-mr-07", "language": "mr", "text": "ताप आणि खोकला", "facts": {"age": 8}, "expected": "PAED", "split": "dev"}
+{"id": "ROUTE-GENMED-mr-08", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-mr-09", "language": "mr", "text": "ताप आणि खोकला", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hinglish-00", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-hinglish-01", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-hinglish-02", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "test"}
+{"id": "ROUTE-GENMED-hinglish-03", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hinglish-04", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hinglish-05", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hinglish-06", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hinglish-07", "language": "hinglish", "text": "bukhar aur khansi", "facts": {"age": 8}, "expected": "PAED", "split": "dev"}
+{"id": "ROUTE-GENMED-hinglish-08", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-GENMED-hinglish-09", "language": "hinglish", "text": "bukhar aur khansi", "facts": {}, "expected": "GENMED", "split": "dev"}
+{"id": "ROUTE-ORTHO-en-00", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-en-01", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-en-02", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-en-03", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-en-04", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-en-05", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-en-06", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-en-07", "language": "en", "text": "joint pain after sprain", "facts": {"age": 8}, "expected": "PAED", "split": "dev"}
+{"id": "ROUTE-ORTHO-en-08", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-en-09", "language": "en", "text": "joint pain after sprain", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hi-00", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-hi-01", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-hi-02", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-hi-03", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hi-04", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hi-05", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hi-06", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hi-07", "language": "hi", "text": "हड्डी में दर्द", "facts": {"age": 8}, "expected": "PAED", "split": "dev"}
+{"id": "ROUTE-ORTHO-hi-08", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hi-09", "language": "hi", "text": "हड्डी में दर्द", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-mr-00", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-mr-01", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-mr-02", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-mr-03", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-mr-04", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-mr-05", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-mr-06", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-mr-07", "language": "mr", "text": "सांधा दुखणे", "facts": {"age": 8}, "expected": "PAED", "split": "dev"}
+{"id": "ROUTE-ORTHO-mr-08", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-mr-09", "language": "mr", "text": "सांधा दुखणे", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hinglish-00", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-hinglish-01", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-hinglish-02", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "test"}
+{"id": "ROUTE-ORTHO-hinglish-03", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hinglish-04", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hinglish-05", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hinglish-06", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hinglish-07", "language": "hinglish", "text": "joint me dard", "facts": {"age": 8}, "expected": "PAED", "split": "dev"}
+{"id": "ROUTE-ORTHO-hinglish-08", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ORTHO-hinglish-09", "language": "hinglish", "text": "joint me dard", "facts": {}, "expected": "ORTHO", "split": "dev"}
+{"id": "ROUTE-ENT-en-00", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-en-01", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-en-02", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-en-03", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-en-04", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-en-05", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-en-06", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-en-07", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-en-08", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-en-09", "language": "en", "text": "ear pain", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hi-00", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-hi-01", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-hi-02", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-hi-03", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hi-04", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hi-05", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hi-06", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hi-07", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hi-08", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hi-09", "language": "hi", "text": "गले में दर्द", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-mr-00", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-mr-01", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-mr-02", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-mr-03", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-mr-04", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-mr-05", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-mr-06", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-mr-07", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-mr-08", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-mr-09", "language": "mr", "text": "कान दुखणे", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hinglish-00", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-hinglish-01", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-hinglish-02", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "test"}
+{"id": "ROUTE-ENT-hinglish-03", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hinglish-04", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hinglish-05", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hinglish-06", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hinglish-07", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hinglish-08", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-ENT-hinglish-09", "language": "hinglish", "text": "kan me dard", "facts": {}, "expected": "ENT", "split": "dev"}
+{"id": "ROUTE-OBG-en-00", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-en-01", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-en-02", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-en-03", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-en-04", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-en-05", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-en-06", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-en-07", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-en-08", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-en-09", "language": "en", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hi-00", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-hi-01", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-hi-02", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-hi-03", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hi-04", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hi-05", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hi-06", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hi-07", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hi-08", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hi-09", "language": "hi", "text": "मासिक दर्द", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-mr-00", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-mr-01", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-mr-02", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-mr-03", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-mr-04", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-mr-05", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-mr-06", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-mr-07", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-mr-08", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-mr-09", "language": "mr", "text": "पाळीची वेदना", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hinglish-00", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-hinglish-01", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-hinglish-02", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "test"}
+{"id": "ROUTE-OBG-hinglish-03", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hinglish-04", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hinglish-05", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hinglish-06", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hinglish-07", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hinglish-08", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-OBG-hinglish-09", "language": "hinglish", "text": "period pain", "facts": {"age": 25, "sex": "female"}, "expected": "OBG", "split": "dev"}
+{"id": "ROUTE-DERM-en-00", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-en-01", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-en-02", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-en-03", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-en-04", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-en-05", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-en-06", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-en-07", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-en-08", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-en-09", "language": "en", "text": "itchy skin rash", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hi-00", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-hi-01", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-hi-02", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-hi-03", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hi-04", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hi-05", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hi-06", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hi-07", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hi-08", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hi-09", "language": "hi", "text": "त्वचा में खुजली", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-mr-00", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-mr-01", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-mr-02", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-mr-03", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-mr-04", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-mr-05", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-mr-06", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-mr-07", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-mr-08", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-mr-09", "language": "mr", "text": "त्वचेवर पुरळ", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hinglish-00", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-hinglish-01", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-hinglish-02", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "test"}
+{"id": "ROUTE-DERM-hinglish-03", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hinglish-04", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hinglish-05", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hinglish-06", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hinglish-07", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hinglish-08", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-DERM-hinglish-09", "language": "hinglish", "text": "skin me khujli", "facts": {}, "expected": "DERM", "split": "dev"}
+{"id": "ROUTE-OPHTH-en-00", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-en-01", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-en-02", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-en-03", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-en-04", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-en-05", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-en-06", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-en-07", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-en-08", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-en-09", "language": "en", "text": "blurred vision", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hi-00", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-hi-01", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-hi-02", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-hi-03", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hi-04", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hi-05", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hi-06", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hi-07", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hi-08", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hi-09", "language": "hi", "text": "आंख में दर्द", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-mr-00", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-mr-01", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-mr-02", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-mr-03", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-mr-04", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-mr-05", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-mr-06", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-mr-07", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-mr-08", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-mr-09", "language": "mr", "text": "डोळा दुखणे", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hinglish-00", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-hinglish-01", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-hinglish-02", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "test"}
+{"id": "ROUTE-OPHTH-hinglish-03", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hinglish-04", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hinglish-05", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hinglish-06", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hinglish-07", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hinglish-08", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-OPHTH-hinglish-09", "language": "hinglish", "text": "aankh me dard", "facts": {}, "expected": "OPHTH", "split": "dev"}
+{"id": "ROUTE-SURG-en-00", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-en-01", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-en-02", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-en-03", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-en-04", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-en-05", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-en-06", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-en-07", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-en-08", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-en-09", "language": "en", "text": "abdominal lump", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hi-00", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-hi-01", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-hi-02", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-hi-03", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hi-04", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hi-05", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hi-06", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hi-07", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hi-08", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hi-09", "language": "hi", "text": "पेट में गांठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-mr-00", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-mr-01", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-mr-02", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-mr-03", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-mr-04", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-mr-05", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-mr-06", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-mr-07", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-mr-08", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-mr-09", "language": "mr", "text": "पोटात गाठ", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hinglish-00", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-hinglish-01", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-hinglish-02", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "test"}
+{"id": "ROUTE-SURG-hinglish-03", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hinglish-04", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hinglish-05", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hinglish-06", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hinglish-07", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hinglish-08", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-SURG-hinglish-09", "language": "hinglish", "text": "pet me ganth", "facts": {}, "expected": "SURG", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-en-00", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-en-01", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-en-02", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-en-03", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-en-04", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-en-05", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-en-06", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-en-07", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-en-08", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-en-09", "language": "en", "text": "unclear concern", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-00", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-01", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-02", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-03", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-04", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-05", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-06", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-07", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-08", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hi-09", "language": "hi", "text": "अन्य समस्या", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-00", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-01", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-02", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-03", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-04", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-05", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-06", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-07", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-08", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-mr-09", "language": "mr", "text": "इतर त्रास", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-00", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-01", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-02", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "test"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-03", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-04", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-05", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-06", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-07", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-08", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}
+{"id": "ROUTE-NURSE_TRIAGE-hinglish-09", "language": "hinglish", "text": "dusri dikkat", "facts": {}, "expected": "NURSE_TRIAGE", "split": "dev"}

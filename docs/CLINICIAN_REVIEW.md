@@ -10,5 +10,8 @@ All patient-facing consent, question-bank, danger-tile, and red-flag content bel
 | `services/api/app/domain/interview/bank/triggers.json` | Clinical appropriateness and whether complaint terms select suitable questions | Pending |
 | `services/api/app/domain/interview/bank/danger_tiles.json` | Emergency wording, escalation expectations, translation parity | Pending |
 | `services/api/app/domain/interview/engine.py` | Confirm deterministic field mapping and default routing are safe for history collection | Pending |
+| `services/api/app/domain/redflags/rules.yaml` | Clinical appropriateness, false-negative/false-positive risks, urgency, Hindi/Marathi/Hinglish wording | Pending |
+| `services/api/app/domain/routing/engine.py` | Department mapping, age/pregnancy modifiers, ambiguity and nurse-triage behavior | Pending |
+| Red-flag patient messages in `services/api/app/api/v1/intake.py` | Confirm neutral wording and Hindi/Marathi translations | Pending |
 
 No clinical sign-off is implied by passing automated checks. Track reviewer names, dates, and approved content versions here after review.
