@@ -374,6 +374,7 @@ class QueueRepository:
                         "op": "upsert",
                         "visit_id": str(visit_id),
                         "department_id": str(row_data["department_id"]),
+                        "notify_token": True,
                     },
                     separators=(",", ":"),
                 ),

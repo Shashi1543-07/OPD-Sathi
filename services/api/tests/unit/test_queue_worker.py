@@ -96,6 +96,10 @@ class FakeRedis:
         self.published.append((channel, message))
         return 1
 
+    async def zrange(self, _key: str, _start: int, _stop: int, *, withscores: bool) -> list[object]:
+        assert withscores
+        return []
+
 
 def _event_and_visit(status: str = "queued") -> tuple[dict[str, object], dict[str, object]]:
     visit_id = uuid4()

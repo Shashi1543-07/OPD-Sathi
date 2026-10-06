@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from app.config import get_settings
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
+from app.notifications.providers import build_notification_provider
+from app.notifications.queue import deliver_pending_once, record_queue_event_intents
 
 logger = structlog.get_logger(__name__)
 
@@ -120,6 +122,17 @@ async def relay_once(connection: AsyncConnection, client: Any, *, settings: Any)
                 visit_id=visit_id,
                 payload={"changed": True},
             )
+            department_id = (
+                row["department_id"] if row is not None else UUID(payload["department_id"])
+            )
+            await record_queue_event_intents(
+                connection,
+                client,
+                hospital_id=hospital_id,
+                department_id=department_id,
+                settings=settings,
+                token_issued_visit_id=visit_id if payload.get("notify_token") is True else None,
+            )
             await connection.execute(
                 text("UPDATE outbox SET processed_at = now() WHERE id = :id"), {"id": event_id}
             )
@@ -187,6 +200,7 @@ async def on_startup(ctx: dict[str, Any]) -> None:
         settings.redis_state_url, decode_responses=True
     )
     ctx.update(settings=settings, engine=engine, redis=client)
+    ctx["notification_provider"] = build_notification_provider(settings)
     registry_key = QueueRedis(client, app_env=settings.app_env).registry_key()
     if not await client.sismember(registry_key, "ready"):
         lock_key = f"osa:{settings.app_env}:qrebuild-lock"
@@ -213,8 +227,16 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
 async def relay_queue_outbox(ctx: dict[str, Any]) -> None:
     async with ctx["engine"].begin() as connection:
         count = await relay_once(connection, ctx["redis"], settings=ctx["settings"])
+    async with ctx["engine"].begin() as connection:
+        sent, failed = await deliver_pending_once(
+            connection,
+            settings=ctx["settings"],
+            provider=ctx["notification_provider"],
+        )
     if count:
         logger.info("queue_outbox_processed", count=count)
+    if sent or failed:
+        logger.info("notifications_processed", sent=sent, failed=failed)
 
 
 class WorkerSettings:
