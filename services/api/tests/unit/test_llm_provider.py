@@ -74,6 +74,24 @@ async def test_mock_returns_only_scripted_result_and_copies_values() -> None:
         await provider.generate_json("synthetic prompt", SCHEMA)
 
 
+def test_llm_metrics_snapshot_contains_only_aggregate_numbers() -> None:
+    metrics = LLMMetrics(
+        requests=3,
+        successes=2,
+        failures=1,
+        prompt_tokens=40,
+        response_tokens=20,
+    )
+    metrics.latencies_ms.extend([10.0, 20.0, 30.0])
+    snapshot = metrics.safe_snapshot()
+    assert snapshot["requests"] == 3
+    assert snapshot["prompt_tokens"] == 40
+    assert snapshot["response_tokens"] == 20
+    assert snapshot["latency_p50_ms"] == 20.0
+    assert snapshot["latency_p95_ms"] == 30.0
+    assert all(isinstance(value, (int, float, type(None))) for value in snapshot.values())
+
+
 def test_factory_uses_mock_by_default_and_requires_gemini_key() -> None:
     assert isinstance(build_llm_provider(Settings(_env_file=None)), MockLLM)
     with pytest.raises(ValueError, match="GEMINI_API_KEY"):
@@ -97,6 +115,7 @@ async def test_gemini_uses_json_schema_and_records_only_aggregate_usage() -> Non
     config = client.models.calls[0][2]
     assert config.response_mime_type == "application/json"
     assert config.response_json_schema == SCHEMA
+    assert config.max_output_tokens == 1024
     assert metrics.prompt_tokens == 7
     assert metrics.response_tokens == 3
     assert metrics.successes == 1
@@ -188,6 +207,20 @@ async def test_gemini_retries_once_on_transient_error_using_fallback_model() -> 
         "gemini-fallback-test",
     ]
     assert metrics.retries == 1
+
+
+@pytest.mark.asyncio
+async def test_gemini_honors_a_lower_configured_output_token_limit() -> None:
+    client = FakeClient([FakeResponse({"ok": True})])
+    provider = GeminiProvider(
+        api_key="synthetic-test-key",
+        model="gemini-primary-test",
+        fallback_model="gemini-fallback-test",
+        max_output_tokens=96,
+        client=client,
+    )
+    await provider.generate_json("synthetic prompt", SCHEMA)
+    assert client.models.calls[0][2].max_output_tokens == 96
 
 
 @pytest.mark.asyncio

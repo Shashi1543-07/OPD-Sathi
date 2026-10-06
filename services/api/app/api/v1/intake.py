@@ -123,6 +123,31 @@ def _session_key(hospital_id: UUID, visit_id: UUID) -> str:
     return f"osa:intake:{hospital_id}:{visit_id}"
 
 
+async def _hospital_llm_enabled(request: Request, hospital_id: UUID) -> bool:
+    """Combine the global kill switch with this tenant's explicit AI opt-in."""
+    if not request.app.state.settings.llm_enabled:
+        return False
+    cached = getattr(request.state, "llm_enablement", None)
+    if isinstance(cached, tuple) and cached[0] == hospital_id:
+        return cached[1] is True
+    enabled = False
+    try:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            configured = await connection.scalar(
+                text(
+                    "SELECT llm_enabled FROM hospital_ai_settings WHERE hospital_id = :hospital_id"
+                ),
+                {"hospital_id": hospital_id},
+            )
+            enabled = configured is True
+    except Exception:
+        # An unavailable or unmigrated setting store must leave the deterministic path active.
+        enabled = False
+    request.state.llm_enablement = (hospital_id, enabled)
+    return enabled
+
+
 async def _evaluate_visit(
     connection: Any,
     *,
@@ -162,9 +187,16 @@ async def _evaluate_visit(
         tile_ids=tuple(_DANGER_TILE_RULE_IDS.get(tile_id, tile_id) for tile_id in tile_ids),
     )
     provider = request.app.state.llm_provider if request is not None else None
+    tenant_llm_enabled = (
+        await _hospital_llm_enabled(request, hospital_id)
+        if request is not None
+        and request.app.state.settings.llm_enabled
+        and getattr(provider, "name", "mock") == "gemini"
+        else False
+    )
     if (
         request is not None
-        and request.app.state.settings.llm_enabled
+        and tenant_llm_enabled
         and getattr(provider, "name", "mock") == "gemini"
         and text_answer.strip()
     ):
@@ -527,7 +559,10 @@ def _schedule_case_sheet_enrichment(
     language: Language,
 ) -> None:
     """Start bounded best-effort enrichment after returning a deterministic summary."""
-    if not transcript.strip() or not request.app.state.settings.llm_enabled:
+    if not transcript.strip() or getattr(request.state, "llm_enablement", None) != (
+        hospital_id,
+        True,
+    ):
         return
     provider = request.app.state.llm_provider
     if getattr(provider, "name", "mock") != "gemini":
@@ -979,6 +1014,7 @@ async def _question_response(
         if (
             request.app.state.settings.llm_enabled
             and getattr(request.app.state.llm_provider, "name", "mock") == "gemini"
+            and await _hospital_llm_enabled(request, hospital_id)
         ):
             candidate_ids = [
                 question_id

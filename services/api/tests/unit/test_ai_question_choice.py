@@ -171,7 +171,10 @@ async def test_intake_persists_selected_id_and_reuses_it_on_refresh() -> None:
         llm_provider=provider,
         redis_state=redis,
     )
-    request = SimpleNamespace(app=SimpleNamespace(state=app_state))
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=app_state),
+        state=SimpleNamespace(llm_enablement=(hospital_id, True)),
+    )
 
     first = await _question_response(
         request, hospital_id=hospital_id, visit_id=visit_id, state=state

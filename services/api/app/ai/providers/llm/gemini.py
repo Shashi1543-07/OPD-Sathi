@@ -61,6 +61,7 @@ class GeminiProvider:
         fallback_model: str,
         session_budget: SessionCallBudget | None = None,
         max_calls_per_session: int = 30,
+        max_output_tokens: int = MAX_OUTPUT_TOKENS,
         metrics: LLMMetrics | None = None,
         client: _AsyncClient | None = None,
     ) -> None:
@@ -68,12 +69,15 @@ class GeminiProvider:
             raise ValueError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
         if not model.strip() or not fallback_model.strip():
             raise ValueError("LLM_MODEL and LLM_FALLBACK_MODEL must be configured")
-        if max_calls_per_session < 1:
-            raise ValueError("per-session call cap must be positive")
+        if not 1 <= max_calls_per_session <= 30:
+            raise ValueError("per-session call cap must be between 1 and 30")
+        if not 1 <= max_output_tokens <= MAX_OUTPUT_TOKENS:
+            raise ValueError("max output tokens must be between 1 and 1024")
         self.model = model
         self.fallback_model = fallback_model
         self.session_budget = session_budget
         self.max_calls_per_session = max_calls_per_session
+        self.max_output_tokens = max_output_tokens
         self.metrics = metrics or LLMMetrics()
         self._client = client or self._create_client(api_key)
         self._failures = 0
@@ -129,7 +133,7 @@ class GeminiProvider:
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
             response_json_schema=dict(schema),
-            max_output_tokens=MAX_OUTPUT_TOKENS,
+            max_output_tokens=self.max_output_tokens,
         )
         return await self._client.models.generate_content(
             model=model,

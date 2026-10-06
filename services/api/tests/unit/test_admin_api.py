@@ -120,6 +120,60 @@ async def test_admin_list_is_scoped_audited_and_serializes_page(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
+async def test_admin_can_read_and_update_tenant_ai_opt_in(monkeypatch) -> None:
+    hospital_id, actor_id = uuid4(), uuid4()
+    statements: list[tuple[object, object]] = []
+    audited: list[dict[str, object]] = []
+
+    class SettingsConnection(FakeConnection):
+        async def execute(self, statement: object, params: object = None) -> None:
+            statements.append((statement, params))
+
+        async def scalar(self, *_args: object, **_kwargs: object) -> bool:
+            return True
+
+    connection = SettingsConnection()
+    app = SimpleNamespace(
+        state=SimpleNamespace(
+            engine=SimpleNamespace(begin=lambda: connection),
+            settings=Settings(),
+        )
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "PATCH",
+            "path": "/admin/ai-settings",
+            "headers": [],
+            "server": ("test", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+            "app": app,
+            "state": {},
+        }
+    )
+    user = {"hospital_id": str(hospital_id), "sub": str(actor_id)}
+
+    async def scope(_connection: object, _hospital: object) -> None:
+        return None
+
+    async def audit(_connection: object, _request: object, **values: object) -> None:
+        audited.append(values)
+
+    monkeypatch.setattr(admin, "set_hospital_scope", scope)
+    monkeypatch.setattr(admin, "audit", audit)
+    assert await admin.get_ai_settings(request, user) == {"llm_enabled": True}
+    assert await admin.patch_ai_settings(
+        admin.AISettingsPatch(llm_enabled=False), request, user
+    ) == {"llm_enabled": False}
+    assert len(statements) == 1
+    assert "ON CONFLICT (hospital_id) DO UPDATE" in str(statements[0][0])
+    assert statements[0][1] == {"hospital_id": hospital_id, "llm_enabled": False}
+    assert audited[0]["action"] == "admin.ai_settings.updated"
+    assert audited[0]["meta"] == {"llm_enabled": False}
+
+
+@pytest.mark.asyncio
 async def test_admin_kiosk_create_shows_activation_code_only_once(monkeypatch) -> None:
     hospital_id, actor_id, kiosk_id = uuid4(), uuid4(), uuid4()
     calls: list[dict[str, object]] = []

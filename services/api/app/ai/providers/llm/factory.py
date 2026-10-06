@@ -28,5 +28,6 @@ def build_llm_provider(
         fallback_model=settings.llm_fallback_model,
         session_budget=budget,
         max_calls_per_session=settings.llm_max_calls_per_session,
+        max_output_tokens=settings.llm_max_output_tokens,
         client=client,
     )

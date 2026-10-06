@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     llm_enabled: bool = True
     llm_max_calls_per_session: int = 30
+    llm_max_output_tokens: int = 1024
     access_token_minutes: int = 10
     refresh_token_hours: int = 8
     kiosk_token_hours: int = 12
@@ -56,8 +57,10 @@ class Settings(BaseSettings):
             raise ValueError("STT_PROVIDER must be mock or sarvam")
         if self.llm_provider not in {"mock", "gemini"}:
             raise ValueError("LLM_PROVIDER must be mock or gemini")
-        if self.llm_max_calls_per_session < 1:
-            raise ValueError("LLM_MAX_CALLS_PER_SESSION must be positive")
+        if not 1 <= self.llm_max_calls_per_session <= 30:
+            raise ValueError("LLM_MAX_CALLS_PER_SESSION must be between 1 and 30")
+        if not 1 <= self.llm_max_output_tokens <= 1024:
+            raise ValueError("LLM_MAX_OUTPUT_TOKENS must be between 1 and 1024")
         if self.llm_provider == "gemini" and not self.gemini_api_key.strip():
             raise ValueError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
         if self.access_token_minutes != 10:

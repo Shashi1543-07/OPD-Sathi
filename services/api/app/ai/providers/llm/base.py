@@ -38,6 +38,28 @@ class LLMMetrics:
     response_tokens: int = 0
     latencies_ms: deque[float] = field(default_factory=lambda: deque(maxlen=512))
 
+    def safe_snapshot(self) -> dict[str, int | float | None]:
+        """Return bounded aggregate counters and latency quantiles without request data."""
+        ordered = sorted(self.latencies_ms)
+        if ordered:
+            p50 = ordered[(len(ordered) - 1) // 2]
+            p95 = ordered[min(len(ordered) - 1, (95 * len(ordered) + 99) // 100 - 1)]
+        else:
+            p50 = None
+            p95 = None
+        return {
+            "requests": self.requests,
+            "successes": self.successes,
+            "failures": self.failures,
+            "retries": self.retries,
+            "circuit_open": self.circuit_open,
+            "call_limit_rejections": self.call_limit_rejections,
+            "prompt_tokens": self.prompt_tokens,
+            "response_tokens": self.response_tokens,
+            "latency_p50_ms": p50,
+            "latency_p95_ms": p95,
+        }
+
 
 class SessionCallBudget(Protocol):
     """Atomically account for model calls without retaining patient identifiers."""

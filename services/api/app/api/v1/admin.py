@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import text
 
 from app.config import Settings
 from app.core.audit import audit
@@ -101,6 +102,10 @@ class KioskPatch(Payload):
         return value
 
 
+class AISettingsPatch(Payload):
+    llm_enabled: bool
+
+
 def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
     return UUID(principal["hospital_id"]), UUID(principal["sub"])
 
@@ -112,6 +117,52 @@ def _not_found() -> ApiProblemError:
         title="Not found",
         detail="The requested record was not found.",
     )
+
+
+@router.get("/ai-settings")
+async def get_ai_settings(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, bool]:
+    hospital_id, _ = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        enabled = await connection.scalar(
+            text("SELECT llm_enabled FROM hospital_ai_settings WHERE hospital_id = :hospital_id"),
+            {"hospital_id": hospital_id},
+        )
+    return {"llm_enabled": enabled is True}
+
+
+@router.patch("/ai-settings")
+async def patch_ai_settings(
+    payload: AISettingsPatch,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, bool]:
+    hospital_id, actor_id = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await connection.execute(
+            text(
+                "INSERT INTO hospital_ai_settings (hospital_id, llm_enabled) "
+                "VALUES (:hospital_id, :llm_enabled) ON CONFLICT (hospital_id) DO UPDATE "
+                "SET llm_enabled = EXCLUDED.llm_enabled, updated_at = now()"
+            ),
+            {"hospital_id": hospital_id, "llm_enabled": payload.llm_enabled},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.ai_settings.updated",
+            resource_type="hospital_ai_settings",
+            resource_id=hospital_id,
+            meta={"llm_enabled": payload.llm_enabled},
+        )
+    return {"llm_enabled": payload.llm_enabled}
 
 
 @router.get("/{resource}")
