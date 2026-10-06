@@ -531,6 +531,7 @@ export function KioskIntake() {
               />
             ) : (
               <textarea
+                aria-label={t("answerPlaceholder", { ns: "kiosk" })}
                 maxLength={500}
                 rows={4}
                 value={String(answer)}

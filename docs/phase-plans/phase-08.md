@@ -69,7 +69,7 @@
 
 ## Gate
 
-Protocol/provider tests pass; the voice Playwright flow passes; touch fallback appears within three seconds; no audio persists when `STORE_AUDIO=false`. Report live WER, keyword recall, and latency if a real provider key and consenting recordings are available. Do not claim live-provider accuracy without measuring it.
+Focused protocol/provider and evaluation tests pass; the voice Playwright flow passes; touch fallback appears within three seconds; no audio persists when `STORE_AUDIO=false`. The local full backend suite and hosted CI gate are still pending resolution: this Windows run had environment-related failures, and the branch has not been pushed for hosted CI. See the [Phase 8 report](../phase-reports/phase-08.md) for exact results. Report live WER, keyword recall, and latency only if a real provider key and consenting recordings are available; do not claim live-provider accuracy without measuring it.
 
 ## Manual verification
 
