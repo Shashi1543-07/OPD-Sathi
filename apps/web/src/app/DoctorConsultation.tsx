@@ -22,6 +22,13 @@ export function DoctorConsultation() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const visitId = searchParams.get("visit_id");
+  const routeStatus = searchParams.get("status");
+  const [actionState, setActionState] = useState<{
+    visitId: string;
+    status: string;
+  } | null>(null);
+  const visitStatus =
+    actionState?.visitId === visitId ? actionState.status : routeStatus;
   const [sheet, setSheet] = useState<CaseSheetResult>();
   const [transcript, setTranscript] = useState<TranscriptTurn[]>([]);
   const [error, setError] = useState("");
@@ -147,6 +154,10 @@ export function DoctorConsultation() {
         method: "POST",
       });
       if (!response.ok) throw new Error(t("consultActionError"));
+      setActionState({
+        visitId,
+        status: action === "start" ? "in_consult" : "done",
+      });
       if (action === "complete") navigate("/staff/queue");
     } catch (reason) {
       setError(
@@ -328,12 +339,16 @@ export function DoctorConsultation() {
           <p>{t("consultVersion", { version: sheet.version })}</p>
         </div>
         <div className="consult-actions">
-          <button type="button" onClick={() => void transition("start")}>
-            {t("startConsult")}
-          </button>
-          <button type="button" onClick={() => void transition("complete")}>
-            {t("finishConsult")}
-          </button>
+          {(visitStatus === "called" || visitStatus === null) && (
+            <button type="button" onClick={() => void transition("start")}>
+              {t("startConsult")}
+            </button>
+          )}
+          {(visitStatus === "in_consult" || visitStatus === null) && (
+            <button type="button" onClick={() => void transition("complete")}>
+              {t("finishConsult")}
+            </button>
+          )}
           <button type="button" onClick={() => window.print()}>
             {t("printCaseSheet")}
           </button>

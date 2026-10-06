@@ -635,7 +635,7 @@ export function StaffQueueBoard() {
                     <div className="staff-queue-actions">
                       {canConsult && (
                         <Link
-                          to={`/staff/consultations?visit_id=${item.visit_id}`}
+                          to={`/staff/consultations?visit_id=${item.visit_id}&status=${item.status}`}
                         >
                           {t("openCaseSheet")}
                         </Link>
