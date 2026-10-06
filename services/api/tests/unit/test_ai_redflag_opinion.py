@@ -89,6 +89,21 @@ async def test_unsupported_ids_and_evidence_are_dropped() -> None:
 
 
 @pytest.mark.asyncio
+async def test_prohibited_recommendation_evidence_rejects_the_opinion() -> None:
+    rule = RULES[0]
+    provider = FixtureProvider(
+        {"flags": [{"rule_id": rule.id, "evidence": "You should take medicine."}]}
+    )
+    flags = await second_opinion_flags(
+        provider,
+        transcript="You should take medicine.",
+        language="en",
+        session_id="synthetic-session",
+    )
+    assert flags == []
+
+
+@pytest.mark.asyncio
 async def test_provider_failure_and_timeout_return_no_extra_flags() -> None:
     rule = RULES[0]
     failed = await second_opinion_flags(
@@ -135,9 +150,7 @@ def test_combination_keeps_rule_flags_and_never_reduces_urgency() -> None:
     model_flag = RedFlag("R3", "urgent", "llm", "quote", "reason", False)
     for deterministic in samples:
         combined = combine_redflag_opinions(deterministic, [model_flag, model_flag])
-        expected_count = len(deterministic) + int(
-            "R3" not in {flag.id for flag in deterministic}
-        )
+        expected_count = len(deterministic) + int("R3" not in {flag.id for flag in deterministic})
         assert len(combined) == expected_count
         assert levels[maximum_urgency(combined)] >= levels[maximum_urgency(deterministic)]
         assert urgency_never_decreases(deterministic, combined)

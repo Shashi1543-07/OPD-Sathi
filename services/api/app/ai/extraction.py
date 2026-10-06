@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.ai.output_guard import UnsafeLLMOutputError, validate_safe_output
 from app.ai.prompts.builders import build_extraction_prompt
 from app.ai.providers.llm.base import LLMProvider, LLMUnavailableError
 from app.domain.case_sheet import CaseSheet
@@ -185,8 +186,9 @@ async def extract_case_sheet_patch(
             ),
             timeout=bounded_timeout + 0.1,
         )
+        validate_safe_output(output)
         return apply_extraction_patch(case_sheet, transcript, output)
-    except (LLMUnavailableError, ExtractionValidationError):
+    except (LLMUnavailableError, ExtractionValidationError, UnsafeLLMOutputError):
         return deepcopy(case_sheet)
     except Exception:
         # Provider adapters are not allowed to leak provider diagnostics into patient flows.

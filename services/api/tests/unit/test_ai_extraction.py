@@ -216,6 +216,18 @@ async def test_provider_failure_returns_the_immediate_deterministic_sheet() -> N
 
 
 @pytest.mark.asyncio
+async def test_prohibited_model_text_keeps_the_deterministic_sheet() -> None:
+    original = _sheet()
+    provider = FixtureProvider(
+        {"findings": [_finding("/hpi/associated_symptoms", "You have diabetes.")]}
+    )
+    result = await extract_case_sheet_patch(
+        provider, original, "You have diabetes.", "en", session_id="synthetic-session"
+    )
+    assert result == original
+
+
+@pytest.mark.asyncio
 async def test_empty_voice_transcript_skips_provider_call() -> None:
     provider = FixtureProvider({"findings": []})
     original = _sheet()

@@ -137,6 +137,25 @@ async def test_gemini_rejects_json_that_does_not_match_schema() -> None:
 
 
 @pytest.mark.asyncio
+async def test_gemini_rejects_diagnosis_text_even_when_schema_is_valid() -> None:
+    client = FakeClient([FakeResponse({"text": "You have diabetes."})])
+    provider = GeminiProvider(
+        api_key="synthetic-test-key",
+        model="gemini-primary-test",
+        fallback_model="gemini-fallback-test",
+        client=client,
+    )
+    schema = {
+        "type": "object",
+        "properties": {"text": {"type": "string"}},
+        "required": ["text"],
+        "additionalProperties": False,
+    }
+    with pytest.raises(LLMUnavailableError, match="unavailable"):
+        await provider.generate_json("synthetic prompt", schema)
+
+
+@pytest.mark.asyncio
 async def test_gemini_rejects_invalid_schema_before_sending_prompt() -> None:
     client = FakeClient([])
     provider = GeminiProvider(

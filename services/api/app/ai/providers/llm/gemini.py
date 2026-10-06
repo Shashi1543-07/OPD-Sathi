@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from time import monotonic
 from typing import Any, Protocol, cast
 
+from app.ai.output_guard import validate_safe_output
 from app.ai.providers.llm.base import (
     LLMMetrics,
     LLMUnavailableError,
@@ -214,6 +215,7 @@ class GeminiProvider:
                     )
                     value, prompt_tokens, response_tokens = self._decode_response(response)
                     self._validate_schema(value, schema)
+                    validate_safe_output(value)
                     self.metrics.prompt_tokens += prompt_tokens
                     self.metrics.response_tokens += response_tokens
                     self._record_success()

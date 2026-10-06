@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Sequence
 from typing import Any
 
+from app.ai.output_guard import UnsafeLLMOutputError, validate_safe_output
 from app.ai.prompts.builders import build_redflag_prompt
 from app.ai.providers.llm.base import LLMProvider
 from app.domain.redflags.engine import RULES, RedFlag, RuleModel, maximum_urgency
@@ -88,6 +89,10 @@ async def second_opinion_flags(
 
     raw_flags = response.get("flags")
     if not isinstance(raw_flags, list):
+        return []
+    try:
+        validate_safe_output(raw_flags)
+    except UnsafeLLMOutputError:
         return []
     extra: list[RedFlag] = []
     seen: set[str] = set()
