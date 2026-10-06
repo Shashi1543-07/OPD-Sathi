@@ -57,8 +57,11 @@ eval:
 eval-interview:
 	PYTHONPATH=$(API_DIR) python eval/interview/evaluate.py
 
-eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live:
+eval-extraction eval-adversarial eval-redflags-llm eval-live:
 	@echo "$@ is not available until its implementation phase."
+
+eval-stt:
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/stt/evaluate.py
 
 eval-redflags:
 	PYTHONPATH=$(API_DIR) $(PYTHON) services/api/scripts/validate_redflag_rules.py

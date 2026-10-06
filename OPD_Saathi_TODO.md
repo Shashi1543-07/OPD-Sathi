@@ -145,6 +145,8 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 - [x] 8.5 Integrate live transcript, editing, confidence check, and voice UI states (always-reviewable transcript; voice mode persisted; all 3 locales checked).
 - [x] 8.6 Support mixed-language speech without changing the original script (mixed Devanagari/Latin pass-through test).
 - [x] 8.7 Fall back to touch/typing within three seconds on provider failure or absent partials (fake-clock interview test confirms the transition).
+- [x] 8.8 Add consent-based evaluation plan/audio plus Mock CI evaluation (80 scripts documented; 80 synthetic cases, no recordings committed, WER 0 and keyword recall 1 in fixture mode).
+- [x] 8.9 Add protocol/provider/Playwright tests (provider/socket/evaluation tests pass; Chromium fake-audio and permission-denial flows 2/2).
 - [ ] 8.6 Support mixed-language speech without changing the original script.
 - [ ] 8.7 Fall back to touch/typing within three seconds on provider failure.
 - [ ] 8.8 Add consent-based evaluation plan/audio (ignored and deleted after use) plus Mock CI evaluation.

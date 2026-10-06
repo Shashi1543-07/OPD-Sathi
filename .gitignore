@@ -32,6 +32,8 @@ apps/web/.lighthouseci/
 data/
 *.log
 *.sqlite3
+eval/stt/audio/*
+!eval/stt/audio/.gitkeep
 pytest-cache-files*/
 services/api/openapi.json
 .DS_Store

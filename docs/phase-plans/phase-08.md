@@ -1,6 +1,6 @@
 # Phase 8 — Voice input
 
-**Status:** In progress on `phase-08-voice`, branched from merged Phase 7 commit `16d4952`. Step 8.1 is complete. Sarvam's current Realtime STT docs and provider decision are recorded in ADR 003. No real API key was supplied; the implementation stays on Mock until one is configured.
+**Status:** Implementation steps 8.1–8.9 are complete on `phase-08-voice`, branched from merged Phase 7 commit `16d4952`. Sarvam's current Realtime STT docs and provider decision are recorded in ADR 003. No real API key was supplied; Mock remains default and live speech accuracy is unmeasured.
 
 ## Work order
 
@@ -11,8 +11,8 @@
 5. [x] **8.5 Interview integration:** voice orb states, live transcript, final submission as `input_mode=voice`, tap-to-edit, and transcript review prompt.
 6. [x] **8.6 Mixed language:** pass UI language as the recognition language, accept code-mixing, and preserve the transcript's original script without translation.
 7. [x] **8.7 Safe fallback:** switch to touch and typing within three seconds on provider failure, absent partials, or open circuit; keep nurse-assisted entry available.
-8. [ ] **8.8 Evaluation:** document the 80-utterance consenting-speaker recording script and implement Mock CI evaluation. Keep recordings ignored and out of Git.
-9. [ ] **8.9 Verification:** protocol/provider tests and Chromium fake-audio Playwright coverage.
+8. [x] **8.8 Evaluation:** document the 80-utterance consenting-speaker recording script and implement Mock CI evaluation. Keep recordings ignored and out of Git.
+9. [x] **8.9 Verification:** protocol/provider tests and Chromium fake-audio Playwright coverage.
 
 ## Step 8.1 verification
 
@@ -55,6 +55,17 @@
 - After local speech begins, the kiosk starts a three-second watchdog and resets it when partial text arrives. Provider errors, a missing first partial, or stalled partials close the socket, stop microphone tracks, and leave the answer editable by touch or typing.
 - The capture worklet ignores leading silence for VAD, ends after 1.2 seconds of silence after speech, and offers touch fallback after 15 seconds with no detected speech.
 - The interview test advances a fake clock by exactly three seconds and confirms the touch/typing fallback message; the provider outage path never supplies made-up text.
+
+## Step 8.8 verification
+
+- Added 80 synthetic reference prompts (30 Hindi, 30 Marathi, 20 English), plus a recording protocol requiring three consenting adult volunteers, quiet/noisy conditions, no patient recordings, and immediate post-evaluation deletion. `eval/stt/audio/` is Git-ignored.
+- `eval/stt/evaluate.py` and `make eval-stt` run the deterministic Mock-only CI evaluation. The local run measured **80 cases**, WER **0.0** and exact-keyword recall **1.0** for each language; Mock p95 was below **0.006 ms** on this Windows run. These numbers measure fixture plumbing only, not speech recognition accuracy; live audio WER/latency remain unmeasured because no key or volunteer clips were supplied.
+- Metric and fixture tests: **3 passed**. A standard-library WER implementation is used so the synthetic CI evaluation adds no new runtime dependency.
+
+## Step 8.9 verification
+
+- Provider, audio-socket, and evaluation tests pass; Chromium Playwright fake-audio streaming/editing and microphone-denial flows pass **2/2**.
+- Full project frontend tests, accessibility/lint/type checks, and production build are recorded in the Phase 8 report.
 
 ## Gate
 
