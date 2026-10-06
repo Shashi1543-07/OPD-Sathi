@@ -85,6 +85,7 @@ The complete local backend suite was also attempted: **318 passed**, one Redis w
 
 - Added backend tests for admin, auth login, intake helper and route branches, queue operations, and encrypted repository behavior.
 - Testing found two defects and both are fixed: selected intake danger tiles now reach the corresponding existing red-flag rules, and the staff queue returns department catalog entries instead of the last department's visit rows.
+- The first hosted backend run revealed that repository tests relied on `APP_DATA_KEY` from the developer's local `.env`. They now use explicit deterministic synthetic encryption and HMAC keys, removing that environment dependency.
 - Full backend command: `docker compose run --rm -T --no-deps -e WORKER_DATABASE_URL= -v /mnt/c/Users/lenovo/Downloads/OPD-Sathi:/workspace -w /workspace api python -m pytest services/api/tests --cov=services/api/app --cov-report=term-missing -q` — **366 passed**, 0 failed, 0 skipped; **80.0% (2,548/3,184 statements)** against the unchanged **80%** threshold. One Starlette/httpx deprecation warning.
 - `ruff check services/api/app services/api/tests`, `mypy --strict services/api/app` (**51 source files, no issues**), and `bandit -q -r services/api/app` passed. `app/core` + `app/domain` remains **97%** against the **95%** threshold.
 

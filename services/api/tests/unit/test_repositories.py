@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -9,6 +10,14 @@ import pytest
 from app.config import Settings
 from app.core.crypto import encrypt_field
 from app.db.repositories import CaseSheetRepository, PatientRepository, VisitRepository
+
+
+def make_test_settings() -> Settings:
+    return Settings(
+        app_env="test",
+        app_data_key=base64.b64encode(b"s" * 32).decode("ascii"),
+        app_hmac_key=base64.b64encode(b"h" * 32).decode("ascii"),
+    )
 
 
 class Result:
@@ -46,7 +55,7 @@ class Connection:
 @pytest.mark.asyncio
 async def test_patient_repository_encrypts_writes_and_decrypts_tenant_scoped_reads() -> None:
     hospital_id, patient_id = uuid4(), uuid4()
-    settings = Settings()
+    settings = make_test_settings()
     connection = Connection()
     repo = PatientRepository(connection, settings)
     created_id = await repo.create(
@@ -88,7 +97,7 @@ async def test_patient_and_visit_repositories_paginate_and_validate_limits() -> 
     hospital_id, patient_id, department_id = uuid4(), uuid4(), uuid4()
     first_id, second_id = uuid4(), uuid4()
     created = datetime.now(UTC)
-    settings = Settings()
+    settings = make_test_settings()
     connection = Connection(
         rows=[
             {
@@ -139,7 +148,7 @@ async def test_patient_and_visit_repositories_paginate_and_validate_limits() -> 
 @pytest.mark.asyncio
 async def test_case_sheet_repository_round_trips_encrypted_data_and_checks_versions() -> None:
     hospital_id, visit_id, sheet_id, editor_id = (uuid4() for _ in range(4))
-    settings = Settings()
+    settings = make_test_settings()
     connection = Connection(scalar=sheet_id)
     repo = CaseSheetRepository(connection, settings)
     data = {"schema_version": "1.0", "language": "en", "chief_complaint": {"text": "test"}}

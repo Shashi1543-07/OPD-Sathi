@@ -87,6 +87,7 @@
 
 - Added focused backend tests for admin lifecycle/helper paths, successful and failed login, patient intake answer/correction/read/cancel flows, queue routing/status/alert flows, and encrypted patient/case-sheet repository behavior.
 - The tests exposed and fixed two defects: intake danger-tile IDs are now mapped to the existing red-flag rule IDs before evaluation, and the staff queue keeps its department catalog separate from per-department visit rows.
+- Hosted CI initially exposed an environment-dependent fixture: three repository tests expected `APP_DATA_KEY` from the developer's local `.env`. The tests now provide deterministic synthetic data and HMAC keys directly, so they pass in CI without project secrets.
 - Full backend command: `docker compose run --rm -T --no-deps -e WORKER_DATABASE_URL= -v /mnt/c/Users/lenovo/Downloads/OPD-Sathi:/workspace -w /workspace api python -m pytest services/api/tests --cov=services/api/app --cov-report=term-missing -q` — **366 passed**, 0 failed, 0 skipped; **2,548/3,184 statements = 80.0%** (threshold **80%**, pass). One existing Starlette/httpx deprecation warning remains.
 - `ruff check services/api/app services/api/tests`, `mypy --strict services/api/app` (**51 source files, no issues**), and `bandit -q -r services/api/app` all passed. The combined `app/core` + `app/domain` gate remains **97%** against **95%**.
 
