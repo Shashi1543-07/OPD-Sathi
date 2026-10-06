@@ -4,7 +4,9 @@ import { expect, test } from "@playwright/test";
 
 const visitId = "00000000-0000-7000-8000-000000000105";
 
-test("patient status page shows live queue position and a safe ETA range", async ({ page }) => {
+test("patient status page shows live queue position and a safe ETA range", async ({
+  page,
+}) => {
   const payload = {
     state: "waiting",
     token: "GEN-007",
@@ -28,13 +30,26 @@ test("patient status page shows live queue position and a safe ETA range", async
   await expect(page.getByText("5–10 min")).toBeVisible();
   await expect(page.getByText("3", { exact: true })).toBeVisible();
   await expect(page.getByText(/urgent/i)).toHaveCount(0);
-  const screenshotDirectory = resolve(process.cwd(), "..", "..", "docs", "screenshots", "phase-05");
+  const screenshotDirectory = resolve(
+    process.cwd(),
+    "..",
+    "..",
+    "docs",
+    "screenshots",
+    "phase-05",
+  );
   mkdirSync(screenshotDirectory, { recursive: true });
-  await page.screenshot({ path: resolve(screenshotDirectory, "patient-status-en.png"), fullPage: true });
+  await page.screenshot({
+    path: resolve(screenshotDirectory, "patient-status-en.png"),
+    fullPage: true,
+  });
 });
 
-test("staff can call a waiting patient from the queue board", async ({ page }) => {
+test("staff can call a waiting patient from the queue board", async ({
+  page,
+}) => {
   let state = "queued";
+  let queueRequests = 0;
   await page.route("**/auth/refresh", (route) =>
     route.fulfill({
       json: {
@@ -51,8 +66,9 @@ test("staff can call a waiting patient from the queue board", async ({ page }) =
       },
     }),
   );
-  await page.route("**/queue", (route) =>
-    route.fulfill({
+  await page.route(/\/queue(?:\?.*)?$/, (route) => {
+    queueRequests += 1;
+    return route.fulfill({
       json: {
         items: [
           {
@@ -62,23 +78,48 @@ test("staff can call a waiting patient from the queue board", async ({ page }) =
             urgency: "routine",
             status: state,
             age_years: 37,
+            sex: "unknown",
+            complaint: "Synthetic queue complaint",
             position: 1,
+            queued_at: "2026-10-06T05:00:00Z",
+          },
+        ],
+        departments: [
+          {
+            id: "00000000-0000-7000-8000-000000000510",
+            code: "GENMED",
+            name: "General Medicine",
           },
         ],
         next_cursor: null,
         limit: 50,
       },
-    }),
-  );
+    });
+  });
   await page.route(`**/queue/${visitId}/call`, async (route) => {
     state = "called";
     await route.fulfill({ json: { visit_id: visitId, status: state } });
   });
   await page.goto("/staff");
+  await expect.poll(() => queueRequests).toBeGreaterThan(0);
   await expect(page.getByText("GEN-007")).toBeVisible();
   await page.getByRole("button", { name: "Call" }).click();
-  await expect(page.getByText("called", { exact: false })).toBeVisible();
-  const screenshotDirectory = resolve(process.cwd(), "..", "..", "docs", "screenshots", "phase-05");
+  await expect(
+    page
+      .getByRole("region", { name: "Queue patients" })
+      .getByText("called", { exact: true }),
+  ).toBeVisible();
+  const screenshotDirectory = resolve(
+    process.cwd(),
+    "..",
+    "..",
+    "docs",
+    "screenshots",
+    "phase-05",
+  );
   mkdirSync(screenshotDirectory, { recursive: true });
-  await page.screenshot({ path: resolve(screenshotDirectory, "staff-queue-en.png"), fullPage: true });
+  await page.screenshot({
+    path: resolve(screenshotDirectory, "staff-queue-en.png"),
+    fullPage: true,
+  });
 });

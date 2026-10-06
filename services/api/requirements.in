@@ -23,3 +23,5 @@ pip-audit
 PyJWT
 argon2-cffi
 cryptography
+weasyprint>=70,<71
+pypdf

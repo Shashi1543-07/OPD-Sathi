@@ -44,6 +44,14 @@ from app.domain.routing.engine import route as route_department
 router = APIRouter(prefix="/intake", tags=["intake"])
 _SESSION_TTL_FACTOR = 60 * 60
 MAX_ANSWER_CHARACTERS = 500
+_DANGER_TILE_RULE_IDS = {
+    "chest_pain": "DS_CHEST",
+    "breathing_difficulty": "DS_BREATH",
+    "heavy_bleeding": "DS_BLEED",
+    "fainting": "DS_FIT",
+    "seizure": "DS_FIT",
+    "sudden_weakness": "DS_STROKE",
+}
 
 
 class StrictPayload(BaseModel):
@@ -54,6 +62,10 @@ class CreateSessionPayload(StrictPayload):
     language: Language
 
 
+class CreateAssistedSessionPayload(StrictPayload):
+    language: Language
+
+
 class ConsentPayload(StrictPayload):
     version: str = Field(min_length=1, max_length=64)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -61,6 +73,7 @@ class ConsentPayload(StrictPayload):
 
 
 class IdentityPayload(StrictPayload):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
     age: StrictInt = Field(ge=0, le=120)
     sex: Literal["female", "male", "other", "unknown"]
     phone: str | None = Field(default=None, pattern=r"^[6-9][0-9]{9}$")
@@ -138,7 +151,7 @@ async def _evaluate_visit(
             sex=row["sex"],
             pregnant=row["pregnant"],
             severity=severity_value if isinstance(severity_value, int) else None,
-            tile_ids=tuple(tile_ids),
+            tile_ids=tuple(_DANGER_TILE_RULE_IDS.get(tile_id, tile_id) for tile_id in tile_ids),
         ),
     )
     route_result = route_department(
@@ -466,6 +479,93 @@ async def create_session(
     }
 
 
+@router.post("/assisted-sessions", status_code=status.HTTP_201_CREATED)
+async def create_assisted_session(
+    payload: CreateAssistedSessionPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("nurse"))],
+) -> dict[str, Any]:
+    hospital_id, nurse_id = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        department_id = await IntakeRepository(
+            connection, request.app.state.settings
+        ).active_nurse_department(
+            hospital_id=hospital_id,
+            nurse_id=nurse_id,
+        )
+        if department_id is None:
+            raise _error(
+                403,
+                "FORBIDDEN",
+                "Permission denied",
+                "An active department assignment is required for assisted registration.",
+            )
+        visit_id, patient_id = await IntakeRepository(
+            connection, request.app.state.settings
+        ).create_assisted_session(
+            hospital_id=hospital_id,
+            department_id=department_id,
+            language=payload.language,
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=nurse_id,
+            action="intake.assisted_started",
+            resource_type="visit",
+            resource_id=visit_id,
+            meta={"channel": "nurse", "language": payload.language},
+        )
+    consent = get_consent_copy(payload.language)
+    session_state: dict[str, Any] = {
+        "visit_id": str(visit_id),
+        "patient_id": str(patient_id),
+        "kiosk_id": None,
+        "nurse_id": str(nurse_id),
+        "channel": "nurse",
+        "assisted": True,
+        "language": payload.language,
+        "phase": "consent",
+        "danger_ids": [],
+        "corrections": 0,
+    }
+    try:
+        await request.app.state.redis_state.set(
+            _session_key(hospital_id, visit_id),
+            json.dumps(session_state, separators=(",", ":")),
+            ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+        )
+    except RedisError as exc:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            await IntakeRepository(connection, request.app.state.settings).set_visit_status(
+                hospital_id=hospital_id, visit_id=visit_id, status="cancelled"
+            )
+        raise _error(
+            503,
+            "DEPENDENCY_UNAVAILABLE",
+            "Session unavailable",
+            "Please ask staff to start registration again.",
+        ) from exc
+    token = issue_access_token(
+        subject=visit_id,
+        role="patient",
+        hospital_id=hospital_id,
+        settings=request.app.state.settings,
+        lifetime=timedelta(hours=request.app.state.settings.patient_session_hours),
+    )
+    return {
+        "visit_id": str(visit_id),
+        "patient_access_token": token,
+        "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+        "consent": {**consent, "language": payload.language},
+        "assisted": True,
+    }
+
+
 @router.post("/sessions/{visit_id}/consent")
 async def record_consent(
     visit_id: UUID,
@@ -487,6 +587,11 @@ async def record_consent(
         )
     if context["consent_granted"] is True:
         return {"granted": True, "next": "identity"}
+    state = _read_state(
+        await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
+    )
+    assisted = state.get("channel") == "nurse" and state.get("assisted") is True
+    nurse_id = UUID(state["nurse_id"]) if assisted else None
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         repository = IntakeRepository(connection, request.app.state.settings)
@@ -497,6 +602,7 @@ async def record_consent(
             version=copy["version"],
             text_sha256=copy["sha256"],
             granted=payload.granted,
+            channel="nurse" if assisted else "kiosk",
         )
         if not payload.granted:
             await repository.set_visit_status(
@@ -506,17 +612,14 @@ async def record_consent(
             connection,
             request,
             hospital_id=hospital_id,
-            actor_type="patient",
-            actor_id=visit_id,
+            actor_type="user" if nurse_id else "patient",
+            actor_id=nurse_id or visit_id,
             action="intake.consent.granted" if payload.granted else "intake.consent.declined",
             resource_type="visit",
             resource_id=visit_id,
             meta={"language": language, "version": copy["version"]},
         )
     if payload.granted:
-        state = _read_state(
-            await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
-        )
         state["phase"] = "identity"
         await request.app.state.redis_state.set(
             _session_key(hospital_id, visit_id),
@@ -540,6 +643,13 @@ async def save_identity(
     )
     key = _session_key(hospital_id, visit_id)
     state = _read_state(await request.app.state.redis_state.get(key))
+    if state.get("assisted") is True and not payload.name:
+        raise _error(
+            422,
+            "VALIDATION_FAILED",
+            "Name required",
+            "Enter the patient's name for nurse-assisted registration.",
+        )
     if state.get("phase") != "identity":
         raise _error(
             409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
@@ -554,6 +664,7 @@ async def save_identity(
                 age=payload.age,
                 sex=payload.sex,
                 phone=payload.phone,
+                name=payload.name if state.get("assisted") is True else None,
             )
     except Exception as exc:
         if "uq_patients_hospital_phone_hmac" in str(exc):

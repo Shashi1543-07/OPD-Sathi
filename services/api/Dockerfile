@@ -9,7 +9,10 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.lock.txt
 
 FROM python:3.12.11-slim-bookworm AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:$PATH"
-RUN groupadd --system app && useradd --system --gid app --create-home app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-inter fonts-noto-core libharfbuzz-subset0 libpango-1.0-0 libpangoft2-1.0-0 poppler-utils \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app && useradd --system --gid app --create-home app
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 COPY services/api/app ./app

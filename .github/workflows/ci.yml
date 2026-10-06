@@ -34,6 +34,7 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: services/api/requirements.lock.txt
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-core libharfbuzz-subset0 libpango-1.0-0 libpangoft2-1.0-0 poppler-utils
       - run: bash services/api/scripts/init-db.sh
         env:
           PGHOST: localhost

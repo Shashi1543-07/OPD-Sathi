@@ -1,12 +1,29 @@
 import type { Language } from "../i18n";
+import { staffAuth } from "./auth";
 
 const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const kioskKey = "osa.kiosk.access";
 const patientKey = "osa.patient.session";
 
-type Session = { visit_id: string; patient_access_token: string; consent?: ConsentCopy; stage?: string };
-export type ConsentCopy = { language: Language; version: string; sha256: string; text: string };
-export type Question = { id: string; input: "text" | "scale"; optional: boolean; prompt: string };
+type Session = {
+  visit_id: string;
+  patient_access_token: string;
+  consent?: ConsentCopy;
+  stage?: string;
+  assisted?: boolean;
+};
+export type ConsentCopy = {
+  language: Language;
+  version: string;
+  sha256: string;
+  text: string;
+};
+export type Question = {
+  id: string;
+  input: "text" | "scale";
+  optional: boolean;
+  prompt: string;
+};
 export type DangerTile = { id: string; label: string };
 export type CaseSheet = {
   language: Language;
@@ -45,7 +62,11 @@ function getPatientSession(): Session | null {
   }
 }
 
-async function call<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+async function call<T>(
+  path: string,
+  options: RequestInit = {},
+  token?: string,
+): Promise<T> {
   const response = await fetch(`${apiOrigin}${path}`, {
     ...options,
     headers: {
@@ -55,8 +76,15 @@ async function call<T>(path: string, options: RequestInit = {}, token?: string):
     },
   });
   if (!response.ok) {
-    const problem = (await response.json().catch(() => ({}))) as { detail?: string; title?: string };
-    throw new Error(problem.detail ?? problem.title ?? "The kiosk could not continue. Please ask staff for help.");
+    const problem = (await response.json().catch(() => ({}))) as {
+      detail?: string;
+      title?: string;
+    };
+    throw new Error(
+      problem.detail ??
+        problem.title ??
+        "The kiosk could not continue. Please ask staff for help.",
+    );
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -64,8 +92,13 @@ async function call<T>(path: string, options: RequestInit = {}, token?: string):
 
 function patientRequest<T>(path: string, options: RequestInit = {}) {
   const session = getPatientSession();
-  if (!session) throw new Error("Please start again with help from the clinic staff.");
-  return call<T>(`/intake/sessions/${session.visit_id}${path}`, options, session.patient_access_token);
+  if (!session)
+    throw new Error("Please start again with help from the clinic staff.");
+  return call<T>(
+    `/intake/sessions/${session.visit_id}${path}`,
+    options,
+    session.patient_access_token,
+  );
 }
 
 export const intake = {
@@ -86,47 +119,98 @@ export const intake = {
     sessionStorage.setItem(patientKey, JSON.stringify(response));
     return response;
   },
+  startAssisted: async (language: Language) => {
+    const response = await staffAuth.request("/intake/assisted-sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ language }),
+    });
+    if (!response.ok)
+      throw new Error(
+        "Could not start assisted registration. Please try again.",
+      );
+    const session = (await response.json()) as Session & { assisted: true };
+    const consent = session.consent;
+    sessionStorage.setItem(
+      patientKey,
+      JSON.stringify({ ...session, stage: "consent" }),
+    );
+    return consent;
+  },
   consent: (consent: ConsentCopy, granted: boolean) =>
     patientRequest<{ next: string; message?: string }>("/consent", {
       method: "POST",
-      body: JSON.stringify({ version: consent.version, sha256: consent.sha256, granted }),
+      body: JSON.stringify({
+        version: consent.version,
+        sha256: consent.sha256,
+        granted,
+      }),
     }),
-  identity: (age: number, sex: string, phone?: string) =>
+  identity: (age: number, sex: string, phone?: string, name?: string) =>
     patientRequest<{ next: string }>("/identity", {
       method: "POST",
-      body: JSON.stringify({ age, sex, phone: phone || null }),
+      body: JSON.stringify({
+        age,
+        sex,
+        phone: phone || null,
+        name: name || null,
+      }),
     }),
   dangerSigns: (tileIds: string[]) =>
-    patientRequest<{ staff_help_required: boolean; patient_message?: string }>("/danger-signs", {
-      method: "POST",
-      body: JSON.stringify({ tile_ids: tileIds }),
-    }),
+    patientRequest<{ staff_help_required: boolean; patient_message?: string }>(
+      "/danger-signs",
+      {
+        method: "POST",
+        body: JSON.stringify({ tile_ids: tileIds }),
+      },
+    ),
   dangerTiles: () => patientRequest<{ tiles: DangerTile[] }>("/danger-tiles"),
-  nextQuestion: () => patientRequest<IntakeResponse>("/interview/next-question"),
+  nextQuestion: () =>
+    patientRequest<IntakeResponse>("/interview/next-question"),
   answer: (questionId: string, answer: string | number | null, skip = false) =>
     patientRequest<IntakeResponse>("/interview/answers", {
       method: "POST",
       headers: { "Idempotency-Key": crypto.randomUUID() },
-      body: JSON.stringify({ question_id: questionId, answer, skip, input_mode: "touch" }),
+      body: JSON.stringify({
+        question_id: questionId,
+        answer,
+        skip,
+        input_mode: "touch",
+      }),
     }),
   correct: (questionId: string, answer: string | number) =>
     patientRequest<IntakeResponse>("/interview/answers", {
       method: "PATCH",
-      body: JSON.stringify({ question_id: questionId, answer, input_mode: "touch" }),
+      body: JSON.stringify({
+        question_id: questionId,
+        answer,
+        input_mode: "touch",
+      }),
     }),
-  confirm: () => patientRequest<{ confirmed: boolean; token: string; status_token: string; status_url: string; position: number | null }>("/confirm", {
-    method: "POST",
-    headers: { "Idempotency-Key": crypto.randomUUID() },
-  }),
+  confirm: () =>
+    patientRequest<{
+      confirmed: boolean;
+      token: string;
+      status_token: string;
+      status_url: string;
+      position: number | null;
+    }>("/confirm", {
+      method: "POST",
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+    }),
   cancel: async () => {
     const session = getPatientSession();
-    if (session) await patientRequest<void>("", { method: "DELETE" }).catch(() => undefined);
+    if (session)
+      await patientRequest<void>("", { method: "DELETE" }).catch(
+        () => undefined,
+      );
     sessionStorage.removeItem(patientKey);
   },
   finish: () => sessionStorage.removeItem(patientKey),
   setStage: (stage: string) => {
     const session = getPatientSession();
-    if (session) sessionStorage.setItem(patientKey, JSON.stringify({ ...session, stage }));
+    if (session)
+      sessionStorage.setItem(patientKey, JSON.stringify({ ...session, stage }));
   },
   session: getPatientSession,
 };

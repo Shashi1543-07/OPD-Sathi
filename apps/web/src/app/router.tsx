@@ -6,6 +6,15 @@ import { KioskPreview } from "./KioskPreview";
 import { StaffShell } from "./StaffShell";
 import { PatientStatus } from "./PatientStatus";
 import { KioskIntake } from "./KioskIntake";
+import { StaffQueueBoard } from "./StaffQueueBoard";
+import { DoctorConsultation } from "./DoctorConsultation";
+import { NurseConsole } from "./NurseConsole";
+import { AdminConsole } from "./AdminConsole";
+import {
+  StaffLanding,
+  StaffPageGate,
+  StaffPlaceholderPage,
+} from "./StaffNavigation";
 
 export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/kiosk" replace /> },
@@ -20,7 +29,61 @@ export const router = createBrowserRouter([
         : []),
     ],
   },
-  { path: "/staff", element: <StaffShell /> },
+  {
+    path: "/staff",
+    element: <StaffShell />,
+    children: [
+      { index: true, element: <StaffLanding /> },
+      {
+        path: "dashboard",
+        element: (
+          <StaffPageGate page="dashboard">
+            <StaffPlaceholderPage page="dashboard" />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "queue",
+        element: (
+          <StaffPageGate page="queue">
+            <StaffQueueBoard />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "consultations",
+        element: (
+          <StaffPageGate page="consultations">
+            <DoctorConsultation />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "patients",
+        element: (
+          <StaffPageGate page="patients">
+            <NurseConsole />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "reports",
+        element: (
+          <StaffPageGate page="reports">
+            <StaffPlaceholderPage page="reports" />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <StaffPageGate page="settings">
+            <AdminConsole />
+          </StaffPageGate>
+        ),
+      },
+    ],
+  },
   {
     path: "/s/:token",
     element: <PatientStatus />,

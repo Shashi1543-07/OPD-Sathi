@@ -125,16 +125,16 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 
 ## Phase 7 — Doctor/nurse consoles and PDF
 
-- [ ] 7.1 Finalize staff layout and role-based navigation.
-- [ ] 7.2 Build live, virtualized staff queue board with filters and alert controls.
-- [ ] 7.3 Add audited, versioned case-sheet read/edit API with conflict detection.
-- [ ] 7.4 Build doctor consult view, edits, transcript access, and consult actions.
-- [ ] 7.5 Build nurse assisted registration, alerts, overrides, and no-show actions.
-- [ ] 7.6 Build admin user, kiosk, and department screens.
-- [ ] 7.7 Add audited multilingual PDF export and text-content tests.
-- [ ] 7.8 Complete loading/empty/error states and print styles.
-- [ ] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests.
-- [ ] Gate: complete role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage thresholds.
+- [x] 7.1 Finalize staff layout and role-based navigation; guarded admin, doctor, and nurse routes pass the 18-combination access matrix.
+- [x] 7.2 Build live, virtualized staff queue board with filters and alert controls.
+- [x] 7.3 Add audited, versioned case-sheet read/edit API with conflict detection.
+- [x] 7.4 Build doctor consult view, edits, transcript access, and consult actions.
+- [x] 7.5 Build nurse assisted registration, alerts, overrides, and no-show actions.
+- [x] 7.6 Build admin user, kiosk, and department screens.
+- [x] 7.7 Add audited multilingual PDF export and text-content tests.
+- [x] 7.8 Complete loading/empty/error states and print styles.
+- [x] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests; full browser regression 107/107, axe 0 serious/critical, 5,000-row update 18.90 ms, and all case-sheet/transcript read audit assertions pass.
+- [x] Gate: role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage pass; backend-wide coverage is 80.0% (2,548/3,184 statements) against the 80% target, and combined core/domain coverage is 97% against the 95% target. See the [Phase 7 report](docs/phase-reports/phase-07.md). Waiting for the human's `approve phase 7` before Phase 8.
 
 ## Phase 8 — Voice input
 

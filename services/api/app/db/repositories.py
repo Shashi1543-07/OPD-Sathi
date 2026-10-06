@@ -415,6 +415,7 @@ class QueueRepository:
         case_sheets = table(
             "case_sheets", column("hospital_id"), column("visit_id"), column("data")
         )
+        patients = table("patients", column("hospital_id"), column("id"), column("sex"))
         statement = (
             select(
                 visits.c.id.label("visit_id"),
@@ -432,11 +433,17 @@ class QueueRepository:
                 visits.c.consult_ended_at,
                 visits.c.assigned_doctor_id,
                 case_sheets.c.data.label("case_sheet_data"),
+                patients.c.sex,
             )
             .outerjoin(
                 case_sheets,
                 (case_sheets.c.hospital_id == visits.c.hospital_id)
                 & (case_sheets.c.visit_id == visits.c.id),
+            )
+            .join(
+                patients,
+                (patients.c.hospital_id == visits.c.hospital_id)
+                & (patients.c.id == visits.c.patient_id),
             )
             .where(
                 visits.c.hospital_id == hospital_id,
@@ -604,14 +611,24 @@ class CaseSheetRepository:
             raise RuntimeError("saved case sheet was not found in the current tenant")
         return result
 
-    async def get(self, *, hospital_id: UUID, visit_id: UUID) -> dict[str, Any] | None:
+    async def get(
+        self, *, hospital_id: UUID, visit_id: UUID, for_update: bool = False
+    ) -> dict[str, Any] | None:
+        statement = (
+            text(
+                "SELECT id, data, version FROM case_sheets "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id FOR UPDATE"
+            )
+            if for_update
+            else text(
+                "SELECT id, data, version FROM case_sheets "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+            )
+        )
         row = (
             (
                 await self.connection.execute(
-                    text(
-                        "SELECT id, data FROM case_sheets "
-                        "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
-                    ),
+                    statement,
                     {"hospital_id": hospital_id, "visit_id": visit_id},
                 )
             )
@@ -629,7 +646,45 @@ class CaseSheetRepository:
             key=self.settings.app_data_key_bytes,
             associated_data=f"case_sheets:data:{visit_id}",
         )
-        return {"id": row["id"], "data": json.loads(plaintext)}
+        return {
+            "id": row["id"],
+            "data": json.loads(plaintext),
+            "version": row["version"],
+        }
+
+    async def replace_if_version(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        expected_version: int,
+        data: dict[str, Any],
+        editor_id: UUID,
+    ) -> int | None:
+        encrypted_data = encrypt_field(
+            json.dumps(data, separators=(",", ":")),
+            key=self.settings.app_data_key_bytes,
+            associated_data=f"case_sheets:data:{visit_id}",
+        )
+        result = await self.connection.execute(
+            text(
+                "UPDATE case_sheets SET data = CAST(:data AS jsonb), "
+                "schema_version = :schema_version, "
+                "version = version + 1, last_edited_by = :editor_id "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                "AND version = :expected_version RETURNING version"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "data": json.dumps({"ciphertext": encrypted_data}),
+                "schema_version": str(data["schema_version"]),
+                "editor_id": editor_id,
+                "expected_version": expected_version,
+            },
+        )
+        updated_version = result.scalar_one_or_none()
+        return int(updated_version) if updated_version is not None else None
 
     async def confirm(self, *, hospital_id: UUID, visit_id: UUID) -> bool:
         result = await self.connection.execute(
@@ -646,6 +701,55 @@ class InterviewTurnRepository:
     def __init__(self, connection: AsyncConnection, settings: Settings):
         self.connection = connection
         self.settings = settings
+
+    async def list_for_visit(self, *, hospital_id: UUID, visit_id: UUID) -> list[dict[str, Any]]:
+        rows = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT id, turn_index, question_id, input_mode, text_original, "
+                        "text_english, stt_confidence FROM interview_turns "
+                        "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                        "ORDER BY turn_index"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        turns: list[dict[str, Any]] = []
+        for row in rows:
+            turn_id = row["id"]
+            original = row["text_original"]
+            english = row["text_english"]
+            turns.append(
+                {
+                    "turn_index": row["turn_index"],
+                    "question_id": row["question_id"],
+                    "input_mode": row["input_mode"],
+                    "text_original": (
+                        decrypt_field(
+                            original,
+                            key=self.settings.app_data_key_bytes,
+                            associated_data=f"interview_turns:text_original:{turn_id}",
+                        )
+                        if isinstance(original, str)
+                        else None
+                    ),
+                    "text_english": (
+                        decrypt_field(
+                            english,
+                            key=self.settings.app_data_key_bytes,
+                            associated_data=f"interview_turns:text_english:{turn_id}",
+                        )
+                        if isinstance(english, str)
+                        else None
+                    ),
+                    "stt_confidence": row["stt_confidence"],
+                }
+            )
+        return turns
 
     async def add(
         self,
@@ -709,6 +813,20 @@ class IntakeRepository:
         self.connection = connection
         self.settings = settings
 
+    async def active_nurse_department(
+        self, *, hospital_id: UUID, nurse_id: UUID
+    ) -> UUID | None:
+        department_id = await self.connection.scalar(
+            text(
+                "SELECT d.id FROM users u JOIN departments d "
+                "ON d.hospital_id = u.hospital_id AND d.id = u.department_id "
+                "WHERE u.hospital_id = :hospital_id AND u.id = :nurse_id "
+                "AND u.role = 'nurse' AND u.is_active = true AND d.is_active = true"
+            ),
+            {"hospital_id": hospital_id, "nurse_id": nurse_id},
+        )
+        return department_id if isinstance(department_id, UUID) else None
+
     async def kiosk_is_active(self, *, hospital_id: UUID, kiosk_id: UUID) -> bool:
         result = await self.connection.scalar(
             text(
@@ -736,6 +854,24 @@ class IntakeRepository:
         patient_id = await PatientRepository(self.connection, self.settings).create(
             hospital_id=hospital_id,
             name="Kiosk visitor",
+            phone=None,
+            preferred_language=language,
+        )
+        visit_id = await VisitRepository(self.connection, self.settings).create(
+            hospital_id=hospital_id,
+            patient_id=patient_id,
+            department_id=department_id,
+            service_date=datetime.now(ZoneInfo("Asia/Kolkata")).date(),
+            language=language,
+        )
+        return visit_id, patient_id
+
+    async def create_assisted_session(
+        self, *, hospital_id: UUID, department_id: UUID, language: str
+    ) -> tuple[UUID, UUID]:
+        patient_id = await PatientRepository(self.connection, self.settings).create(
+            hospital_id=hospital_id,
+            name="Pending nurse-assisted visitor",
             phone=None,
             preferred_language=language,
         )
@@ -777,6 +913,7 @@ class IntakeRepository:
         version: str,
         text_sha256: str,
         granted: bool,
+        channel: str = "kiosk",
     ) -> None:
         existing = await self.connection.scalar(
             text(
@@ -790,7 +927,7 @@ class IntakeRepository:
             text(
                 "INSERT INTO consents (id, hospital_id, visit_id, language, text_version, "
                 "text_sha256, granted, granted_at, channel) VALUES (:id, :hospital_id, :visit_id, "
-                ":language, :version, :text_sha256, :granted, :granted_at, 'kiosk')"
+                ":language, :version, :text_sha256, :granted, :granted_at, :channel)"
             ),
             {
                 "id": uuid7(),
@@ -801,6 +938,7 @@ class IntakeRepository:
                 "text_sha256": text_sha256,
                 "granted": granted,
                 "granted_at": datetime.now(UTC) if granted else None,
+                "channel": channel,
             },
         )
 
@@ -813,7 +951,17 @@ class IntakeRepository:
         age: int,
         sex: str,
         phone: str | None,
+        name: str | None = None,
     ) -> None:
+        name_enc = (
+            encrypt_field(
+                name,
+                key=self.settings.app_data_key_bytes,
+                associated_data=f"patients:name_enc:{patient_id}",
+            )
+            if name
+            else None
+        )
         phone_enc = (
             encrypt_field(
                 phone,
@@ -827,7 +975,8 @@ class IntakeRepository:
         current_year = datetime.now(ZoneInfo("Asia/Kolkata")).year
         await self.connection.execute(
             text(
-                "UPDATE patients SET phone_enc = :phone_enc, phone_hmac = :phone_hmac, "
+                "UPDATE patients SET name_enc = coalesce(:name_enc, name_enc), "
+                "phone_enc = :phone_enc, phone_hmac = :phone_hmac, "
                 "year_of_birth = :year_of_birth, sex = :sex, preferred_language = "
                 "(SELECT language FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id) "
                 "WHERE hospital_id = :hospital_id AND id = :patient_id"
@@ -835,6 +984,7 @@ class IntakeRepository:
             {
                 "phone_enc": phone_enc,
                 "phone_hmac": phone_hmac,
+                "name_enc": name_enc,
                 "year_of_birth": current_year - age,
                 "sex": sex,
                 "hospital_id": hospital_id,

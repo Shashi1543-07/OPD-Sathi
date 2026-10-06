@@ -1,5 +1,6 @@
 """FastAPI application factory for the OPD Saathi API."""
 
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import cast
@@ -19,6 +20,7 @@ from starlette.responses import Response
 from app.api.v1 import admin as admin_api
 from app.api.v1 import audit as audit_api
 from app.api.v1 import auth as auth_api
+from app.api.v1 import case_sheets as case_sheets_api
 from app.api.v1 import intake as intake_api
 from app.api.v1 import queue as queue_api
 from app.config import Settings, get_settings
@@ -33,6 +35,7 @@ from app.core.errors import (
 from app.core.logging import configure_logging
 from app.core.ratelimit import InMemorySlidingWindow
 from app.db.session import create_engine, ping_database
+from app.pdf import warm_pdf_renderer
 
 logger = structlog.get_logger(__name__)
 
@@ -127,6 +130,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        await asyncio.to_thread(warm_pdf_renderer)
         app.state.engine = engine_factory(configured.database_url)
         app.state.redis_state = redis_factory(configured.redis_state_url, decode_responses=True)
         try:
@@ -181,6 +185,7 @@ def create_app(
             "X-Request-ID",
         ],
         expose_headers=[
+            "ETag",
             "X-Request-ID",
             "Retry-After",
             "X-RateLimit-Limit",
@@ -199,6 +204,7 @@ def create_app(
     app.include_router(admin_api.router)
     app.include_router(intake_api.router)
     app.include_router(queue_api.router)
+    app.include_router(case_sheets_api.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
