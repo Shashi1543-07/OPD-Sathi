@@ -4,7 +4,7 @@ COMPOSE ?= docker compose
 WEB_DIR := apps/web
 API_DIR := services/api
 
-.PHONY: up down api worker web migrate seed seed-bulk demo-seed types lint fmt test test-unit test-int e2e eval eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live prompts-audio prompts-audio-check simulate-queue demo-ratelimit load chaos scan backup restore screenshots
+.PHONY: up down api worker web migrate seed seed-bulk demo-seed types lint fmt test test-unit test-int e2e eval eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live prompts-audio prompts-audio-check simulate-queue demo-ratelimit load-test chaos scan backup restore screenshots
 
 up:
 	$(COMPOSE) up -d postgres redis
@@ -89,7 +89,7 @@ prompts-audio:
 prompts-audio-check:
 	PYTHONPATH=$(API_DIR) $(PYTHON) $(API_DIR)/scripts/generate_prompt_audio.py --check
 
-load chaos scan backup restore screenshots:
+load-test chaos scan backup restore screenshots:
 	@echo "$@ is added in a later implementation phase."
 
 simulate-queue:
