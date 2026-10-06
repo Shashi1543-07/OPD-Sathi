@@ -13,6 +13,8 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 
 from app.ai.extraction import extract_case_sheet_patch, merge_enriched_case_sheet
+from app.ai.prompts.builders import QuestionCandidate
+from app.ai.question_choice import select_question_id
 from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
 from app.core.errors import ApiProblemError
@@ -892,6 +894,58 @@ async def _question_response(
             state_data=state,
             interview_state=interview_state,
         )
+    pending_id = state.get("ai_selected_question")
+    if (
+        isinstance(pending_id, str)
+        and pending_id in QUESTIONS
+        and pending_id not in interview_state.asked
+    ):
+        question = QUESTIONS[pending_id]
+    else:
+        state.pop("ai_selected_question", None)
+        if (
+            request.app.state.settings.llm_enabled
+            and getattr(request.app.state.llm_provider, "name", "mock") == "gemini"
+        ):
+            candidate_ids = [
+                question_id
+                for question_id in interview_state.queued
+                if question_id in QUESTIONS and question_id not in interview_state.asked
+            ][:5]
+            candidates = tuple(
+                QuestionCandidate(
+                    question_id, QUESTIONS[question_id].prompt[interview_state.language]
+                )
+                for question_id in candidate_ids
+            )
+            transcript = "\n".join(
+                str(answer)
+                for answer in interview_state.answers.values()
+                if isinstance(answer, str)
+            )
+            selected_id = await select_question_id(
+                request.app.state.llm_provider,
+                transcript=transcript,
+                language=interview_state.language,
+                candidates=candidates,
+                fallback_id=question.id,
+                session_id=str(visit_id),
+            )
+            if selected_id != question.id:
+                reordered = [selected_id] + [
+                    question_id
+                    for question_id in interview_state.queued
+                    if question_id != selected_id
+                ]
+                interview_state = interview_state.model_copy(update={"queued": reordered})
+                state["interview"] = interview_state.model_dump(mode="json")
+                state["ai_selected_question"] = selected_id
+                await request.app.state.redis_state.set(
+                    _session_key(hospital_id, visit_id),
+                    json.dumps(state, separators=(",", ":")),
+                    ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+                )
+                question = QUESTIONS[selected_id]
     return {
         "complete": False,
         "question": _question_payload(question.id, interview_state.language),
@@ -1010,6 +1064,7 @@ async def submit_answer(
                 tile_ids=next_state.red_flag_ids,
             )
         state["interview"] = next_state.model_dump(mode="json")
+        state.pop("ai_selected_question", None)
         await request.app.state.redis_state.set(
             key,
             json.dumps(state, separators=(",", ":")),
