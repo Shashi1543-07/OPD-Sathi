@@ -1,5 +1,6 @@
 """FastAPI application factory for the OPD Saathi API."""
 
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import cast
@@ -34,6 +35,7 @@ from app.core.errors import (
 from app.core.logging import configure_logging
 from app.core.ratelimit import InMemorySlidingWindow
 from app.db.session import create_engine, ping_database
+from app.pdf import warm_pdf_renderer
 
 logger = structlog.get_logger(__name__)
 
@@ -128,6 +130,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        await asyncio.to_thread(warm_pdf_renderer)
         app.state.engine = engine_factory(configured.database_url)
         app.state.redis_state = redis_factory(configured.redis_state_url, decode_responses=True)
         try:

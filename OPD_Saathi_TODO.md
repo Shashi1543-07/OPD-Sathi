@@ -131,7 +131,7 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 - [x] 7.4 Build doctor consult view, edits, transcript access, and consult actions.
 - [x] 7.5 Build nurse assisted registration, alerts, overrides, and no-show actions.
 - [x] 7.6 Build admin user, kiosk, and department screens.
-- [ ] 7.7 Add audited multilingual PDF export and text-content tests.
+- [x] 7.7 Add audited multilingual PDF export and text-content tests.
 - [ ] 7.8 Complete loading/empty/error states and print styles.
 - [ ] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests.
 - [ ] Gate: complete role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage thresholds.

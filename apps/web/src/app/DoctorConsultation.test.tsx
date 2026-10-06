@@ -170,4 +170,44 @@ describe("Phase 7.4 doctor consultation", () => {
       "Updated synthetic headache",
     );
   });
+
+  it("downloads the audited PDF through the authenticated API", async () => {
+    const request = vi.spyOn(staffAuth, "request");
+    request
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            visit_id: "visit-1",
+            version: 1,
+            case_sheet: sheet,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ visit_id: "visit-1", turns: [] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(new Blob(["synthetic pdf"]), {
+          status: 200,
+          headers: { "Content-Type": "application/pdf" },
+        }),
+      );
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:synthetic-pdf");
+    const downloadClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    renderConsult();
+    await screen.findByText("Synthetic headache");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Download case sheet PDF" }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    expect(request.mock.calls[2][0]).toBe("/visits/visit-1/case-sheet.pdf");
+    expect(downloadClick).toHaveBeenCalledOnce();
+  });
 });

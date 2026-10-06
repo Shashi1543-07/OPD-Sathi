@@ -10,7 +10,7 @@
 4. [x] **7.4 Doctor consult view:** reading-order case sheet, confidence/source details, edit and conflict flows, audited transcript view, consult actions, and keyboard controls.
 5. [x] **7.5 Nurse console:** assisted registration, alert review, queue overrides, and no-show flow.
 6. [x] **7.6 Admin screens:** user, kiosk, and department management with activation secrets shown only once.
-7. [ ] **7.7 PDF:** A4 multilingual case sheet through WeasyPrint, with the required history-only disclaimer; audit access and validate extracted text.
+7. [x] **7.7 PDF:** A4 multilingual case sheet through WeasyPrint, with the required history-only disclaimer; audit access and validate extracted text.
 8. [ ] **7.8 UI states:** loading, empty, error, and print states.
 9. [ ] **7.9 Browser/access gates:** doctor, nurse, and admin flows; role access matrix; two-browser edit conflict; PDF content; axe and large-queue responsiveness.
 
@@ -57,6 +57,14 @@
 - Kiosk creation returns its activation code in the initial response. Idempotency storage removes the one-time field before caching, so a retry with the same key cannot retrieve the secret again.
 - Verification: `npm --prefix apps/web test -- --reporter=dot` — **27 passed across 9 files**; `npm --prefix apps/web run typecheck` and `lint` passed; `check-locales` reported **310 keys per language**. `.venv/Scripts/python.exe -m pytest services/api/tests/unit/test_domain_data.py -q` — **53 passed**; Ruff passed and strict mypy reported **50 source files, no issues**.
 - The full Prettier check currently reports **77** style warnings across existing generated output and untouched files. The changed Phase 7.6 source files were formatted individually; unrelated files were left unchanged.
+
+### Step 7.7 verification
+
+- Added `GET /visits/{id}/case-sheet.pdf`, restricted to active doctor/nurse staff in the visit's assigned department. The PDF includes the queue token, attention reasons, multilingual history sections, and the required history-only disclaimer. Exports are audited with the case-sheet version and red-flag count; responses are marked `Cache-Control: no-store`.
+- Added a doctor-console PDF download using the authenticated staff API request. The API image and CI install WeasyPrint's Pango libraries, Inter, Noto Sans Devanagari, and Poppler for PDF text checks.
+- Verification on Ubuntu WSL with the locked Python 3.12 environment: PDF/API tests **7 passed**; `pdftotext` found the synthetic Hindi complaint, queue number, attention reason, and disclaimer; `pdfinfo` reported **1 A4 page (595.276 × 841.89 pt)**. After startup font warm-up, **25** synthetic renders measured **p50 64.94 ms, p95 79.93 ms, max 82.08 ms**, under the **1,500 ms p95** limit.
+- Frontend: **28 tests passed across 9 files**, TypeScript, ESLint, locale parity (**313 keys per language**), and production build passed. Bundle: **477.93 kB** JavaScript (**149.15 kB gzip**). Ruff and strict mypy passed (**51 source files**); `git diff --check` passed.
+- Screenshot: [synthetic A4 case sheet](../screenshots/phase-07/case-sheet-synthetic.png). PDF layout was rendered and visually inspected after the disclaimer fix.
 
 ## Acceptance gate
 

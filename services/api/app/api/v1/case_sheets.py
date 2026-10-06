@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, Header, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
+from starlette.responses import Response as StarletteResponse
 
 from app.core.audit import audit
 from app.core.auth import require_role
@@ -15,6 +16,7 @@ from app.db.repositories import CaseSheetRepository, InterviewTurnRepository
 from app.db.session import set_hospital_scope
 from app.domain.case_sheet import CaseSheet
 from app.domain.case_sheet_patch import CaseSheetPatchError, apply_case_sheet_patch
+from app.pdf import render_case_sheet_pdf
 
 router = APIRouter(tags=["case sheets"])
 
@@ -148,6 +150,80 @@ async def get_case_sheet(
     version = int(saved["version"])
     response.headers["ETag"] = f'"{version}"'
     return CaseSheetResponse(visit_id=visit_id, version=version, case_sheet=saved["data"])
+
+
+@router.get("/visits/{visit_id}/case-sheet.pdf", response_class=StarletteResponse)
+async def export_case_sheet_pdf(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse"))],
+) -> StarletteResponse:
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _check_visit_department(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            actor_id=actor_id,
+        )
+        saved = await CaseSheetRepository(connection, request.app.state.settings).get(
+            hospital_id=hospital_id, visit_id=visit_id
+        )
+        if saved is None:
+            raise _problem(
+                404, "NOT_FOUND", "Case sheet not found", "The case sheet is unavailable."
+            )
+        visit = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT token_label, urgency_reasons FROM visits "
+                        "WHERE hospital_id = :hospital_id AND id = :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if visit is None:
+            raise _problem(
+                404,
+                "NOT_FOUND",
+                "Visit not found",
+                "The requested visit is unavailable.",
+            )
+        reasons = [
+            str(item.get("reason_en") or item.get("evidence") or "")
+            for item in saved["data"].get("red_flags", [])
+            if isinstance(item, dict)
+        ]
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="case_sheet.pdf_exported",
+            resource_type="case_sheet",
+            resource_id=saved["id"],
+            meta={"version": int(saved["version"]), "red_flag_count": len(reasons)},
+        )
+    pdf = render_case_sheet_pdf(
+        saved["data"],
+        queue_number=visit["token_label"] or "",
+        attention_reasons=reasons,
+    )
+    return StarletteResponse(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="case-sheet-{visit_id}.pdf"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.patch("/visits/{visit_id}/case-sheet", response_model=CaseSheetResponse)

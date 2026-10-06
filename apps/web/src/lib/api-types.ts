@@ -630,6 +630,23 @@ export interface paths {
         patch: operations["patch_case_sheet_visits__visit_id__case_sheet_patch"];
         trace?: never;
     };
+    "/visits/{visit_id}/case-sheet.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Case Sheet Pdf */
+        get: operations["export_case_sheet_pdf_visits__visit_id__case_sheet_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/visits/{visit_id}/transcript": {
         parameters: {
             query?: never;
@@ -2314,6 +2331,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["CaseSheetResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_case_sheet_pdf_visits__visit_id__case_sheet_pdf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -35,6 +35,7 @@ export function DoctorConsultation() {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<{ path: string; value: string }>();
   const [saving, setSaving] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [conflict, setConflict] = useState(false);
   const firstEditRef = useRef<HTMLButtonElement>(null);
 
@@ -163,6 +164,28 @@ export function DoctorConsultation() {
       setError(
         reason instanceof Error ? reason.message : t("consultActionError"),
       );
+    }
+  }
+
+  async function exportPdf() {
+    if (!visitId) return;
+    setExportingPdf(true);
+    setError("");
+    try {
+      const response = await staffAuth.request(
+        `/visits/${visitId}/case-sheet.pdf`,
+      );
+      if (!response.ok) throw new Error(t("pdfExportError"));
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `opd-saathi-${visitId}.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("pdfExportError"));
+    } finally {
+      setExportingPdf(false);
     }
   }
 
@@ -349,6 +372,13 @@ export function DoctorConsultation() {
               {t("finishConsult")}
             </button>
           )}
+          <button
+            type="button"
+            disabled={exportingPdf}
+            onClick={() => void exportPdf()}
+          >
+            {exportingPdf ? t("exportingPdf") : t("exportPdf")}
+          </button>
           <button type="button" onClick={() => window.print()}>
             {t("printCaseSheet")}
           </button>

@@ -83,6 +83,105 @@ def make_request(connection: FakeConnection) -> Request:
 
 
 @pytest.mark.asyncio
+async def test_case_sheet_pdf_is_department_scoped_and_audited(monkeypatch) -> None:
+    hospital_id, actor_id, department_id, visit_id = (uuid4() for _ in range(4))
+    repository = FakeCaseSheetRepository(version=6)
+    audited: list[dict] = []
+    rendered: list[dict] = []
+    monkeypatch.setattr(case_sheets, "set_hospital_scope", lambda *_args, **_kwargs: _noop())
+    monkeypatch.setattr(case_sheets, "CaseSheetRepository", lambda *_args: repository)
+
+    async def record_audit(_connection, _request, **values) -> None:
+        audited.append(values)
+
+    class Result:
+        def mappings(self):
+            return self
+
+        def first(self):
+            return {"token_label": "GM-042", "urgency_reasons": []}
+
+    class PdfConnection(FakeConnection):
+        async def execute(self, *_args, **_kwargs):
+            return Result()
+
+    def render_pdf(case_sheet, *, queue_number, attention_reasons):
+        rendered.append(
+            {
+                "case_sheet": case_sheet,
+                "queue_number": queue_number,
+                "attention_reasons": attention_reasons,
+            }
+        )
+        return b"%PDF-synthetic"
+
+    monkeypatch.setattr(case_sheets, "audit", record_audit)
+    monkeypatch.setattr(case_sheets, "render_case_sheet_pdf", render_pdf)
+    request = make_request(PdfConnection(department_id, department_id))
+    response = await case_sheets.export_case_sheet_pdf(
+        visit_id,
+        request,
+        {"hospital_id": str(hospital_id), "sub": str(actor_id), "role": "doctor"},
+    )
+
+    assert response.body == b"%PDF-synthetic"
+    assert response.media_type == "application/pdf"
+    assert response.headers["cache-control"] == "no-store"
+    assert rendered[0]["queue_number"] == "GM-042"
+    assert audited[0]["action"] == "case_sheet.pdf_exported"
+    assert audited[0]["meta"] == {"version": 6, "red_flag_count": 0}
+
+
+def test_case_sheet_pdf_contains_english_and_devanagari_text() -> None:
+    import shutil
+    import subprocess
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    from app.pdf import render_case_sheet_pdf
+
+    sheet = {
+        "language": "hi",
+        "chief_complaint": {
+            "text_original": "सिर में दर्द",
+            "text_en": "Headache",
+        },
+        "hpi": {"duration": {"value": 3, "unit": "day"}},
+        "past_history": {"conditions": ["Synthetic history"]},
+        "medications": [],
+        "allergies": [],
+        "red_flags": [],
+        "routing": {"department_code": "GENMED"},
+    }
+    try:
+        pdf = render_case_sheet_pdf(
+                sheet,
+                queue_number="GM-042",
+            attention_reasons=["Synthetic attention reason"],
+        )
+    except OSError as error:
+        if "libgobject-2.0-0" in str(error):
+            pytest.skip("WeasyPrint's native Pango library is unavailable on this host")
+        raise
+    text = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(pdf)).pages)
+
+    pdftotext = shutil.which("pdftotext")
+    if pdftotext is None:
+        pytest.skip("pdftotext is unavailable on this host")
+    extracted = subprocess.run(
+        [pdftotext, "-", "-"], input=pdf, capture_output=True, check=True
+    ).stdout.decode("utf-8")
+
+    assert "सिर में द" in extracted
+    assert "मुख्य शिकायत" in text
+    assert len(PdfReader(BytesIO(pdf)).pages) == 1
+    assert "GM-042" in text
+    assert "Synthetic attention reason" in text
+    assert "Not a diagnosis" in text
+
+
+@pytest.mark.asyncio
 async def test_case_sheet_read_is_department_scoped_and_audited(monkeypatch) -> None:
     hospital_id, actor_id, department_id, visit_id = (uuid4() for _ in range(4))
     repository = FakeCaseSheetRepository(version=4)
