@@ -1,6 +1,6 @@
 # Phase 7 progress report
 
-**Status:** In progress on `phase-07-consoles`. Phase 6 is integrated into `main` as merge commit `0c833c3`; Phase 7 is tracked by draft PR #5. Steps 7.1–7.3 have passed their gates, 7.4 is in progress, and the full Phase 7 acceptance gate is not complete.
+**Status:** In progress on `phase-07-consoles`. Phase 6 is integrated into `main` as merge commit `0c833c3`; Phase 7 is tracked by draft PR #5. Steps 7.1–7.4 are implemented and required CI is green; the full Phase 7 acceptance gate is not complete.
 
 ## Completed work
 
@@ -25,11 +25,11 @@
 - Doctors can edit only history fields through schema-validated JSON Patch operations. Routing, red flags, provenance metadata, and the history disclaimer are protected.
 - Writes require the current `If-Match` version, lock and compare the row, increment the version, mark changed fields as doctor-confirmed, and audit operation/path metadata without recording clinical values. Stale edits return **409** and missing preconditions return **428**.
 
-### 7.4 Doctor consultation view (in progress)
+### 7.4 Doctor consultation view
 
 - Doctors can open an active visit from the queue and review the case sheet in reading order, with source/confidence details and editable history fields.
 - Stale writes open a reload/reapply dialog. The screen includes audited transcript reads, Start/Done actions, print support, and N/E/P keyboard shortcuts.
-- Completion remains pending broader browser and accessibility checks.
+- Broader role-matrix and two-browser edit checks remain in the Step 7.9 acceptance pass.
 
 ## Verification recorded
 
@@ -46,7 +46,8 @@ The complete local backend suite was also attempted: **318 passed**, one Redis w
 
 - Hosted PR #5 CI passed backend, frontend, and security after the 7.3 Bandit fix at `fee4776`: [Actions run](https://github.com/Shashi1543-07/OPD-Sathi/actions/runs/37410094888).
 - Current local Phase 7.4 gates: frontend **25 tests passed across 7 files**; case-sheet/transcript API **13 tests passed**; typecheck, ESLint, locale parity (**254 keys per language**), production build, Ruff, strict mypy, Bandit, and `git diff --check` passed.
+- Hosted PR #5 CI passed backend, frontend (including E2E, Lighthouse, and generated-type parity), and security at `c990f49`: [Actions run](https://github.com/Shashi1543-07/OPD-Sathi/actions/runs/37411307425).
 
 ## Remaining Phase 7 work
 
-Phase 7.4 is in progress. Steps 7.5–7.9 remain: nurse console; admin screens; multilingual PDF; UI states and print styling; and full browser/access/performance gates. The 5,000-row render/update-under-100-ms acceptance measurement, full audit assertions, axe run, human verification, and screenshots are still pending.
+Steps 7.5–7.9 remain: nurse console; admin screens; multilingual PDF; UI states and print styling; and full browser/access/performance gates. The 5,000-row render/update-under-100-ms acceptance measurement, full audit assertions, axe run, human verification, and screenshots are still pending.
