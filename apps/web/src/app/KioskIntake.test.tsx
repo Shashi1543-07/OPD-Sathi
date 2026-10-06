@@ -1,4 +1,11 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter } from "react-router-dom";
@@ -7,38 +14,47 @@ import i18n from "../i18n";
 import { useLanguageStore } from "../languageStore";
 import { KioskIntake } from "./KioskIntake";
 
-const { intakeMock, audioMock, dispatchAudio } = vi.hoisted(() => {
-  let listener: ((event: MessageEvent<string>) => void) | undefined;
-  const socket = {
-    readyState: 1,
-    send: vi.fn(),
-    close: vi.fn(),
-    addEventListener: vi.fn(),
-  } as unknown as WebSocket;
-  return {
-    intakeMock: {
-      session: vi.fn(),
-      setStage: vi.fn(),
-      nextQuestion: vi.fn(),
-      answer: vi.fn(),
-      correct: vi.fn(),
-      connectAudio: vi.fn(
-        (onMessage: (event: MessageEvent<string>) => void) => {
-          listener = onMessage;
-          onMessage({
-            data: JSON.stringify({ type: "ready" }),
-          } as MessageEvent<string>);
-          return socket;
-        },
-      ),
-    },
-    audioMock: {
-      startMicrophoneCapture: vi.fn(async () => vi.fn(async () => undefined)),
-    },
-    dispatchAudio: (packet: object) =>
-      listener?.({ data: JSON.stringify(packet) } as MessageEvent<string>),
-  };
-});
+const { intakeMock, audioMock, dispatchAudio, dispatchSpeech } = vi.hoisted(
+  () => {
+    let listener: ((event: MessageEvent<string>) => void) | undefined;
+    let speechCallback: (() => void) | undefined;
+    const socket = {
+      readyState: 1,
+      send: vi.fn(),
+      close: vi.fn(),
+      addEventListener: vi.fn(),
+    } as unknown as WebSocket;
+    return {
+      intakeMock: {
+        session: vi.fn(),
+        setStage: vi.fn(),
+        nextQuestion: vi.fn(),
+        answer: vi.fn(),
+        correct: vi.fn(),
+        connectAudio: vi.fn(
+          (onMessage: (event: MessageEvent<string>) => void) => {
+            listener = onMessage;
+            onMessage({
+              data: JSON.stringify({ type: "ready" }),
+            } as MessageEvent<string>);
+            return socket;
+          },
+        ),
+      },
+      audioMock: {
+        startMicrophoneCapture: vi.fn(
+          async (_socket: WebSocket, callbacks: { onSpeech?: () => void }) => {
+            speechCallback = callbacks.onSpeech;
+            return vi.fn(async () => undefined);
+          },
+        ),
+      },
+      dispatchAudio: (packet: object) =>
+        listener?.({ data: JSON.stringify(packet) } as MessageEvent<string>),
+      dispatchSpeech: () => speechCallback?.(),
+    };
+  },
+);
 
 vi.mock("../lib/intake", () => ({ intake: intakeMock }));
 vi.mock("../lib/audioCapture", () => ({
@@ -53,6 +69,7 @@ vi.mock("../lib/audioCapture", () => ({
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   useLanguageStore.getState().setLanguage("en");
 });
 
@@ -140,5 +157,25 @@ describe("Phase 8 voice interview", () => {
         "voice",
       ),
     );
+
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Speak your answer" }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText("Listening. Speak now.")).toBeInTheDocument();
+    act(() => {
+      dispatchSpeech();
+      vi.advanceTimersByTime(3_000);
+    });
+    expect(
+      screen.getByText(
+        "Voice service is unavailable. You can type or tap your answer.",
+      ),
+    ).toBeInTheDocument();
   });
 });

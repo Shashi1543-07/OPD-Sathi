@@ -4,6 +4,7 @@ export type CaptureStopReason = "manual" | "silence" | "limit";
 
 export type CaptureCallbacks = {
   onLevel?: (level: number) => void;
+  onSpeech?: () => void;
   onStop?: (reason: CaptureStopReason) => void;
   stream?: MediaStream;
 };
@@ -32,6 +33,8 @@ class Pcm16Capture extends AudioWorkletProcessor {
     this.phase = 0;
     this.frame = [];
     this.silentSeconds = 0;
+    this.noSpeechSeconds = 0;
+    this.heardSpeech = false;
     this.ended = false;
   }
   process(inputs) {
@@ -59,8 +62,21 @@ class Pcm16Capture extends AudioWorkletProcessor {
     }
     const level = Math.sqrt(sum / input.length);
     this.port.postMessage({ type: 'level', value: level });
-    this.silentSeconds = level < 0.012 ? this.silentSeconds + input.length / sampleRate : 0;
-    if (this.silentSeconds >= 1.2) {
+    const elapsed = input.length / sampleRate;
+    if (level >= 0.012) {
+      if (!this.heardSpeech) this.port.postMessage({ type: 'speech' });
+      this.heardSpeech = true;
+      this.silentSeconds = 0;
+      this.noSpeechSeconds = 0;
+    } else if (this.heardSpeech) {
+      this.silentSeconds += elapsed;
+    } else {
+      this.noSpeechSeconds += elapsed;
+    }
+    if (this.heardSpeech && this.silentSeconds >= 1.2) {
+      this.ended = true;
+      this.port.postMessage({ type: 'silence' });
+    } else if (!this.heardSpeech && this.noSpeechSeconds >= 15) {
       this.ended = true;
       this.port.postMessage({ type: 'silence' });
     }
@@ -147,6 +163,8 @@ export async function startMicrophoneCapture(
         socket.send(data.data);
       } else if (data.type === "level") {
         callbacks.onLevel?.(data.value ?? 0);
+      } else if (data.type === "speech") {
+        callbacks.onSpeech?.();
       } else if (data.type === "silence") {
         void cleanup("silence");
       }

@@ -10,7 +10,7 @@
 4. [x] **8.4 Browser capture:** microphone permission handling, 16 kHz mono PCM16 AudioWorklet frames, voice activity detection, level meter, and 60-second cap.
 5. [x] **8.5 Interview integration:** voice orb states, live transcript, final submission as `input_mode=voice`, tap-to-edit, and transcript review prompt.
 6. [x] **8.6 Mixed language:** pass UI language as the recognition language, accept code-mixing, and preserve the transcript's original script without translation.
-7. [ ] **8.7 Safe fallback:** switch to touch and typing within three seconds on provider failure, absent partials, or open circuit; keep nurse-assisted entry available.
+7. [x] **8.7 Safe fallback:** switch to touch and typing within three seconds on provider failure, absent partials, or open circuit; keep nurse-assisted entry available.
 8. [ ] **8.8 Evaluation:** document the 80-utterance consenting-speaker recording script and implement Mock CI evaluation. Keep recordings ignored and out of Git.
 9. [ ] **8.9 Verification:** protocol/provider tests and Chromium fake-audio Playwright coverage.
 
@@ -49,6 +49,12 @@
 
 - The UI's selected `en`, `hi`, or `mr` value is mapped to the matching Sarvam BCP-47 code. The provider and interview pass transcript text through without translation, transliteration, normalization, or script conversion.
 - A protocol test verifies a mixed Devanagari/Latin transcript remains byte-for-byte unchanged.
+
+## Step 8.7 verification
+
+- After local speech begins, the kiosk starts a three-second watchdog and resets it when partial text arrives. Provider errors, a missing first partial, or stalled partials close the socket, stop microphone tracks, and leave the answer editable by touch or typing.
+- The capture worklet ignores leading silence for VAD, ends after 1.2 seconds of silence after speech, and offers touch fallback after 15 seconds with no detected speech.
+- The interview test advances a fake clock by exactly three seconds and confirms the touch/typing fallback message; the provider outage path never supplies made-up text.
 
 ## Gate
 

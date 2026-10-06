@@ -144,6 +144,7 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 - [x] 8.4 Capture/resample browser microphone audio and handle permission/VAD states (16 kHz mono PCM16 worklet; 2 unit tests pass).
 - [x] 8.5 Integrate live transcript, editing, confidence check, and voice UI states (always-reviewable transcript; voice mode persisted; all 3 locales checked).
 - [x] 8.6 Support mixed-language speech without changing the original script (mixed Devanagari/Latin pass-through test).
+- [x] 8.7 Fall back to touch/typing within three seconds on provider failure or absent partials (fake-clock interview test confirms the transition).
 - [ ] 8.6 Support mixed-language speech without changing the original script.
 - [ ] 8.7 Fall back to touch/typing within three seconds on provider failure.
 - [ ] 8.8 Add consent-based evaluation plan/audio (ignored and deleted after use) plus Mock CI evaluation.

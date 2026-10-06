@@ -57,6 +57,8 @@ export function KioskIntake() {
   const [voiceError, setVoiceError] = useState("");
   const voiceSocket = useRef<WebSocket | null>(null);
   const stopCapture = useRef<StopCapture | null>(null);
+  const hasVoiceTranscript = useRef(false);
+  const voiceFallbackTimer = useRef<number | undefined>(undefined);
   const [caseSheet, setCaseSheet] = useState<CaseSheet>();
   const [readback, setReadback] = useState("");
   const [queueToken, setQueueToken] = useState<{
@@ -134,16 +136,44 @@ export function KioskIntake() {
 
   useEffect(
     () => () => {
+      if (voiceFallbackTimer.current !== undefined)
+        window.clearTimeout(voiceFallbackTimer.current);
       void stopCapture.current?.();
       voiceSocket.current?.close();
     },
     [],
   );
 
+  function clearVoiceFallbackTimer() {
+    if (voiceFallbackTimer.current !== undefined) {
+      window.clearTimeout(voiceFallbackTimer.current);
+      voiceFallbackTimer.current = undefined;
+    }
+  }
+
+  function fallBackToTouch() {
+    clearVoiceFallbackTimer();
+    const stop = stopCapture.current;
+    stopCapture.current = null;
+    void stop?.();
+    voiceSocket.current?.close();
+    voiceSocket.current = null;
+    setVoiceLevel(0);
+    setVoiceError(t("voiceFallback", { ns: "kiosk" }));
+    setVoiceState("fallback");
+  }
+
+  function scheduleVoiceFallback() {
+    clearVoiceFallbackTimer();
+    voiceFallbackTimer.current = window.setTimeout(fallBackToTouch, 3_000);
+  }
+
   async function startVoice() {
     if (!consent || !currentQuestion || voiceState === "connecting") return;
     setVoiceError("");
     setVoiceText("");
+    hasVoiceTranscript.current = false;
+    clearVoiceFallbackTimer();
     setVoiceState("connecting");
     let media: MediaStream | undefined;
     let socket: WebSocket | undefined;
@@ -188,16 +218,14 @@ export function KioskIntake() {
           if (!readyResolved) {
             rejectReady?.(new Error("connection_failed"));
           } else {
-            setVoiceError(t("voiceFallback", { ns: "kiosk" }));
-            setVoiceState("fallback");
-            void stopCapture.current?.();
-            stopCapture.current = null;
-            socket?.close();
-            voiceSocket.current = null;
+            fallBackToTouch();
           }
           return;
         }
         if (packet.type === "partial" || packet.type === "final") {
+          hasVoiceTranscript.current = true;
+          if (packet.type === "partial") scheduleVoiceFallback();
+          else clearVoiceFallbackTimer();
           const transcript = packet.text ?? "";
           setVoiceText(transcript);
           setAnswer(transcript);
@@ -247,11 +275,22 @@ export function KioskIntake() {
       stopCapture.current = await startMicrophoneCapture(socket, {
         stream: media,
         onLevel: setVoiceLevel,
-        onStop: () => setVoiceState("processing"),
+        onSpeech: scheduleVoiceFallback,
+        onStop: (reason) => {
+          if (reason === "silence" && !hasVoiceTranscript.current)
+            fallBackToTouch();
+          else
+            setVoiceState((current) =>
+              current === "recording" || current === "connecting"
+                ? "processing"
+                : current,
+            );
+        },
       });
       media = undefined;
       setVoiceState("recording");
     } catch (cause) {
+      clearVoiceFallbackTimer();
       media?.getTracks().forEach((track) => track.stop());
       socket?.close();
       voiceSocket.current = null;
