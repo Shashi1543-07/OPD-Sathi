@@ -251,6 +251,31 @@
       "title": "PastHistory",
       "type": "object"
     },
+    "PatientConfirmation": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed_by_patient": {
+          "default": false,
+          "title": "Confirmed By Patient",
+          "type": "boolean"
+        },
+        "corrections": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Corrections",
+          "type": "array"
+        },
+        "needs_assistance": {
+          "default": false,
+          "title": "Needs Assistance",
+          "type": "boolean"
+        }
+      },
+      "title": "PatientConfirmation",
+      "type": "object"
+    },
     "RedFlag": {
       "additionalProperties": false,
       "properties": {
@@ -519,6 +544,9 @@
       },
       "title": "Field Meta",
       "type": "object"
+    },
+    "patient_confirmation": {
+      "$ref": "#/$defs/PatientConfirmation"
     },
     "disclaimer": {
       "default": "Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis.",
