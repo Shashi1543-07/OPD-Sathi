@@ -13,7 +13,12 @@ CREATE ROLE osa_app LOGIN PASSWORD :'app_password' NOSUPERUSER NOCREATEDB NOCREA
 GRANT CONNECT ON DATABASE :"database_name" TO osa_app;
 CREATE ROLE osa_migrator LOGIN PASSWORD :'migrator_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
 GRANT CONNECT ON DATABASE :"database_name" TO osa_migrator;
+GRANT CREATE ON DATABASE :"database_name" TO osa_migrator;
 GRANT CREATE ON SCHEMA public TO osa_migrator;
 CREATE ROLE osa_worker LOGIN PASSWORD :'worker_password' NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
 GRANT CONNECT ON DATABASE :"database_name" TO osa_worker;
+GRANT osa_worker TO osa_migrator;
+CREATE ROLE osa_analytics_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+GRANT osa_analytics_worker TO osa_migrator, osa_worker;
+CREATE SCHEMA osa_analytics AUTHORIZATION osa_analytics_worker;
 SQL

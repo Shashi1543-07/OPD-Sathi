@@ -1,0 +1,275 @@
+"""Tenant-scoped administrator analytics backed by daily materialized rollups."""
+
+import csv
+import io
+import json
+from collections import defaultdict
+from collections.abc import AsyncIterator
+from datetime import datetime, timedelta, timezone
+from typing import Annotated, Any
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
+from sqlalchemy import text
+
+from app.core.audit import audit
+from app.core.auth import require_role
+from app.db.session import set_hospital_scope
+
+router = APIRouter(prefix="/analytics", tags=["analytics"])
+AdminPrincipal = Annotated[dict[str, Any], Depends(require_role("admin"))]
+_KOLKATA = timezone(timedelta(hours=5, minutes=30))
+
+_ROLLUP_SELECT = (
+    "SELECT a.service_date, a.department_id, d.name_en, d.name_hi, d.name_mr, "
+    "a.patient_count, a.wait_seconds_total, a.wait_sample_count, "
+    "a.consult_seconds_total, a.consult_sample_count, a.urgent_count, "
+    "a.interview_seconds_total, a.interview_sample_count, a.confirmed_count, "
+    "a.confirmed_without_edits_count, a.doctor_edited_count, a.language_mix "
+    "FROM osa_analytics.analytics_daily_department_tenant a JOIN departments d "
+    "ON d.hospital_id = a.hospital_id AND d.id = a.department_id "
+    "WHERE a.hospital_id = :hospital_id"
+)
+
+
+def _mean(total: float, count: int) -> float | None:
+    return round(total / count, 1) if count else None
+
+
+def _safe_csv_cell(value: Any) -> Any:
+    """Prevent tenant-controlled labels from becoming spreadsheet formulas."""
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + value
+    return value
+
+
+def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combine weighted daily rollups without averaging averages."""
+    totals: dict[str, float] = defaultdict(float)
+    languages: dict[str, int] = defaultdict(int)
+    departments: list[dict[str, Any]] = []
+    for row in rows:
+        for key in (
+            "patient_count",
+            "urgent_count",
+            "wait_seconds_total",
+            "wait_sample_count",
+            "consult_seconds_total",
+            "consult_sample_count",
+            "interview_seconds_total",
+            "interview_sample_count",
+            "confirmed_count",
+            "confirmed_without_edits_count",
+            "doctor_edited_count",
+        ):
+            totals[key] += float(row[key] or 0)
+        mix = row["language_mix"] or {}
+        if isinstance(mix, str):
+            mix = json.loads(mix)
+        for language, count in mix.items():
+            languages[language] += int(count)
+        patients = int(row["patient_count"] or 0)
+        departments.append(
+            {
+                "department_id": str(row["department_id"]),
+                "name": {
+                    "en": row["name_en"],
+                    "hi": row["name_hi"],
+                    "mr": row["name_mr"],
+                },
+                "patients": patients,
+                "urgent_count": int(row["urgent_count"] or 0),
+                "average_wait_seconds": _mean(
+                    float(row["wait_seconds_total"] or 0),
+                    int(row["wait_sample_count"] or 0),
+                ),
+            }
+        )
+    patients = int(totals["patient_count"])
+    confirmed = int(totals["confirmed_count"])
+    return {
+        "patients": patients,
+        "average_wait_seconds": _mean(
+            totals["wait_seconds_total"], int(totals["wait_sample_count"])
+        ),
+        "average_consult_seconds": _mean(
+            totals["consult_seconds_total"], int(totals["consult_sample_count"])
+        ),
+        "urgent_count": int(totals["urgent_count"]),
+        "language_mix": dict(languages),
+        "average_interview_seconds": _mean(
+            totals["interview_seconds_total"], int(totals["interview_sample_count"])
+        ),
+        "confirmed_without_edits_percent": round(
+            100 * totals["confirmed_without_edits_count"] / confirmed, 1
+        )
+        if confirmed
+        else None,
+        "doctor_edit_rate_percent": round(100 * totals["doctor_edited_count"] / patients, 1)
+        if patients
+        else None,
+        "department_load": sorted(departments, key=lambda item: item["patients"], reverse=True),
+    }
+
+
+async def _record_view(
+    connection: Any,
+    request: Request,
+    *,
+    hospital_id: UUID,
+    actor_id: UUID,
+    action: str,
+    meta: dict[str, Any],
+) -> None:
+    await audit(
+        connection,
+        request,
+        hospital_id=hospital_id,
+        actor_type="user",
+        actor_id=actor_id,
+        action=action,
+        resource_type="analytics",
+        meta=meta,
+    )
+
+
+@router.get("/summary")
+async def analytics_summary(request: Request, principal: AdminPrincipal) -> dict[str, Any]:
+    hospital_id, actor_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _record_view(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_id=actor_id,
+            action="analytics.summary.viewed",
+            meta={},
+        )
+        rows = (
+            (
+                await connection.execute(
+                    text(_ROLLUP_SELECT + " AND a.service_date = :service_date"),
+                    {"hospital_id": hospital_id, "service_date": datetime.now(_KOLKATA).date()},
+                )
+            )
+            .mappings()
+            .all()
+        )
+    return summarize([dict(row) for row in rows])
+
+
+@router.get("/timeseries")
+async def analytics_timeseries(
+    request: Request,
+    principal: AdminPrincipal,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
+    department_id: UUID | None = None,
+) -> dict[str, Any]:
+    hospital_id, actor_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
+    end_day = datetime.now(_KOLKATA).date()
+    start_day = end_day - timedelta(days=days - 1)
+    query = text(
+        _ROLLUP_SELECT
+        + " AND a.service_date >= :start_day AND a.service_date <= :end_day"
+        + (" AND a.department_id = :department_id" if department_id else "")
+        + " ORDER BY a.service_date, d.name_en"
+    )
+    params: dict[str, Any] = {
+        "hospital_id": hospital_id,
+        "start_day": start_day,
+        "end_day": end_day,
+    }
+    if department_id:
+        params["department_id"] = department_id
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _record_view(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_id=actor_id,
+            action="analytics.timeseries.viewed",
+            meta={"days": days, "department_id": str(department_id) if department_id else None},
+        )
+        rows = (await connection.execute(query, params)).mappings().all()
+    return {"days": days, "items": [dict(row) for row in rows]}
+
+
+@router.get("/export.csv")
+async def analytics_export(
+    request: Request,
+    principal: AdminPrincipal,
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
+) -> StreamingResponse:
+    hospital_id, actor_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
+    end_day = datetime.now(_KOLKATA).date()
+    start_day = end_day - timedelta(days=days - 1)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _record_view(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_id=actor_id,
+            action="analytics.csv.exported",
+            meta={"days": days},
+        )
+
+    async def csv_rows() -> AsyncIterator[str]:
+        output = io.StringIO(newline="")
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "service_date",
+                "department_en",
+                "patients",
+                "urgent_count",
+                "average_wait_seconds",
+                "average_consult_seconds",
+                "average_interview_seconds",
+                "confirmed_without_edits_count",
+                "confirmed_count",
+                "doctor_edited_count",
+                "language_mix",
+            ]
+        )
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            result = await connection.stream(
+                text(
+                    _ROLLUP_SELECT
+                    + " AND a.service_date >= :start_day AND a.service_date <= :end_day "
+                    "ORDER BY a.service_date, d.name_en"
+                ),
+                {"hospital_id": hospital_id, "start_day": start_day, "end_day": end_day},
+            )
+            async for row in result.mappings():
+                writer.writerow(
+                    [
+                        row["service_date"],
+                        _safe_csv_cell(row["name_en"]),
+                        row["patient_count"],
+                        row["urgent_count"],
+                        _mean(row["wait_seconds_total"], row["wait_sample_count"]),
+                        _mean(row["consult_seconds_total"], row["consult_sample_count"]),
+                        _mean(row["interview_seconds_total"], row["interview_sample_count"]),
+                        row["confirmed_without_edits_count"],
+                        row["confirmed_count"],
+                        row["doctor_edited_count"],
+                        row["language_mix"],
+                    ]
+                )
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+
+    return StreamingResponse(
+        csv_rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="opd-analytics.csv"'},
+    )

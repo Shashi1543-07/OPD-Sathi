@@ -23,6 +23,7 @@ from app.ai.providers.llm.mock import MockLLM
 from app.ai.providers.stt.factory import build_stt_provider
 from app.ai.providers.tts.factory import build_tts_provider
 from app.api.v1 import admin as admin_api
+from app.api.v1 import analytics as analytics_api
 from app.api.v1 import audio as audio_api
 from app.api.v1 import audit as audit_api
 from app.api.v1 import auth as auth_api
@@ -221,6 +222,7 @@ def create_app(
     app.include_router(auth_api.router)
     app.include_router(audit_api.router)
     app.include_router(admin_api.router)
+    app.include_router(analytics_api.router)
     app.include_router(intake_api.router)
     app.include_router(audio_api.router)
     app.include_router(queue_api.router)

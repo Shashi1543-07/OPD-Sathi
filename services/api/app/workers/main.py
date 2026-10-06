@@ -239,11 +239,25 @@ async def relay_queue_outbox(ctx: dict[str, Any]) -> None:
         logger.info("notifications_processed", sent=sent, failed=failed)
 
 
+async def refresh_analytics(ctx: dict[str, Any]) -> None:
+    """Refresh the daily materialized rollup owned by the restricted worker schema."""
+    async with ctx["engine"].begin() as connection:
+        await connection.execute(text("SET ROLE osa_analytics_worker"))
+        await connection.execute(
+            text("REFRESH MATERIALIZED VIEW CONCURRENTLY osa_analytics.analytics_daily_department")
+        )
+        await connection.execute(text("RESET ROLE"))
+    logger.info("analytics_materialized_view_refreshed")
+
+
 class WorkerSettings:
     """ARQ worker configuration; cron ticks on every even second."""
 
     functions = [relay_queue_outbox]
-    cron_jobs = [cron(relay_queue_outbox, second=set(range(0, 60, 2)))]
+    cron_jobs = [
+        cron(relay_queue_outbox, second=set(range(0, 60, 2))),
+        cron(refresh_analytics, minute=set(range(0, 60, 5))),
+    ]
     on_startup = on_startup
     on_shutdown = on_shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_state_url)

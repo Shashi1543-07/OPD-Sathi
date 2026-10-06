@@ -16,5 +16,12 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'osa_worker')
 \gexec
 ALTER ROLE osa_worker LOGIN PASSWORD :'worker_password'
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT BYPASSRLS;
+SELECT 'CREATE ROLE osa_analytics_worker NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'osa_analytics_worker')
+\gexec
 GRANT CONNECT ON DATABASE :"database_name" TO osa_worker;
+GRANT osa_worker TO osa_migrator;
+GRANT osa_analytics_worker TO osa_migrator, osa_worker;
+CREATE SCHEMA IF NOT EXISTS osa_analytics AUTHORIZATION osa_analytics_worker;
+ALTER SCHEMA osa_analytics OWNER TO osa_analytics_worker;
 SQL

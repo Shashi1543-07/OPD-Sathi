@@ -10,6 +10,7 @@ import { StaffQueueBoard } from "./StaffQueueBoard";
 import { DoctorConsultation } from "./DoctorConsultation";
 import { NurseConsole } from "./NurseConsole";
 import { AdminConsole } from "./AdminConsole";
+import { AnalyticsDashboard } from "./AnalyticsDashboard";
 import {
   StaffLanding,
   StaffPageGate,
@@ -70,7 +71,7 @@ export const router = createBrowserRouter([
         path: "reports",
         element: (
           <StaffPageGate page="reports">
-            <StaffPlaceholderPage page="reports" />
+            <AnalyticsDashboard />
           </StaffPageGate>
         ),
       },
