@@ -613,6 +613,23 @@ export interface paths {
         patch: operations["patch_case_sheet_visits__visit_id__case_sheet_patch"];
         trace?: never;
     };
+    "/visits/{visit_id}/transcript": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Transcript */
+        get: operations["get_transcript_visits__visit_id__transcript_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -911,6 +928,34 @@ export interface components {
             text_en: string;
             /** Confidence */
             confidence?: number | null;
+        };
+        /** TranscriptResponse */
+        TranscriptResponse: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /** Turns */
+            turns: components["schemas"]["TranscriptTurn"][];
+        };
+        /** TranscriptTurn */
+        TranscriptTurn: {
+            /** Turn Index */
+            turn_index: number;
+            /** Question Id */
+            question_id: string;
+            /**
+             * Input Mode
+             * @enum {string}
+             */
+            input_mode: "voice" | "touch" | "text" | "nurse";
+            /** Text Original */
+            text_original: string | null;
+            /** Text English */
+            text_english: string | null;
+            /** Stt Confidence */
+            stt_confidence: number | null;
         };
         /** UserCreate */
         UserCreate: {
@@ -2206,6 +2251,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseSheetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transcript_visits__visit_id__transcript_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptResponse"];
                 };
             };
             /** @description Validation Error */

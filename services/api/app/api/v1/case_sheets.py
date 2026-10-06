@@ -11,7 +11,7 @@ from sqlalchemy import text
 from app.core.audit import audit
 from app.core.auth import require_role
 from app.core.errors import ApiProblemError
-from app.db.repositories import CaseSheetRepository
+from app.db.repositories import CaseSheetRepository, InterviewTurnRepository
 from app.db.session import set_hospital_scope
 from app.domain.case_sheet import CaseSheet
 from app.domain.case_sheet_patch import CaseSheetPatchError, apply_case_sheet_patch
@@ -41,6 +41,20 @@ class CaseSheetResponse(BaseModel):
     visit_id: UUID
     version: int
     case_sheet: CaseSheet
+
+
+class TranscriptTurn(BaseModel):
+    turn_index: int
+    question_id: str
+    input_mode: Literal["voice", "touch", "text", "nurse"]
+    text_original: str | None
+    text_english: str | None
+    stt_confidence: float | None
+
+
+class TranscriptResponse(BaseModel):
+    visit_id: UUID
+    turns: list[TranscriptTurn]
 
 
 def _problem(status: int, code: str, title: str, detail: str) -> ApiProblemError:
@@ -211,3 +225,36 @@ async def patch_case_sheet(
         )
     response.headers["ETag"] = f'"{new_version}"'
     return CaseSheetResponse(visit_id=visit_id, version=new_version, case_sheet=updated)
+
+
+@router.get("/visits/{visit_id}/transcript", response_model=TranscriptResponse)
+async def get_transcript(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor"))],
+) -> TranscriptResponse:
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _check_visit_department(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            actor_id=actor_id,
+        )
+        turns = await InterviewTurnRepository(
+            connection, request.app.state.settings
+        ).list_for_visit(hospital_id=hospital_id, visit_id=visit_id)
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="transcript.read",
+            resource_type="visit_transcript",
+            resource_id=visit_id,
+            meta={"turn_count": len(turns)},
+        )
+    return TranscriptResponse(visit_id=visit_id, turns=turns)

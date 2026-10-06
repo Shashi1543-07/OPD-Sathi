@@ -7,6 +7,7 @@ import { StaffShell } from "./StaffShell";
 import { PatientStatus } from "./PatientStatus";
 import { KioskIntake } from "./KioskIntake";
 import { StaffQueueBoard } from "./StaffQueueBoard";
+import { DoctorConsultation } from "./DoctorConsultation";
 import {
   StaffLanding,
   StaffPageGate,
@@ -51,7 +52,7 @@ export const router = createBrowserRouter([
         path: "consultations",
         element: (
           <StaffPageGate page="consultations">
-            <StaffPlaceholderPage page="consultations" />
+            <DoctorConsultation />
           </StaffPageGate>
         ),
       },

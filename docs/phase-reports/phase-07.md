@@ -1,6 +1,6 @@
 # Phase 7 progress report
 
-**Status:** In progress on `phase-07-consoles`. Phase 6 is integrated into `main` as merge commit `0c833c3`; Phase 7 is tracked by draft PR #5. The full Phase 7 acceptance gate is not complete.
+**Status:** In progress on `phase-07-consoles`. Phase 6 is integrated into `main` as merge commit `0c833c3`; Phase 7 is tracked by draft PR #5. Steps 7.1–7.3 have passed their gates, 7.4 is in progress, and the full Phase 7 acceptance gate is not complete.
 
 ## Completed work
 
@@ -25,19 +25,28 @@
 - Doctors can edit only history fields through schema-validated JSON Patch operations. Routing, red flags, provenance metadata, and the history disclaimer are protected.
 - Writes require the current `If-Match` version, lock and compare the row, increment the version, mark changed fields as doctor-confirmed, and audit operation/path metadata without recording clinical values. Stale edits return **409** and missing preconditions return **428**.
 
+### 7.4 Doctor consultation view (in progress)
+
+- Doctors can open an active visit from the queue and review the case sheet in reading order, with source/confidence details and editable history fields.
+- Stale writes open a reload/reapply dialog. The screen includes audited transcript reads, Start/Done actions, print support, and N/E/P keyboard shortcuts.
+- Completion remains pending broader browser and accessibility checks.
+
 ## Verification recorded
 
-- Frontend tests: **23 passed** across **6** test files.
+- Frontend tests: **25 passed** across **7** test files.
 - Queue access policy tests: **3 passed**.
-- Case-sheet API and patch tests: **12 passed**.
-- Typecheck, ESLint, production build, Ruff, strict mypy, locale parity (**219 keys per language**), and contrast checks (**12 pairs**) passed.
-- Production bundle: **441.03 kB** JavaScript (**139.29 kB gzip**); build completed successfully.
+- Case-sheet API and patch tests: **13 passed**.
+- Typecheck, ESLint, production build, Ruff, strict mypy, locale parity (**254 keys per language**), and contrast checks (**12 pairs**) passed.
+- Production bundle after the 7.4 screen: **455.77 kB** JavaScript (**143.65 kB gzip**); build completed successfully.
 - The Phase 5 staff-call Playwright scenario passed locally after fixing virtualizer ref initialization and the query-aware queue mock.
 - Hosted PR #5 CI passed all required jobs (backend, frontend, security) at `c1bca98`: [Actions run](https://github.com/Shashi1543-07/OPD-Sathi/actions/runs/37408601882).
 - `git diff --check` passed.
 
 The complete local backend suite was also attempted: **318 passed**, one Redis websocket latency integration failed to subscribe in this environment, and three tests could not create their temporary directories under the default Windows pytest temp root. The hosted CI backend job passed on the same queue API changes.
 
+- Hosted PR #5 CI passed backend, frontend, and security after the 7.3 Bandit fix at `fee4776`: [Actions run](https://github.com/Shashi1543-07/OPD-Sathi/actions/runs/37410094888).
+- Current local Phase 7.4 gates: frontend **25 tests passed across 7 files**; case-sheet/transcript API **13 tests passed**; typecheck, ESLint, locale parity (**254 keys per language**), production build, Ruff, strict mypy, Bandit, and `git diff --check` passed.
+
 ## Remaining Phase 7 work
 
-Steps 7.4–7.9 remain: doctor consult view and conflict flow; nurse console; admin screens; multilingual PDF; UI states and print styling; and full browser/access/performance gates. The 5,000-row render/update-under-100-ms acceptance measurement, full audit assertions, axe run, human verification, and screenshots are still pending.
+Phase 7.4 is in progress. Steps 7.5–7.9 remain: nurse console; admin screens; multilingual PDF; UI states and print styling; and full browser/access/performance gates. The 5,000-row render/update-under-100-ms acceptance measurement, full audit assertions, axe run, human verification, and screenshots are still pending.

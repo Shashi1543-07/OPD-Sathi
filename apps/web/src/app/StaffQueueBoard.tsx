@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ConnectionIndicator, UrgencyBadge } from "../components/ui";
 import { staffAuth } from "../lib/auth";
 import {
@@ -43,6 +45,7 @@ function initialSoundPreference(): boolean {
 }
 
 export function StaffQueueBoard() {
+  const { t } = useTranslation("staff");
   const [items, setItems] = useState<QueueItem[]>([]);
   const [departments, setDepartments] = useState<QueueDepartment[]>([]);
   const [departmentId, setDepartmentId] = useState("");
@@ -417,6 +420,7 @@ export function StaffQueueBoard() {
 
   const canOverride =
     staffAuth.user?.role === "nurse" || staffAuth.user?.role === "admin";
+  const canConsult = staffAuth.user?.role === "doctor";
   const orderedItems = useMemo(() => sortQueue(items), [items]);
   // The virtualizer exposes imperative measurements; React Compiler intentionally skips it.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -629,6 +633,13 @@ export function StaffQueueBoard() {
                       </div>
                     )}
                     <div className="staff-queue-actions">
+                      {canConsult && (
+                        <Link
+                          to={`/staff/consultations?visit_id=${item.visit_id}`}
+                        >
+                          {t("openCaseSheet")}
+                        </Link>
+                      )}
                       {item.status === "queued" && (
                         <button
                           type="button"

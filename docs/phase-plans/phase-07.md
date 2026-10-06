@@ -1,6 +1,6 @@
 # Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1–7.3 are implemented; the Phase 7 PR is draft #5. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
+**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1–7.3 are implemented; Step 7.4 is in progress on draft PR #5. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
 
 ## Work order
 
@@ -33,10 +33,16 @@
 
 ### Step 7.3 verification
 
-- `services/api/tests/unit/test_case_sheet_patch.py` and `services/api/tests/unit/test_case_sheet_api.py`: **12 passed**.
+- `services/api/tests/unit/test_case_sheet_patch.py` and `services/api/tests/unit/test_case_sheet_api.py`: **13 passed**.
 - Case-sheet reads are limited to doctors/nurses in their assigned department and create an audit event. Writes are doctor-only, require a positive `If-Match` version, lock and compare the current row version, validate the complete `CaseSheet`, update doctor provenance, and audit changed paths/operations without copying clinical values into audit metadata.
 - Conflict responses use **409**; missing version uses **428**. Reads and successful writes return the current strong ETag.
-- Ruff, strict mypy, and regenerated OpenAPI TypeScript types passed. Hosted PR #5 CI has not yet run against this 7.3 increment.
+- Ruff, strict mypy, Bandit, and regenerated OpenAPI TypeScript types passed. Hosted PR #5 CI passed backend, frontend, and security at `fee4776`: [Actions run](https://github.com/Shashi1543-07/OPD-Sathi/actions/runs/37410094888).
+
+### Step 7.4 progress
+
+- Added the doctor-only, department-scoped transcript endpoint. Interview text is decrypted by the repository and each read is audited without copying transcript text into the audit record.
+- Replaced the consultations placeholder with a case-sheet view in reading order, confidence/source metadata, inline edits, a 409 reload/reapply dialog, audited transcript panel, Start/Done actions, print shortcut, and N/E/P keyboard controls.
+- Targeted doctor consultation tests: **2 passed**, including versioned edits and conflict reapplication. The full frontend suite, typecheck, ESLint, locale parity, and production build passed with this screen; Phase 7.4 is not yet complete pending broader browser/accessibility gates.
 
 ## Acceptance gate
 

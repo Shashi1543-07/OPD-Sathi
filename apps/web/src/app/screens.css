@@ -846,6 +846,188 @@
   cursor: pointer;
   padding: 8px 12px;
 }
+.staff-queue-actions a {
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: inline-flex;
+  padding: 8px 12px;
+  text-decoration: none;
+}
+.doctor-consult {
+  margin: 0 auto;
+  max-width: 1440px;
+  padding: 20px;
+}
+.consult-header,
+.consult-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+.consult-header h2,
+.consult-header p {
+  margin: 0 0 6px;
+}
+.consult-actions button,
+.consult-actions a,
+.consult-field-actions button,
+.consult-edit,
+.consult-conflict button,
+.doctor-consult > button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--slate-600);
+  cursor: pointer;
+  font: inherit;
+  min-height: 40px;
+  padding: 8px 12px;
+  text-decoration: none;
+}
+.consult-actions {
+  justify-content: flex-start;
+}
+.consult-shortcuts {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.consult-columns {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 2fr);
+}
+.consult-sheet,
+.consult-transcript {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+}
+.consult-sheet h3,
+.consult-transcript h3 {
+  margin-top: 0;
+}
+.consult-sheet dl {
+  margin: 0;
+}
+.consult-field {
+  align-items: start;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(120px, 1fr) 3fr auto;
+  padding: 12px 0;
+}
+.consult-field dt {
+  font-weight: 700;
+}
+.consult-field dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.consult-field dd small,
+.consult-transcript small,
+.consult-sheet li small {
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+.consult-field textarea {
+  box-sizing: border-box;
+  font: inherit;
+  min-height: 72px;
+  width: 100%;
+}
+.consult-field-actions {
+  display: flex;
+  gap: 6px;
+  grid-column: 2 / -1;
+}
+.consult-sheet section {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+}
+.consult-sheet h4 {
+  margin: 8px 0;
+}
+.consult-sheet ul,
+.consult-transcript ol {
+  padding-left: 22px;
+}
+.consult-red-flags {
+  background: #fff3f0;
+  border: 1px solid #a32828 !important;
+  border-radius: 8px;
+  color: #5f1717;
+  padding: 10px !important;
+}
+.consult-disclaimer {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 0;
+}
+.consult-transcript li {
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+}
+.consult-transcript li p {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+.consult-translation {
+  color: var(--text-muted);
+}
+.consult-dialog-backdrop {
+  align-items: center;
+  background: #0008;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: fixed;
+  z-index: 20;
+}
+.consult-conflict {
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: 0 12px 44px #0004;
+  max-width: 520px;
+  padding: 24px;
+}
+.consult-conflict button {
+  margin: 4px;
+}
+@media (max-width: 850px) {
+  .consult-columns {
+    grid-template-columns: 1fr;
+  }
+  .consult-field {
+    grid-template-columns: 1fr auto;
+  }
+  .consult-field dd {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+@media print {
+  .consult-columns {
+    grid-template-columns: 1fr;
+  }
+  .consult-sheet,
+  .consult-transcript {
+    border: 0;
+    padding: 0;
+  }
+  .consult-edit,
+  .consult-field-actions,
+  .consult-transcript {
+    display: none !important;
+  }
+}
 .staff-alert-controls {
   display: flex;
   justify-content: flex-end;

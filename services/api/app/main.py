@@ -182,6 +182,7 @@ def create_app(
             "X-Request-ID",
         ],
         expose_headers=[
+            "ETag",
             "X-Request-ID",
             "Retry-After",
             "X-RateLimit-Limit",

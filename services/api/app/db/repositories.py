@@ -702,6 +702,55 @@ class InterviewTurnRepository:
         self.connection = connection
         self.settings = settings
 
+    async def list_for_visit(self, *, hospital_id: UUID, visit_id: UUID) -> list[dict[str, Any]]:
+        rows = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT id, turn_index, question_id, input_mode, text_original, "
+                        "text_english, stt_confidence FROM interview_turns "
+                        "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                        "ORDER BY turn_index"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        turns: list[dict[str, Any]] = []
+        for row in rows:
+            turn_id = row["id"]
+            original = row["text_original"]
+            english = row["text_english"]
+            turns.append(
+                {
+                    "turn_index": row["turn_index"],
+                    "question_id": row["question_id"],
+                    "input_mode": row["input_mode"],
+                    "text_original": (
+                        decrypt_field(
+                            original,
+                            key=self.settings.app_data_key_bytes,
+                            associated_data=f"interview_turns:text_original:{turn_id}",
+                        )
+                        if isinstance(original, str)
+                        else None
+                    ),
+                    "text_english": (
+                        decrypt_field(
+                            english,
+                            key=self.settings.app_data_key_bytes,
+                            associated_data=f"interview_turns:text_english:{turn_id}",
+                        )
+                        if isinstance(english, str)
+                        else None
+                    ),
+                    "stt_confidence": row["stt_confidence"],
+                }
+            )
+        return turns
+
     async def add(
         self,
         *,

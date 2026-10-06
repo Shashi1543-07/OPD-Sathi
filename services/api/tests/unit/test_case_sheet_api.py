@@ -184,5 +184,46 @@ async def test_case_sheet_reads_hide_other_departments(monkeypatch) -> None:
     assert not_found.value.status == 404
 
 
+@pytest.mark.asyncio
+async def test_transcript_is_doctor_scoped_and_audited_without_text_in_audit(monkeypatch) -> None:
+    hospital_id, actor_id, department_id, visit_id = (uuid4() for _ in range(4))
+    monkeypatch.setattr(case_sheets, "set_hospital_scope", lambda *_args, **_kwargs: _noop())
+
+    class FakeTranscriptRepository:
+        def __init__(self, *_args) -> None:
+            pass
+
+        async def list_for_visit(self, **_kwargs):
+            return [
+                {
+                    "turn_index": 1,
+                    "question_id": "chief_complaint",
+                    "input_mode": "text",
+                    "text_original": "Synthetic complaint",
+                    "text_english": "Synthetic complaint",
+                    "stt_confidence": None,
+                }
+            ]
+
+    audited: list[dict] = []
+
+    async def record_audit(_connection, _request, **values) -> None:
+        audited.append(values)
+
+    monkeypatch.setattr(case_sheets, "InterviewTurnRepository", FakeTranscriptRepository)
+    monkeypatch.setattr(case_sheets, "audit", record_audit)
+    request = make_request(FakeConnection(department_id, department_id))
+    response = await case_sheets.get_transcript(
+        visit_id,
+        request,
+        {"hospital_id": str(hospital_id), "sub": str(actor_id), "role": "doctor"},
+    )
+
+    assert response.turns[0].text_original == "Synthetic complaint"
+    assert audited[0]["action"] == "transcript.read"
+    assert audited[0]["meta"] == {"turn_count": 1}
+    assert "Synthetic complaint" not in str(audited[0])
+
+
 async def _noop() -> None:
     return None
