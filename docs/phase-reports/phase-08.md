@@ -24,9 +24,9 @@ Patients can speak an answer during the intake interview. The kiosk shows the wo
 | Audio persistence | None by default | No audio writes; no recordings in Git; `eval/stt/audio/` ignored | Pass |
 | Synthetic Mock evaluation | 80 cases, 30 hi / 30 mr / 20 en | 80; WER 0.0 and keyword recall 1.0 for each language | Pass, fixture plumbing only |
 | Live speech WER / keyword recall / latency | Report only with key and consenting audio | Not measured; no key or recordings supplied | Not measured |
-| Full backend suite on this Windows host | 0 failed or errored | 364 passed, 13 failed, 3 errors, 1 skipped | Local environment gate failed |
+| Full backend suite in Docker/WSL2 (Linux, Python 3.12) | 0 failed or errored | 381 passed, 1 warning; 80.0% total coverage | Pass |
 
-The 13 full-suite failures are existing local infrastructure limitations: Postgres/Redis integration services are unavailable and WeasyPrint cannot load its native `libgobject` dependency on this Windows host. Three test setups also hit permission errors under the shared pytest temporary directory. The Phase 8 provider, socket, and evaluation tests themselves pass. Hosted CI has not run for this unpushed phase branch, so the full phase gate is still pending.
+The earlier direct Windows run had environment failures: unavailable Postgres/Redis services, WeasyPrint's missing native `libgobject` dependency, and pytest temporary-directory permission errors. Re-running the full suite in the supported Docker/WSL2 environment cleared those failures: **381 passed, 0 failed, 0 errors, 0 skipped; 80.0% total backend coverage**. The branch was pushed to `origin/phase-08-voice` on 6 October 2026. Hosted CI is triggered by that push, but its result could not be retrieved from this environment; it must be confirmed on GitHub before the phase is merged.
 
 The Mock WER is expected to be zero because the adapter returns the exact configured text fixture. It is not a claim about recognition accuracy. The local Mock p95 values were 0.0056 ms for English, 0.0024 ms for Hindi, and 0.0018 ms for Marathi; they measure only fixture processing.
 
@@ -40,7 +40,8 @@ The Mock WER is expected to be zero because the adapter returns the exact config
 - `npm run build` — passed.
 - `playwright test e2e/phase-08.spec.ts` — **2 passed**.
 - `python eval/stt/evaluate.py` — **80 cases**, live audio false; per-language WER 0.0 and exact keyword recall 1.0.
-- Full backend `pytest services/api/tests -q` — **364 passed, 13 failed, 3 errors, 1 skipped** for the host issues above.
+- `docker compose run --rm -T --no-deps -e WORKER_DATABASE_URL= -v /mnt/c/Users/lenovo/Downloads/OPD-Sathi:/workspace -w /workspace api python -m pytest services/api/tests --cov=services/api/app --cov-report=term-missing -q` — **381 passed, 0 failed, 0 errors, 0 skipped; 80.0% total coverage** in Docker/WSL2 (Python 3.12).
+- The full packaged API container currently needs the repository mounted at `/workspace` because `services/api/app/domain/redflags/engine.py` references an evaluation file outside the image. Local preview was started with that mount; no tracked code was changed for the workaround.
 
 ## 5. Screenshots and artifacts
 
@@ -62,7 +63,8 @@ No volunteer audio was recorded. No live request was made.
 ## 7. Known issues and decisions
 
 - No API key or volunteer audio was available; live Sarvam WER, keyword recall, and latency remain unmeasured.
-- The entire backend suite cannot pass on this Windows host because its database/cache services, pytest temp directory, and WeasyPrint native libraries are unavailable. Run hosted CI before treating the phase gate as green.
+- Hosted CI must be confirmed on GitHub before merge. The repository API returned 404 from this environment and GitHub CLI is unavailable, so the run's status could not be checked here.
+- The production-style API image fails to start because `redflags/engine.py` computes an evaluation-data path outside the packaged image. For local preview, run the API with the repository mounted at its root; this is a pre-existing packaging issue and should be corrected before relying on the image as a deployment artifact.
 - Native-speaker review of Hindi and Marathi transcripts remains necessary before real-world use. Phase 4 translation and Phase 6 clinical reviews also remain pending.
 
 ## 8. Next phase preview
