@@ -17,6 +17,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
+from app.ai.providers.llm.factory import build_llm_provider
+from app.ai.providers.llm.gemini import GeminiProvider
+from app.ai.providers.llm.mock import MockLLM
 from app.ai.providers.stt.factory import build_stt_provider
 from app.api.v1 import admin as admin_api
 from app.api.v1 import audio as audio_api
@@ -135,6 +138,7 @@ def create_app(
         await asyncio.to_thread(warm_pdf_renderer)
         app.state.engine = engine_factory(configured.database_url)
         app.state.redis_state = redis_factory(configured.redis_state_url, decode_responses=True)
+        app.state.llm_provider = build_llm_provider(configured, redis=app.state.redis_state)
         try:
             queue_registry = f"osa:{configured.app_env}:qregistry"
             if configured.worker_database_url and not await app.state.redis_state.sismember(
@@ -158,6 +162,8 @@ def create_app(
                         await app.state.redis_state.delete(lock_key)
             yield
         finally:
+            if isinstance(app.state.llm_provider, GeminiProvider):
+                await app.state.llm_provider.aclose()
             await app.state.engine.dispose()
             await app.state.redis_state.aclose()
 
@@ -171,6 +177,7 @@ def create_app(
     )
     app.state.settings = configured
     app.state.stt_provider = build_stt_provider(configured)
+    app.state.llm_provider = MockLLM()
     app.state.memory_limiter = InMemorySlidingWindow()
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)

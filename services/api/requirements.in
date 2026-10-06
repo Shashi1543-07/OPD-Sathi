@@ -1,7 +1,7 @@
 fastapi
 gunicorn
 uvicorn-worker
-uvicorn[standard]
+uvicorn[standard]<0.54
 pydantic-settings
 structlog
 sqlalchemy[asyncio]
@@ -9,6 +9,8 @@ asyncpg
 alembic
 redis
 arq
+google-genai==2.28.0
+jsonschema
 
 # Test and development tooling
 httpx

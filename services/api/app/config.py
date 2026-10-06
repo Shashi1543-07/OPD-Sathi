@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     stt_model: str = "saaras:v3-realtime"
     sarvam_api_key: str = ""
     store_audio: bool = False
+    llm_provider: str = "mock"
+    llm_model: str = "gemini-3.8-flash"
+    llm_fallback_model: str = "gemini-3.5-flash-lite"
+    gemini_api_key: str = ""
+    llm_enabled: bool = True
+    llm_max_calls_per_session: int = 30
     access_token_minutes: int = 10
     refresh_token_hours: int = 8
     kiosk_token_hours: int = 12
@@ -48,6 +54,12 @@ class Settings(BaseSettings):
             raise ValueError("APP_ENV must be development, test, or production")
         if self.stt_provider not in {"mock", "sarvam"}:
             raise ValueError("STT_PROVIDER must be mock or sarvam")
+        if self.llm_provider not in {"mock", "gemini"}:
+            raise ValueError("LLM_PROVIDER must be mock or gemini")
+        if self.llm_max_calls_per_session < 1:
+            raise ValueError("LLM_MAX_CALLS_PER_SESSION must be positive")
+        if self.llm_provider == "gemini" and not self.gemini_api_key.strip():
+            raise ValueError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
         if self.access_token_minutes != 10:
             raise ValueError("staff access tokens must expire after 10 minutes")
         if min(self.refresh_token_hours, self.kiosk_token_hours, self.patient_session_hours) < 1:
