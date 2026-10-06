@@ -66,7 +66,9 @@ export function StaffQueueBoard() {
   const sequenceRef = useRef(0);
   const loadedIdsRef = useRef(new Set<string>());
   const requestScopeRef = useRef("");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useCallback((element: HTMLDivElement | null) => {
+    setScrollElement(element);
+  }, []);
 
   useEffect(() => {
     soundRef.current = soundEnabled;
@@ -302,10 +304,6 @@ export function StaffQueueBoard() {
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    setScrollElement(scrollRef.current);
   }, []);
 
   async function acknowledge(alertId: string) {
