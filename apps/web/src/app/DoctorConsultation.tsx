@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  FileText,
+  Hand,
+  MessageSquareText,
+  Mic,
+  Stethoscope,
+  UserRound,
+} from "lucide-react";
 import type { components } from "../lib/api-types";
 import { staffAuth } from "../lib/auth";
+import { ConfidenceChip } from "../components/ui";
 
 type CaseSheet = components["schemas"]["CaseSheet"];
 type TranscriptTurn = {
@@ -201,6 +210,16 @@ export function DoctorConsultation() {
         ? emptyText
         : String(value);
     const metadata = sheet?.case_sheet.field_meta?.[path];
+    const SourceIcon = metadata
+      ? {
+          patient_voice: Mic,
+          patient_touch: Hand,
+          patient_text: MessageSquareText,
+          nurse: UserRound,
+          doctor: Stethoscope,
+          document: FileText,
+        }[metadata.source]
+      : undefined;
     const editing = draft?.path === path;
     return (
       <div className="consult-field" key={path}>
@@ -219,11 +238,23 @@ export function DoctorConsultation() {
               text
             )}
           </div>
-          <small>
-            {metadata
-              ? `${metadata.source} · ${Math.round(metadata.confidence * 100)}%`
-              : t("sourceUnrecorded")}
-          </small>
+          <div className="consult-field-provenance">
+            {metadata && SourceIcon ? (
+              <span
+                className="consult-source"
+                title={t(`source_${metadata.source}`)}
+              >
+                <SourceIcon aria-hidden="true" />
+                <span>{t(`source_${metadata.source}`)}</span>
+              </span>
+            ) : (
+              <small>{t("sourceUnrecorded")}</small>
+            )}
+            {metadata && <ConfidenceChip value={metadata.confidence} />}
+            {metadata?.ai_assisted && (
+              <span className="consult-ai-assisted">{t("aiAssisted")}</span>
+            )}
+          </div>
           {editing ? (
             <div className="consult-field-actions">
               <button
@@ -392,6 +423,9 @@ export function DoctorConsultation() {
       <div className="consult-columns">
         <article className="consult-sheet">
           <h3>{t("caseSheetTitle")}</h3>
+          {Object.values(sheet.case_sheet.field_meta ?? {}).some(
+            (metadata) => metadata.ai_assisted,
+          ) && <p className="consult-ai-note">{t("aiAssistedNote")}</p>}
           <dl>
             {summaryFields}
             {additionalFields}

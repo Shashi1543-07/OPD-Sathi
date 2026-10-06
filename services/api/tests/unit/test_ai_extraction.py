@@ -63,6 +63,7 @@ def test_applies_quote_supported_finding_and_marks_patient_voice_source() -> Non
         "source": "patient_voice",
         "confidence": 0.91,
         "confirmed": False,
+        "ai_assisted": True,
     }
 
 

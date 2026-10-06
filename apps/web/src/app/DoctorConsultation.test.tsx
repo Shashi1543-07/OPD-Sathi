@@ -34,6 +34,7 @@ const sheet = {
       source: "patient_text",
       confidence: 0.9,
       confirmed: true,
+      ai_assisted: true,
     },
   },
   disclaimer: "History only. Not a diagnosis.",
@@ -139,6 +140,9 @@ describe("Phase 7.4 doctor consultation", () => {
     expect(
       screen.getByRole("heading", { name: "Interview transcript" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("AI-assisted")).toBeVisible();
+    expect(screen.getByText("Patient text")).toBeVisible();
+    expect(screen.getByText("90%")).toBeVisible();
     const editButtons = await screen.findAllByRole("button", { name: "Edit" });
     await userEvent.setup().click(editButtons[0]);
     fireEvent.change(screen.getByRole("textbox", { name: "Chief complaint" }), {

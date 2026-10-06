@@ -115,6 +115,7 @@ def apply_extraction_patch(
             "source": "patient_voice",
             "confidence": fact.confidence,
             "confirmed": False,
+            "ai_assisted": True,
         }
     try:
         return CaseSheet.model_validate(updated).model_dump(mode="json")

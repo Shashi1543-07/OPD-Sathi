@@ -83,6 +83,7 @@ class FieldMeta(StrictModel):
     source: Literal["patient_voice", "patient_touch", "patient_text", "nurse", "doctor", "document"]
     confidence: Confidence
     confirmed: bool
+    ai_assisted: bool = False
 
 
 class CaseSheet(StrictModel):

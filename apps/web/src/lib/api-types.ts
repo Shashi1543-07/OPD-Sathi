@@ -820,6 +820,11 @@ export interface components {
             confidence: number;
             /** Confirmed */
             confirmed: boolean;
+            /**
+             * Ai Assisted
+             * @default false
+             */
+            ai_assisted: boolean;
         };
         /** HPI */
         HPI: {
