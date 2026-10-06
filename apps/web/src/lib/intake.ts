@@ -1,5 +1,6 @@
 import type { Language } from "../i18n";
 import { staffAuth } from "./auth";
+import type { OfflineSubmission } from "./offlineOutbox";
 
 const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const kioskKey = "osa.kiosk.access";
@@ -121,6 +122,23 @@ function connectAudio(onMessage: (message: MessageEvent<string>) => void) {
 
 export const intake = {
   isKioskActivated: () => Boolean(getKioskToken()),
+  kioskAccessToken: getKioskToken,
+  submitOffline: (submission: OfflineSubmission) =>
+    call<{
+      confirmed: boolean;
+      token: string;
+      status_token: string;
+      status_url: string;
+      position: number | null;
+    }>(
+      "/intake/offline-submissions",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": submission.idempotency_key },
+        body: JSON.stringify(submission),
+      },
+      getKioskToken() ?? undefined,
+    ),
   activate: async (activationCode: string) => {
     const response = await call<{ access_token: string }>("/kiosks/activate", {
       method: "POST",

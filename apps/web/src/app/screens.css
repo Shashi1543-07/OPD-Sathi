@@ -1386,3 +1386,62 @@
     visibility: visible;
   }
 }
+.kiosk-offline-page form {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0;
+}
+.kiosk-offline-page fieldset {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+.kiosk-offline-page fieldset label,
+.kiosk-offline-page .offline-consent {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+.kiosk-offline-page input[type="checkbox"] {
+  flex: 0 0 auto;
+  min-height: 24px;
+  width: 24px;
+}
+.offline-nurse-warning {
+  background: #fff1f0;
+  border-inline-start: 5px solid #b42318;
+  color: #842029;
+  font-size: 1.2rem;
+  font-weight: 800;
+  padding: 14px;
+}
+.offline-provisional-slip {
+  align-items: center;
+  border: 2px dashed var(--border);
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin: 18px 0;
+  max-width: 460px;
+  padding: 18px;
+}
+.offline-provisional-slip strong {
+  color: var(--primary);
+  font-size: 2rem;
+}
+@media print {
+  .kiosk-header,
+  .kiosk-footer,
+  .ui-offline-banner,
+  .offline-provisional-slip button,
+  .kiosk-offline-page form,
+  .kiosk-offline-page > section > a {
+    display: none !important;
+  }
+  .offline-provisional-slip {
+    border: 2px dashed #333;
+    break-inside: avoid;
+  }
+}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { LanguageSelector } from "../components/ui";
 import { intake } from "../lib/intake";
 import { useLanguageStore } from "../languageStore";
@@ -9,6 +9,8 @@ export function KioskWelcome() {
   const { t } = useTranslation(["common", "kiosk"]);
   const language = useLanguageStore((state) => state.language);
   const navigate = useNavigate();
+  const outletContext = useOutletContext<{ networkOffline: boolean } | undefined>();
+  const networkOffline = outletContext?.networkOffline ?? !navigator.onLine;
   const [activationCode, setActivationCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,7 +50,7 @@ export function KioskWelcome() {
         <LanguageSelector />
         <div className="welcome-actions">
           {activated ? (
-            <button className="ui-button ui-button--primary ui-button--kiosk" type="button" disabled={busy} onClick={start}>
+            <button className="ui-button ui-button--primary ui-button--kiosk" type="button" disabled={busy || networkOffline} onClick={start}>
               {busy ? "…" : t("startIntake", { ns: "kiosk" })}
             </button>
           ) : (
@@ -68,6 +70,9 @@ export function KioskWelcome() {
               <p>{t("activationHelp", { ns: "kiosk" })}</p>
             </div>
           )}
+          {activated && networkOffline && <button className="ui-button ui-button--secondary ui-button--kiosk" type="button" onClick={() => navigate("/kiosk/offline-intake")}>
+            {t("offlineStart", { ns: "kiosk" })}
+          </button>}
           {error && <p role="alert">{error}</p>}
           {import.meta.env.DEV && (
             <div>

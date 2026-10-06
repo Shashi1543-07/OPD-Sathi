@@ -12,7 +12,7 @@ const patientSession = {
   stage: "interview",
 };
 
-test("fixed prompt audio plays from the service worker cache while offline", async ({
+test("cached kiosk shell and prompt audio work while offline", async ({
   page,
   context,
 }) => {
@@ -21,11 +21,8 @@ test("fixed prompt audio plays from the service worker cache while offline", asy
   }, patientSession);
   const audioResponses: boolean[] = [];
   let failedRequests = 0;
-  page.on("request", (request) => {
+  page.on("requestfailed", (request) => {
     if (request.url().includes("readback-audio")) failedRequests += 1;
-  });
-  page.on("requestfailed", () => {
-    failedRequests += 1;
   });
   page.on("response", (response) => {
     if (response.url().includes("mock-tone.wav")) {
@@ -61,4 +58,7 @@ test("fixed prompt audio plays from the service worker cache while offline", asy
   expect(audioResponses[0]).toBe(true);
   expect(failedRequests).toBe(0);
   expect(page.url()).toContain("/kiosk/intake");
+
+  await page.goto("/kiosk/offline-intake");
+  await expect(page.getByRole("heading", { name: "Offline check-in" })).toBeVisible();
 });

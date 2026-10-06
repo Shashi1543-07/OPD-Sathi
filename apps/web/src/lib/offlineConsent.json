@@ -1,0 +1,17 @@
+{
+  "en": {
+    "version": "consent-1.0",
+    "sha256": "2115299620e53feb78d00c4a26a6f9fb3bb734a064647d4f4b2f36e3f7fb9c33",
+    "text": "We will ask a few questions about your health and share your answers with the clinic team to help with your visit. This is not a diagnosis. You may ask staff for help or stop at any time. Do you agree to continue?"
+  },
+  "hi": {
+    "version": "consent-1.0",
+    "sha256": "9feee946edab35082672abec94719ce27b2848583e6305d1305469976c324eeb",
+    "text": "हम आपकी सेहत के बारे में कुछ सवाल पूछेंगे और आपकी मुलाक़ात में मदद के लिए आपके जवाब क्लिनिक की टीम के साथ साझा करेंगे। यह निदान नहीं है। आप कभी भी कर्मचारी से मदद माँग सकते हैं या रुक सकते हैं। क्या आप आगे बढ़ने के लिए सहमत हैं?"
+  },
+  "mr": {
+    "version": "consent-1.0",
+    "sha256": "06f9167bfaadc6d24c06d91f2d59aa4bcef8845d5800bbaf0a3e3f59bd1f21c4",
+    "text": "आम्ही तुमच्या आरोग्याबद्दल काही प्रश्न विचारू आणि भेटीसाठी मदत व्हावी म्हणून तुमची उत्तरे क्लिनिकच्या कर्मचाऱ्यांशी शेअर करू. हे निदान नाही. तुम्ही कधीही कर्मचाऱ्यांची मदत घेऊ शकता किंवा थांबू शकता. पुढे सुरू ठेवण्यास तुमची संमती आहे का?"
+  }
+}

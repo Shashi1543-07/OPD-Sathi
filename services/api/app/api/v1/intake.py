@@ -106,6 +106,30 @@ class AnswerPayload(StrictPayload):
     input_mode: Literal["touch", "text", "voice", "nurse"] = "touch"
 
 
+class OfflineSubmissionPayload(StrictPayload):
+    idempotency_key: str = Field(min_length=16, max_length=200, pattern=r"^[A-Za-z0-9_-]+$")
+    language: Language
+    consent_granted: bool
+    consent_version: str = Field(min_length=1, max_length=64)
+    consent_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    age: StrictInt = Field(ge=0, le=120)
+    sex: Literal["female", "male", "other", "unknown"]
+    chief_complaint: str = Field(min_length=1, max_length=500)
+    duration: str = Field(default="", max_length=500)
+    severity: StrictInt = Field(ge=0, le=10)
+    conditions: str = Field(default="", max_length=500)
+    medications: str = Field(default="", max_length=500)
+    allergies: str = Field(default="", max_length=500)
+    danger_tile_ids: list[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def normalize_text(self) -> "OfflineSubmissionPayload":
+        self.chief_complaint = self.chief_complaint.strip()
+        if not self.chief_complaint:
+            raise ValueError("a chief concern is required")
+        return self
+
+
 def _error(status_code: int, code: str, title: str, detail: str) -> ApiProblemError:
     return ApiProblemError(status=status_code, code=code, title=title, detail=detail)
 
@@ -1585,6 +1609,154 @@ async def confirm_summary(
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
     return queue_response
+
+
+@router.post("/offline-submissions", status_code=status.HTTP_201_CREATED)
+async def replay_offline_submission(
+    payload: OfflineSubmissionPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_kiosk())],
+) -> dict[str, Any]:
+    """Replay one encrypted local kiosk submission through the regular intake engine."""
+    hospital_id, kiosk_id = _identity(principal)
+    if request.headers.get("Idempotency-Key") != payload.idempotency_key:
+        raise _error(
+            400,
+            "VALIDATION_FAILED",
+            "Idempotency key mismatch",
+            "The request header and offline submission key must match.",
+        )
+    if not payload.consent_granted:
+        raise _error(
+            422,
+            "CONSENT_REQUIRED",
+            "Consent required",
+            "The patient must agree before the offline form can be submitted.",
+        )
+    consent_copy = get_consent_copy(payload.language)
+    if (
+        payload.consent_version != consent_copy["version"]
+        or payload.consent_sha256 != consent_copy["sha256"]
+    ):
+        raise _error(
+            409,
+            "CONSENT_COPY_MISMATCH",
+            "Consent copy changed",
+            "The offline notice is out of date. Please ask clinic staff to help.",
+        )
+    body = payload.model_dump()
+
+    async def operation() -> dict[str, Any]:
+        session = await create_session(
+            CreateSessionPayload(language=payload.language), request, principal
+        )
+        visit_id = UUID(session["visit_id"])
+        patient_principal = {
+            "hospital_id": str(hospital_id),
+            "sub": str(visit_id),
+            "role": "patient",
+        }
+        consent = consent_copy
+        await record_consent(
+            visit_id,
+            ConsentPayload(version=consent["version"], sha256=consent["sha256"], granted=True),
+            request,
+            patient_principal,
+        )
+        await save_identity(
+            visit_id,
+            IdentityPayload(age=payload.age, sex=payload.sex),
+            request,
+            patient_principal,
+        )
+        await save_danger_signs(
+            visit_id,
+            DangerSignsPayload(tile_ids=payload.danger_tile_ids),
+            request,
+            patient_principal,
+        )
+
+        state = _read_state(
+            await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
+        )
+        interview_state = InterviewState.model_validate(state["interview"])
+        # The short form asks these safety-relevant history fields even when the
+        # complaint would not otherwise activate their adaptive modules.
+        queued = list(interview_state.queued)
+        for question_id in ("past_history", "medications", "allergies"):
+            if question_id not in queued:
+                queued.append(question_id)
+        interview_state = interview_state.model_copy(update={"queued": queued})
+        supplied: dict[str, str | int] = {
+            "chief_concern": payload.chief_complaint,
+            "duration": payload.duration,
+            "severity": payload.severity,
+            "past_history": payload.conditions,
+            "medications": payload.medications,
+            "allergies": payload.allergies,
+        }
+        turns: list[dict[str, Any]] = []
+        try:
+            while (question := next_question(interview_state)) is not None:
+                value = supplied.get(question.id)
+                skip = value is None or (isinstance(value, str) and not value.strip())
+                if not skip and question.id == "severity" and isinstance(value, int):
+                    answer: str | int | None = value
+                else:
+                    answer = None if skip else str(value)
+                interview_state = apply_answer(
+                    interview_state, question.id, answer, skip=skip
+                )
+                turns.append(
+                    {
+                        "question_id": question.id,
+                        "answer": None if skip else str(answer),
+                    }
+                )
+        except InterviewValidationError as exc:
+            raise _error(
+                422, "VALIDATION_FAILED", "Offline answers not accepted", str(exc)
+            ) from exc
+
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            repository = InterviewTurnRepository(connection, request.app.state.settings)
+            for turn_index, turn in enumerate(turns):
+                await repository.add(
+                    hospital_id=hospital_id,
+                    visit_id=visit_id,
+                    turn_index=turn_index,
+                    question_id=turn["question_id"],
+                    input_mode="touch",
+                    text_original=turn["answer"],
+                )
+        state["interview"] = interview_state.model_dump(mode="json")
+        await request.app.state.redis_state.set(
+            _session_key(hospital_id, visit_id),
+            json.dumps(state, separators=(",", ":")),
+            ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+        )
+        await _finish_interview(
+            request,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            state_data=state,
+            interview_state=interview_state,
+        )
+        result = await confirm_summary(visit_id, request, patient_principal)
+        return {
+            **result,
+            "visit_id": str(visit_id),
+            "provisional_token": f"L-{payload.idempotency_key[-6:].upper()}",
+        }
+
+    return await IdempotencyStore(request.app.state.redis_state).execute(
+        request,
+        hospital_id=hospital_id,
+        actor_id=kiosk_id,
+        body=body,
+        operation=operation,
+    )
 
 
 @router.delete("/sessions/{visit_id}", status_code=status.HTTP_204_NO_CONTENT)

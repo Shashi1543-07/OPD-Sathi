@@ -6,6 +6,7 @@ import { KioskPreview } from "./KioskPreview";
 import { StaffShell } from "./StaffShell";
 import { PatientStatus } from "./PatientStatus";
 import { KioskIntake } from "./KioskIntake";
+import { KioskOfflineIntake } from "./KioskOfflineIntake";
 import { StaffQueueBoard } from "./StaffQueueBoard";
 import { DoctorConsultation } from "./DoctorConsultation";
 import { NurseConsole } from "./NurseConsole";
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <KioskWelcome /> },
       { path: "intake", element: <KioskIntake /> },
+      { path: "offline-intake", element: <KioskOfflineIntake /> },
       ...(import.meta.env.DEV
         ? [{ path: "preview/:step", element: <KioskPreview /> }]
         : []),

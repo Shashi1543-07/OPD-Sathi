@@ -7,6 +7,7 @@ import {
   ConfirmDialog,
   HelpButton,
   IdleWarningDialog,
+  OfflineBanner,
 } from "../components/ui";
 import { AudioPrompt } from "../components/ui/AudioPrompt";
 import { intake } from "../lib/intake";
@@ -26,6 +27,7 @@ export function KioskShell() {
   const [highContrast, setHighContrast] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [idleKey, setIdleKey] = useState(0);
+  const [networkOffline, setNetworkOffline] = useState(!navigator.onLine);
   const lastActivity = useRef(0);
 
   const restart = useCallback(() => {
@@ -41,6 +43,37 @@ export function KioskShell() {
     setLanguage("en");
     navigate("/kiosk", { replace: true });
   }, [navigate, setLanguage]);
+
+  useEffect(() => {
+    let disposed = false;
+    const checkHealth = async () => {
+      if (!navigator.onLine) {
+        setNetworkOffline(true);
+        return;
+      }
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/healthz`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(4_000),
+        });
+        if (!disposed) setNetworkOffline(!response.ok);
+      } catch {
+        if (!disposed) setNetworkOffline(true);
+      }
+    };
+    const onOnline = () => void checkHealth();
+    const onOffline = () => setNetworkOffline(true);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    void checkHealth();
+    const timer = window.setInterval(() => void checkHealth(), 10_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
 
   useEffect(() => {
     const handleActivity = () => {
@@ -132,7 +165,8 @@ export function KioskShell() {
           {location.pathname === "/kiosk" && <AudioPrompt language={language} promptId="ui.welcome" />}
         </div>
       </header>
-      <Outlet />
+      {networkOffline && <OfflineBanner />}
+      <Outlet context={{ networkOffline }} />
       <footer className="kiosk-footer">
         <span>{t("historyOnly")}</span>
         <span>{t("demoNotice")}</span>
