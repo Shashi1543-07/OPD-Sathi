@@ -5,7 +5,7 @@
 ## Work order
 
 1. [x] **8.1 Provider docs and decision:** check the current official Sarvam STT docs; record endpoints, auth, models, audio formats, and supported app languages. Keep Mock active because no provider key was supplied.
-2. [ ] **8.2 STT adapters:** define `STTProvider`, fixture-driven `MockSTT`, the Sarvam realtime and clip adapters, provider chain, circuit breaker, and metrics.
+2. [x] **8.2 STT adapters:** define `STTProvider`, fixture-driven `MockSTT`, the Sarvam realtime and clip adapters, provider chain, circuit breaker, and metrics.
 3. [ ] **8.3 Audio WebSocket:** authenticated endpoint, per-kiosk request limits, frame size limit, 60-second utterance cap, idle timeout, backpressure, and no-audio-storage default.
 4. [ ] **8.4 Browser capture:** microphone explanation and permission handling, 16 kHz mono PCM16 AudioWorklet frames, voice activity detection, level meter, and 60-second cap.
 5. [ ] **8.5 Interview integration:** voice orb states, live transcript, final submission as `input_mode=voice`, tap-to-edit, and low-confidence review prompt.
@@ -19,6 +19,13 @@
 - Official Sarvam documentation checked on 2026-10-06. See [ADR 003](../DECISIONS.md#adr-003--sarvam-real-time-speech-recognition) for source links and endpoint choices.
 - The Realtime endpoint is selected because it streams partial transcripts; the legacy endpoint only returns final text. The selected PCM16 mono 16 kHz format matches the planned browser worklet.
 - No real Sarvam API key was supplied. No live request or audio recording was attempted; Mock remains the default.
+
+## Step 8.2 verification
+
+- Added the provider contract, Mock and Sarvam adapters, a five-failure/30-second circuit breaker, and aggregate counters that exclude audio, transcript text, and patient identifiers.
+- Live provider errors produce an unavailable result for the touch/typing flow; they never substitute synthetic Mock text.
+- Seven protocol tests pass, Ruff passes for the STT package and tests, and strict mypy passes for the STT package. Full backend tests on Windows report **356 passed, 13 failed, 3 errors, 1 skipped**; the failures are existing environment gates (Postgres/Redis integration services unavailable, temporary-directory permission errors, and WeasyPrint native libraries missing).
+- Full app/test Ruff lint and strict app mypy pass. Repository-wide `ruff format --check` identifies five previously unformatted files outside the Phase 8 change; all Phase 8 files are formatted.
 
 ## Gate
 

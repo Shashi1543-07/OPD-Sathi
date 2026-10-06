@@ -1447,8 +1447,9 @@ Secrets are never committed. `.env.example` contains placeholders only. Generate
 | `APP_HMAC_KEY` | base64 of 32 bytes | Phone lookup hash |
 | `CURSOR_HMAC_KEY` | base64 of 32 bytes | Signs pagination cursors |
 | `PROVIDER_MODE` | `mock` | `live`, `mock`, `demo-safe` |
-| `STT_PROVIDER`, `STT_MODEL` | `mock`, set after reading docs | Speech to text |
-| `SARVAM_API_KEY` | empty | Sarvam services |
+| `STT_PROVIDER`, `STT_MODEL` | `mock`, `saaras:v3-realtime` | Speech to text |
+| `SARVAM_API_KEY` | empty | Sarvam services; required only with `STT_PROVIDER=sarvam` |
+| `STORE_AUDIO` | `false` | Phase 8 audio retention; off by default |
 | `LLM_PROVIDER`, `LLM_MODEL`, `LLM_FALLBACK_MODEL` | `mock`, set after reading docs | LLM |
 | `GEMINI_API_KEY` | empty | Gemini |
 | `LLM_ENABLED` | `true` | Per-hospital switch |

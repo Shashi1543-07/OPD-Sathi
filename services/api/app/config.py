@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     cursor_hmac_key: str = "development-only-cursor-key-change-before-deploy"
     app_data_key: str = ""
     app_hmac_key: str = ""
+    stt_provider: str = "mock"
+    stt_model: str = "saaras:v3-realtime"
+    sarvam_api_key: str = ""
+    store_audio: bool = False
     access_token_minutes: int = 10
     refresh_token_hours: int = 8
     kiosk_token_hours: int = 12
@@ -42,6 +46,8 @@ class Settings(BaseSettings):
     def validate_security_settings(self) -> "Settings":
         if self.app_env not in {"development", "test", "production"}:
             raise ValueError("APP_ENV must be development, test, or production")
+        if self.stt_provider not in {"mock", "sarvam"}:
+            raise ValueError("STT_PROVIDER must be mock or sarvam")
         if self.access_token_minutes != 10:
             raise ValueError("staff access tokens must expire after 10 minutes")
         if min(self.refresh_token_hours, self.kiosk_token_hours, self.patient_session_hours) < 1:
