@@ -122,6 +122,7 @@ def apply_case_sheet_patch(
             "source": "doctor",
             "confidence": 1.0,
             "confirmed": True,
+            "ai_assisted": False,
         }
         changed_paths.append(path)
     try:
