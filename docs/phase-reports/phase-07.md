@@ -1,6 +1,6 @@
-# Phase 7 — Doctor and nurse consoles, PDF
+# Phase 7 — Doctor and nurse consoles, PDF (2026-10-06; `phase-07-consoles`; `059fd38`)
 
-**Status:** Phase 7 implementation and local acceptance gates are complete on `phase-07-consoles` (final coverage-gate commit pending). Backend-wide coverage is **80.0% (2,548/3,184 statements)**, meeting the playbook's **80%** target. Phase 6 is integrated into `main` as merge commit `0c833c3`; all Phase 7 test data is synthetic.
+**Status:** Phase 7 implementation and local acceptance gates are complete on `phase-07-consoles`, committed as `059fd38`. Backend-wide coverage is **80.0% (2,548/3,184 statements)**, meeting the playbook's **80%** target. Phase 6 is integrated into `main` as merge commit `0c833c3`; all Phase 7 test data is synthetic.
 
 ## Completed work
 
