@@ -36,10 +36,10 @@ async def select_question_id(
             provider.generate_json(
                 prompt.text,
                 schema,
-                timeout=MAX_DECISION_SECONDS - 0.05,
+                timeout=MAX_DECISION_SECONDS - 0.10,
                 session_id=session_id,
             ),
-            timeout=MAX_DECISION_SECONDS - 0.02,
+            timeout=MAX_DECISION_SECONDS - 0.05,
         )
     except Exception:
         return fallback_id

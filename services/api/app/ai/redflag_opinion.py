@@ -78,10 +78,10 @@ async def second_opinion_flags(
             provider.generate_json(
                 prompt.text,
                 redflag_json_schema(rules),
-                timeout=bounded_timeout - 0.05,
+                timeout=bounded_timeout - 0.10,
                 session_id=session_id,
             ),
-            timeout=bounded_timeout,
+            timeout=bounded_timeout - 0.05,
         )
     except Exception:
         return []

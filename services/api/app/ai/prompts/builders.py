@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -124,9 +125,17 @@ def build_department_prompt(
     transcript: str,
     language: str,
     department_codes: tuple[str, ...],
+    department_labels: Mapping[str, str] | None = None,
 ) -> PromptEnvelope:
     """Build a department classification prompt scoped to configured department codes."""
     return _build(
         "department_classification",
-        {"transcript": transcript, "language": language, "department_codes": department_codes},
+        {
+            "transcript": transcript,
+            "language": language,
+            "departments": [
+                {"code": code, "label": (department_labels or {}).get(code, code)}
+                for code in department_codes
+            ],
+        },
     )

@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from redis.exceptions import RedisError
 from sqlalchemy import text
 
+from app.ai.department_classifier import classify_department, combine_department_classification
 from app.ai.extraction import extract_case_sheet_patch, merge_enriched_case_sheet
 from app.ai.prompts.builders import QuestionCandidate
 from app.ai.question_choice import select_question_id
@@ -130,6 +131,7 @@ async def _evaluate_visit(
     answers: dict[str, str | int],
     tile_ids: list[str],
     request: Request | None = None,
+    include_department: bool = False,
 ) -> tuple[list[RedFlag], Route, list[dict[str, Any]]]:
     """Persist new rule events and monotonically raise urgency inside the visit transaction."""
     row = (
@@ -167,6 +169,15 @@ async def _evaluate_visit(
         and text_answer.strip()
     ):
         rules_task = asyncio.create_task(asyncio.to_thread(evaluate, text_answer, facts=facts))
+        route_task = asyncio.create_task(
+            asyncio.to_thread(
+                route_department,
+                text_answer,
+                age=row["age_years"],
+                sex=row["sex"],
+                pregnant=row["pregnant"],
+            )
+        )
         opinion_task = asyncio.create_task(
             second_opinion_flags(
                 provider,
@@ -175,16 +186,56 @@ async def _evaluate_visit(
                 session_id=str(visit_id),
             )
         )
-        flags, opinion = await asyncio.gather(rules_task, opinion_task)
+        if include_department:
+            departments = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT code, name_en FROM departments "
+                            "WHERE hospital_id = :hospital_id AND is_active = true"
+                        ),
+                        {"hospital_id": hospital_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            labels = {
+                str(item["code"]): str(item["name_en"])
+                for item in departments
+                if isinstance(item.get("code"), str) and isinstance(item.get("name_en"), str)
+            }
+            if labels:
+                department_task = asyncio.create_task(
+                    classify_department(
+                        provider,
+                        transcript=text_answer,
+                        language=str(row.get("language", "en")),
+                        department_labels=labels,
+                        session_id=str(visit_id),
+                    )
+                )
+                flags, opinion, deterministic_route, model_code = await asyncio.gather(
+                    rules_task, opinion_task, route_task, department_task
+                )
+                route_result = combine_department_classification(deterministic_route, model_code)
+            else:
+                flags, opinion, route_result = await asyncio.gather(
+                    rules_task, opinion_task, route_task
+                )
+        else:
+            flags, opinion, route_result = await asyncio.gather(
+                rules_task, opinion_task, route_task
+            )
         flags = combine_redflag_opinions(flags, opinion)
     else:
         flags = evaluate(text_answer, facts=facts)
-    route_result = route_department(
-        text_answer,
-        age=row["age_years"],
-        sex=row["sex"],
-        pregnant=row["pregnant"],
-    )
+        route_result = route_department(
+            text_answer,
+            age=row["age_years"],
+            sex=row["sex"],
+            pregnant=row["pregnant"],
+        )
     existing = set(
         (
             await connection.execute(
@@ -412,6 +463,7 @@ async def _finish_interview(
             answers=interview_state.answers,
             tile_ids=list(interview_state.red_flag_ids),
             request=request,
+            include_department=True,
         )
         data = _patient_case_sheet(data, flags, route_result)
         case_sheet_id = await CaseSheetRepository(connection, request.app.state.settings).save(
@@ -1152,6 +1204,7 @@ async def correct_interview_answer(
             answers=updated.answers,
             tile_ids=updated.red_flag_ids,
             request=request,
+            include_department=state.get("phase") == "summary",
         )
         if state.get("phase") == "summary":
             data = _patient_case_sheet(data, flags, route_result)
@@ -1226,6 +1279,7 @@ async def confirm_summary(
             answers=interview_state.answers,
             tile_ids=interview_state.red_flag_ids,
             request=request,
+            include_department=True,
         )
         case_data = _patient_case_sheet(saved["data"], flags, route_result)
         if route_result.department_code != "NURSE_TRIAGE":
