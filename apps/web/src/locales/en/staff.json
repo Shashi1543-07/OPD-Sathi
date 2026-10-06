@@ -17,6 +17,7 @@
   "patients": "Patients",
   "reports": "Reports",
   "settings": "Settings",
+  "sectionPlaceholder": "This section is available to your staff role.",
   "email": "Email",
   "emailPlaceholder": "name@example.test",
   "password": "Password",

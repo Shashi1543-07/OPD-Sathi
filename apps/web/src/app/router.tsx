@@ -6,6 +6,12 @@ import { KioskPreview } from "./KioskPreview";
 import { StaffShell } from "./StaffShell";
 import { PatientStatus } from "./PatientStatus";
 import { KioskIntake } from "./KioskIntake";
+import { StaffQueueBoard } from "./StaffQueueBoard";
+import {
+  StaffLanding,
+  StaffPageGate,
+  StaffPlaceholderPage,
+} from "./StaffNavigation";
 
 export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/kiosk" replace /> },
@@ -20,7 +26,61 @@ export const router = createBrowserRouter([
         : []),
     ],
   },
-  { path: "/staff", element: <StaffShell /> },
+  {
+    path: "/staff",
+    element: <StaffShell />,
+    children: [
+      { index: true, element: <StaffLanding /> },
+      {
+        path: "dashboard",
+        element: (
+          <StaffPageGate page="dashboard">
+            <StaffPlaceholderPage page="dashboard" />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "queue",
+        element: (
+          <StaffPageGate page="queue">
+            <StaffQueueBoard />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "consultations",
+        element: (
+          <StaffPageGate page="consultations">
+            <StaffPlaceholderPage page="consultations" />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "patients",
+        element: (
+          <StaffPageGate page="patients">
+            <StaffPlaceholderPage page="patients" />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "reports",
+        element: (
+          <StaffPageGate page="reports">
+            <StaffPlaceholderPage page="reports" />
+          </StaffPageGate>
+        ),
+      },
+      {
+        path: "settings",
+        element: (
+          <StaffPageGate page="settings">
+            <StaffPlaceholderPage page="settings" />
+          </StaffPageGate>
+        ),
+      },
+    ],
+  },
   {
     path: "/s/:token",
     element: <PatientStatus />,

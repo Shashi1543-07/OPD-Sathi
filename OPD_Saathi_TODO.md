@@ -125,7 +125,7 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 
 ## Phase 7 — Doctor/nurse consoles and PDF
 
-- [ ] 7.1 Finalize staff layout and role-based navigation.
+- [x] 7.1 Finalize staff layout and role-based navigation; guarded admin, doctor, and nurse routes pass the 18-combination access matrix.
 - [ ] 7.2 Build live, virtualized staff queue board with filters and alert controls.
 - [ ] 7.3 Add audited, versioned case-sheet read/edit API with conflict detection.
 - [ ] 7.4 Build doctor consult view, edits, transcript access, and consult actions.
