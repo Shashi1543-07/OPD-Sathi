@@ -21,7 +21,7 @@ Analytics endpoints use the application database URL today. `DATABASE_READ_URL` 
 
 - Phase 11's summary query measured 1.88 ms p95 over 30 iterations against the seeded 100,000-visit Compose fixture. This is a local query benchmark, not a concurrent request capacity result.
 - Phase 12's Lighthouse CI run measured kiosk performance 85–86, accessibility 100, and best practices 96; the status page scored 94–95, accessibility 100, and best practices 96.
-- `make load-test` runs a 25-VU `/healthz` smoke profile with k6. It does not simulate intake completion, queue mutations, staff WebSockets, or the playbook's 200-session/10-minute capacity target.
+- `make load-test` runs a 25-VU `/healthz` smoke profile with k6. A local run completed 1,382 requests in 70 s with 0.00% failed, 19.60 requests/s, and 13.51 ms p95 (host hardware was not captured). It does not simulate intake completion, queue mutations, staff WebSockets, or the playbook's 200-session/10-minute capacity target.
 
 ## Growth path and unfinished work
 
