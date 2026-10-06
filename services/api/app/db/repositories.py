@@ -659,7 +659,7 @@ class CaseSheetRepository:
         visit_id: UUID,
         expected_version: int,
         data: dict[str, Any],
-        editor_id: UUID,
+        editor_id: UUID | None,
     ) -> int | None:
         encrypted_data = encrypt_field(
             json.dumps(data, separators=(",", ":")),
@@ -670,7 +670,7 @@ class CaseSheetRepository:
             text(
                 "UPDATE case_sheets SET data = CAST(:data AS jsonb), "
                 "schema_version = :schema_version, "
-                "version = version + 1, last_edited_by = :editor_id "
+                "version = version + 1, last_edited_by = COALESCE(:editor_id, last_edited_by) "
                 "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
                 "AND version = :expected_version RETURNING version"
             ),

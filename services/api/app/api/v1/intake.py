@@ -1,15 +1,18 @@
 """Consent-gated, touch/text intake endpoints for the kiosk and patient token."""
 
+import asyncio
 import json
 from datetime import timedelta
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
 from redis.exceptions import RedisError
 from sqlalchemy import text
 
+from app.ai.extraction import extract_case_sheet_patch, merge_enriched_case_sheet
 from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
 from app.core.errors import ApiProblemError
@@ -42,6 +45,7 @@ from app.domain.routing.engine import Route
 from app.domain.routing.engine import route as route_department
 
 router = APIRouter(prefix="/intake", tags=["intake"])
+_AI_LOGGER = structlog.get_logger(__name__)
 _SESSION_TTL_FACTOR = 60 * 60
 MAX_ANSWER_CHARACTERS = 500
 _DANGER_TILE_RULE_IDS = {
@@ -377,6 +381,7 @@ async def _finish_interview(
 ) -> dict[str, Any]:
     data = build_case_sheet(interview_state)
     alerts: list[dict[str, Any]] = []
+    voice_transcript = ""
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         flags, route_result, alerts = await _evaluate_visit(
@@ -393,6 +398,14 @@ async def _finish_interview(
         await IntakeRepository(connection, request.app.state.settings).set_visit_status(
             hospital_id=hospital_id, visit_id=visit_id, status="awaiting_confirmation"
         )
+        turns = await InterviewTurnRepository(
+            connection, request.app.state.settings
+        ).list_for_visit(hospital_id=hospital_id, visit_id=visit_id)
+        voice_transcript = "\n".join(
+            str(turn["text_original"])
+            for turn in turns
+            if turn["input_mode"] == "voice" and isinstance(turn["text_original"], str)
+        )
     await _publish_alerts(
         request.app.state.redis_state,
         app_env=request.app.state.settings.app_env,
@@ -407,6 +420,14 @@ async def _finish_interview(
         json.dumps(state_data, separators=(",", ":")),
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
+    _schedule_case_sheet_enrichment(
+        request,
+        hospital_id=hospital_id,
+        visit_id=visit_id,
+        baseline=data,
+        transcript=voice_transcript,
+        language=interview_state.language,
+    )
     return {
         "complete": True,
         "case_sheet": data,
@@ -420,6 +441,124 @@ async def _finish_interview(
             if answered_id in interview_state.answers
         ],
     }
+
+
+def _schedule_case_sheet_enrichment(
+    request: Request,
+    *,
+    hospital_id: UUID,
+    visit_id: UUID,
+    baseline: dict[str, Any],
+    transcript: str,
+    language: Language,
+) -> None:
+    """Start bounded best-effort enrichment after returning a deterministic summary."""
+    if not transcript.strip() or not request.app.state.settings.llm_enabled:
+        return
+    provider = request.app.state.llm_provider
+    if getattr(provider, "name", "mock") != "gemini":
+        return
+    task = asyncio.create_task(
+        _run_bounded_case_sheet_enrichment(
+            request,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            baseline=baseline,
+            transcript=transcript,
+            language=language,
+        )
+    )
+    tasks: set[asyncio.Task[None]] = request.app.state.llm_background_tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+
+
+async def _run_bounded_case_sheet_enrichment(
+    request: Request,
+    *,
+    hospital_id: UUID,
+    visit_id: UUID,
+    baseline: dict[str, Any],
+    transcript: str,
+    language: Language,
+) -> None:
+    try:
+        await asyncio.wait_for(
+            _persist_case_sheet_enrichment(
+                request,
+                hospital_id=hospital_id,
+                visit_id=visit_id,
+                baseline=baseline,
+                transcript=transcript,
+                language=language,
+            ),
+            timeout=5.0,
+        )
+    except TimeoutError:
+        _AI_LOGGER.warning("llm_case_sheet_enrichment_fallback", reason="background_timeout")
+
+
+async def _persist_case_sheet_enrichment(
+    request: Request,
+    *,
+    hospital_id: UUID,
+    visit_id: UUID,
+    baseline: dict[str, Any],
+    transcript: str,
+    language: Language,
+) -> None:
+    """Enrich in the background, merging safely against the latest unconfirmed sheet."""
+    try:
+        provider = request.app.state.llm_provider
+        enriched = await extract_case_sheet_patch(
+            provider,
+            baseline,
+            transcript,
+            language,
+            session_id=str(visit_id),
+        )
+        if enriched == baseline:
+            return
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            repository = CaseSheetRepository(connection, request.app.state.settings)
+            saved = await repository.get(
+                hospital_id=hospital_id, visit_id=visit_id, for_update=True
+            )
+            if saved is None:
+                return
+            confirmed_at = await connection.scalar(
+                text(
+                    "SELECT confirmed_at FROM case_sheets "
+                    "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id},
+            )
+            if confirmed_at is not None:
+                return
+            current = saved["data"]
+            merged = merge_enriched_case_sheet(current, baseline, enriched)
+            if merged == current:
+                return
+            version = await repository.replace_if_version(
+                hospital_id=hospital_id,
+                visit_id=visit_id,
+                expected_version=int(saved["version"]),
+                data=merged,
+                editor_id=None,
+            )
+            if version is not None:
+                field_count = sum(
+                    1
+                    for path, metadata in merged["field_meta"].items()
+                    if metadata.get("source") == "patient_voice"
+                    and baseline["field_meta"].get(path) != metadata
+                )
+                _AI_LOGGER.info("llm_case_sheet_enrichment_applied", field_count=field_count)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _AI_LOGGER.warning("llm_case_sheet_enrichment_fallback", reason="unavailable_or_invalid")
 
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)

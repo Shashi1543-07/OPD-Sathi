@@ -162,6 +162,11 @@ def create_app(
                         await app.state.redis_state.delete(lock_key)
             yield
         finally:
+            llm_tasks = tuple(app.state.llm_background_tasks)
+            for task in llm_tasks:
+                task.cancel()
+            if llm_tasks:
+                await asyncio.gather(*llm_tasks, return_exceptions=True)
             if isinstance(app.state.llm_provider, GeminiProvider):
                 await app.state.llm_provider.aclose()
             await app.state.engine.dispose()
@@ -176,6 +181,7 @@ def create_app(
         dependencies=[Depends(authentication_gate)],
     )
     app.state.settings = configured
+    app.state.llm_background_tasks = set()
     app.state.stt_provider = build_stt_provider(configured)
     app.state.llm_provider = MockLLM()
     app.state.memory_limiter = InMemorySlidingWindow()
