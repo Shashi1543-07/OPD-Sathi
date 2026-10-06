@@ -52,6 +52,23 @@ def _problem(status: int, code: str, title: str, detail: str) -> ApiProblemError
     return ApiProblemError(status=status, code=code, title=title, detail=detail)
 
 
+def _staff_queue_department(
+    role: str, assigned_department: UUID | None, requested_department: UUID | None
+) -> UUID | None:
+    if role == "admin":
+        return requested_department
+    if assigned_department is None:
+        raise _problem(403, "FORBIDDEN", "Permission denied", "No staff department is assigned.")
+    if requested_department is not None and requested_department != assigned_department:
+        raise _problem(
+            403,
+            "FORBIDDEN",
+            "Permission denied",
+            "You can only view your assigned department.",
+        )
+    return assigned_department
+
+
 def _encode_queue_cursor(offset: int, key: bytes) -> str:
     value = str(offset).encode("ascii")
     signature = hmac.new(key, value, hashlib.sha256).digest()
@@ -232,19 +249,57 @@ async def staff_queue(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
     department_id: Annotated[UUID | None, Query()] = None,
+    status: Annotated[Literal["queued", "called", "in_consult"] | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: str | None = None,
 ) -> dict[str, Any]:
     hospital_id = UUID(principal["hospital_id"])
+    role = principal["role"]
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
+        if role != "admin":
+            assigned_department = await connection.scalar(
+                text(
+                    "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
+                    "AND id = :actor_id AND is_active = true"
+                ),
+                {"hospital_id": hospital_id, "actor_id": UUID(principal["sub"])},
+            )
+            department_id = _staff_queue_department(
+                role,
+                assigned_department if isinstance(assigned_department, UUID) else None,
+                department_id,
+            )
+
+        department_rows = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT id, code, name_en FROM departments "
+                        "WHERE hospital_id = :hospital_id "
+                        "AND is_active = true AND (:is_admin = true OR "
+                        "id = CAST(:department_id AS uuid)) ORDER BY name_en, id"
+                    ),
+                    {
+                        "hospital_id": hospital_id,
+                        "department_id": department_id,
+                        "is_admin": role == "admin",
+                    },
+                )
+            )
+            .mappings()
+            .all()
+        )
+        if department_id is not None and department_id not in {
+            row["id"] for row in department_rows
+        }:
+            raise _problem(404, "NOT_FOUND", "Department not found", "Choose an active department.")
         repository = QueueRepository(connection, request.app.state.settings)
         rows = await repository.queued_visits(hospital_id=hospital_id, department_id=department_id)
-        departments: dict[UUID, tuple[int, list[float]]] = {}
-        for department in {row["department_id"] for row in rows}:
-            departments[department] = await repository.queue_estimate_inputs(
-                hospital_id=hospital_id, department_id=department
-            )
+        active_department_ids = {row["id"] for row in department_rows}
+        rows = [row for row in rows if row["department_id"] in active_department_ids]
+    if status is not None:
+        rows = [row for row in rows if row["status"] == status]
     groups: dict[UUID, list[dict[str, Any]]] = {}
     for row in rows:
         groups.setdefault(row["department_id"], []).append(row)
@@ -257,6 +312,8 @@ async def staff_queue(
             )
         )
         for index, row in enumerate(department_rows, 1):
+            case_sheet = row.get("case_sheet_data") or {}
+            complaint = case_sheet.get("chief_complaint") or {}
             items.append(
                 {
                     "visit_id": str(row["visit_id"]),
@@ -265,6 +322,8 @@ async def staff_queue(
                     "urgency": row["urgency"],
                     "status": row["status"],
                     "age_years": row["age_years"],
+                    "sex": row["sex"],
+                    "complaint": complaint.get("text_en") or complaint.get("text_original") or "",
                     "position": index,
                     "queued_at": row["queued_at"].isoformat() if row["queued_at"] else None,
                     "routing": (row.get("case_sheet_data") or {}).get("routing"),
@@ -281,7 +340,15 @@ async def staff_queue(
         if offset + limit < len(items)
         else None
     )
-    return {"items": visible, "next_cursor": next_cursor, "limit": limit}
+    return {
+        "items": visible,
+        "next_cursor": next_cursor,
+        "limit": limit,
+        "departments": [
+            {"id": str(row["id"]), "code": row["code"], "name": row["name_en"]}
+            for row in department_rows
+        ],
+    }
 
 
 @router.post("/queue/{visit_id}/routing/confirm")

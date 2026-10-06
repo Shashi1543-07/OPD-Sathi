@@ -415,6 +415,7 @@ class QueueRepository:
         case_sheets = table(
             "case_sheets", column("hospital_id"), column("visit_id"), column("data")
         )
+        patients = table("patients", column("hospital_id"), column("id"), column("sex"))
         statement = (
             select(
                 visits.c.id.label("visit_id"),
@@ -432,11 +433,17 @@ class QueueRepository:
                 visits.c.consult_ended_at,
                 visits.c.assigned_doctor_id,
                 case_sheets.c.data.label("case_sheet_data"),
+                patients.c.sex,
             )
             .outerjoin(
                 case_sheets,
                 (case_sheets.c.hospital_id == visits.c.hospital_id)
                 & (case_sheets.c.visit_id == visits.c.id),
+            )
+            .join(
+                patients,
+                (patients.c.hospital_id == visits.c.hospital_id)
+                & (patients.c.id == visits.c.patient_id),
             )
             .where(
                 visits.c.hospital_id == hospital_id,

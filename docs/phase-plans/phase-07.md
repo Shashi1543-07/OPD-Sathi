@@ -1,11 +1,11 @@
 # Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Active on `phase-07-consoles`, started after the user's explicit instruction to continue from Phase 6. Step 7.1 is complete: staff navigation now uses role-filtered links and guarded routes. Its role/page matrix tests pass for all 18 combinations. All data and accounts used in automated and manual checks must be synthetic.
+**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1 and 7.2 are implemented; the Phase 7 PR is draft #5. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
 
 ## Work order
 
 1. [x] **7.1 Staff layout and role navigation:** real links and route guards for admin, doctor, and nurse pages. Tests cover every role/page combination.
-2. [ ] **7.2 Queue board:** department selection, status filters, urgent pinning, virtual rows, pagination, sequence-aware live updates, connection state, and alert sound preference.
+2. [x] **7.2 Queue board:** department tabs, status filters, urgent pinning, virtual rows, pagination, sequence-aware live updates, connection state, and alert sound preference.
 3. [ ] **7.3 Case-sheet API:** audited reads, schema-validated JSON Patch updates guarded by `If-Match`, doctor source metadata, conflict response, and audit diff.
 4. [ ] **7.4 Doctor consult view:** reading-order case sheet, confidence/source details, edit and conflict flows, audited transcript view, consult actions, and keyboard controls.
 5. [ ] **7.5 Nurse console:** assisted registration, alert review, queue overrides, and no-show flow.
@@ -21,6 +21,15 @@
 - `npm --prefix apps/web run lint`: passed with no warnings.
 - `npm --prefix apps/web run check-locales`: **219 keys per language** across English, Hindi, and Marathi.
 - `npm --prefix apps/web run build`: passed; JavaScript bundle **409.82 kB** (**129.67 kB gzip**).
+
+### Step 7.2 verification
+
+- `npm --prefix apps/web test -- --reporter=dot`: **23 passed** (including department/status filters, load-more paging, urgent pin order, sound preference persistence, and sequence-gap recovery).
+- `npm --prefix apps/web run typecheck`, `npm --prefix apps/web run lint`, and `npm --prefix apps/web run build`: passed.
+- `npm --prefix apps/web run check-locales`: **219 keys per language**; `npm --prefix apps/web run check-contrast`: **12 documented pairs passed**.
+- `.venv/Scripts/python.exe -m pytest services/api/tests/unit/test_queue_board.py -q`: **3 passed**; Ruff and strict mypy passed.
+- The queue API constrains doctors and nurses to their assigned active department. Admins can switch among active departments. The list is paginated, virtualized, urgent-first, and updates from contiguous websocket sequence deltas; a sequence gap triggers a fresh page.
+- The complete backend suite was attempted locally: **318 passed**, one existing Redis websocket latency integration failed to subscribe in this environment, and three tests could not create temporary directories under the default Windows pytest temp root. Required hosted CI for PR #5 is the authoritative cross-platform gate.
 
 ## Acceptance gate
 

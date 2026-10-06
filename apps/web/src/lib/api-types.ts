@@ -1582,6 +1582,7 @@ export interface operations {
         parameters: {
             query?: {
                 department_id?: string | null;
+                status?: ("queued" | "called" | "in_consult") | null;
                 limit?: number;
                 cursor?: string | null;
             };
