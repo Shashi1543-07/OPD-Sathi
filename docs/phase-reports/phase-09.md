@@ -29,6 +29,7 @@ The AI can help choose from approved questions, organize patient statements into
 | PII redaction tests | 100% | Covered by existing unit tests; count not separately rerun for this report | Not measured here |
 | Frontend unit tests | 0 failed | 35 passed, 11 files | Pass |
 | Frontend typecheck and production build | Clean/succeeds | Both passed; 1,699 modules, JS 495.30 kB (153.90 kB gzip) | Pass |
+| Browser provenance/accessibility check | 0 failed; no serious/critical axe violations | 1 passed; 0 serious/critical violations | Pass |
 | Targeted AI backend tests | 0 failed | 281 passed | Pass |
 | Ruff on changed AI/API/evaluation files | Clean | All checks passed | Pass |
 
@@ -45,6 +46,7 @@ The required live-provider gates remain outstanding. All synthetic fixtures cont
 - `npm --prefix apps/web test -- --run` — 35 passed (11 files).
 - `npm --prefix apps/web run typecheck` — passed.
 - `npm --prefix apps/web run build` — passed.
+- `npm exec -- playwright test e2e/phase-09.spec.ts` (from `apps/web`) — 1 passed; no serious or critical axe violations.
 
 On Windows the native Vitest command initially failed with sandbox `spawn EPERM`; rerunning the frontend checks with the required command approval succeeded. WSL was unavailable to the sandboxed run; the project virtual environment (`.venv`, Python 3.12.15) ran the Python evaluations directly.
 
@@ -53,7 +55,8 @@ On Windows the native Vitest command initially failed with sandbox `spawn EPERM`
 - `eval/extraction/dialogues.jsonl` — 100 synthetic dialogues.
 - `eval/adversarial/prompts.jsonl` — 100 synthetic adversarial prompts.
 - `eval/redflags_llm/` — Mock fallback evaluation.
-- No new screenshot was captured.
+- `docs/screenshots/phase-09/staff-case-sheet.png` — staff provenance UI.
+- `eval/live/evaluate.py` — opt-in live-provider evaluation harness; not run in this handoff.
 
 ## 6. How the human tests this phase
 
