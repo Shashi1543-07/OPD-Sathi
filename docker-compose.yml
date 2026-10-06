@@ -25,7 +25,12 @@ services:
 
   redis:
     image: redis:7.4.2-alpine
-    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    command:
+      [
+        "sh",
+        "-c",
+        "exec redis-server --appendonly yes --appendfsync everysec --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\"",
+      ]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
     ports:
@@ -37,6 +42,27 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+    restart: unless-stopped
+
+  redis-cache:
+    image: redis:7.4.2-alpine
+    command:
+      [
+        "sh",
+        "-c",
+        "exec redis-server --save '' --appendonly no --maxmemory \"$$REDIS_CACHE_MAXMEMORY\" --maxmemory-policy allkeys-lru --requirepass \"$$REDIS_PASSWORD\"",
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+      REDIS_CACHE_MAXMEMORY: ${REDIS_CACHE_MAXMEMORY:-256mb}
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     restart: unless-stopped
 
   worker-role-bootstrap:
@@ -62,6 +88,7 @@ services:
     command: ["gunicorn", "app.main:app", "--worker-class", "uvicorn_worker.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "2"]
     environment: &app_environment
       APP_ENV: ${APP_ENV:-development}
+      METRICS_ENABLED: ${METRICS_ENABLED:-false}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       APP_DATA_KEY: ${APP_DATA_KEY:?Set APP_DATA_KEY}
@@ -70,7 +97,7 @@ services:
       WORKER_DATABASE_URL: postgresql+asyncpg://osa_worker:${OSA_WORKER_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
       MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:${OSA_MIGRATOR_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
       REDIS_STATE_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      REDIS_CACHE_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+      REDIS_CACHE_URL: redis://:${REDIS_PASSWORD}@redis-cache:6379/0
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -105,6 +132,45 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [observability]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: [observability]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-local-only-change-me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  grafana_data:

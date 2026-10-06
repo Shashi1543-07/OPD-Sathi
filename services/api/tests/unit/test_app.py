@@ -60,6 +60,29 @@ def test_healthz():
     assert response.json() == {"status": "ok"}
 
 
+def test_metrics_export_uses_bounded_route_labels_and_prometheus_histogram():
+    app = create_app(Settings(metrics_enabled=True))
+    with TestClient(app) as client:
+        client.get("/healthz")
+        response = client.get("/metrics")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert 'http_requests_total{method="GET",route="/healthz",status="200"} 1' in response.text
+    assert any(
+        line.startswith('http_request_duration_seconds_bucket{method="GET",route="/healthz"')
+        and 'le="+Inf"} 1' in line
+        for line in response.text.splitlines()
+    )
+    assert ("GET", "/metrics") in PUBLIC_ROUTES
+
+
+def test_metrics_are_disabled_by_default():
+    app = create_app(Settings())
+    with TestClient(app) as client:
+        response = client.get("/metrics")
+    assert response.status_code == 404
+
+
 def test_problem_json_and_request_id():
     app = create_app(Settings())
 

@@ -3,6 +3,8 @@
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from threading import Lock
+from time import monotonic
 from typing import cast
 from uuid import uuid4
 
@@ -12,10 +14,10 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response
+from starlette.responses import PlainTextResponse, Response
 
 from app.ai.providers.llm.factory import build_llm_provider
 from app.ai.providers.llm.gemini import GeminiProvider
@@ -45,6 +47,72 @@ from app.db.session import create_engine, ping_database
 from app.pdf import warm_pdf_renderer
 
 logger = structlog.get_logger(__name__)
+
+
+class HttpMetrics:
+    """Small process-local Prometheus exporter with bounded, non-sensitive labels."""
+
+    _buckets = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._counts: dict[tuple[str, str, int], int] = {}
+        self._buckets_seen: dict[tuple[str, str, int], list[int]] = {}
+        self._duration_sums: dict[tuple[str, str, int], float] = {}
+
+    def observe(self, method: str, route: str, status: int, seconds: float) -> None:
+        key = (method, route, status)
+        with self._lock:
+            self._counts[key] = self._counts.get(key, 0) + 1
+            seen = self._buckets_seen.setdefault(key, [0] * len(self._buckets))
+            for index, boundary in enumerate(self._buckets):
+                if seconds <= boundary:
+                    seen[index] += 1
+            self._duration_sums[key] = self._duration_sums.get(key, 0.0) + seconds
+
+    def render(self) -> str:
+        """Render Prometheus text; route templates prevent patient IDs becoming labels."""
+        lines = [
+            "# HELP http_requests_total Completed HTTP requests.",
+            "# TYPE http_requests_total counter",
+            "# HELP http_request_duration_seconds HTTP request duration in seconds.",
+            "# TYPE http_request_duration_seconds histogram",
+        ]
+        with self._lock:
+            counts = dict(self._counts)
+            buckets_seen = {key: tuple(values) for key, values in self._buckets_seen.items()}
+            duration_sums = dict(self._duration_sums)
+        for (method, route, status), count in sorted(counts.items()):
+            labels = f'method="{method}",route="{route}",status="{status}"'
+            lines.append(f"http_requests_total{{{labels}}} {count}")
+            seen = buckets_seen[(method, route, status)]
+            for index, bucket in enumerate(self._buckets):
+                cumulative = seen[index]
+                lines.append(
+                    f'http_request_duration_seconds_bucket{{{labels},le="{bucket:g}"}} {cumulative}'
+                )
+            lines.append(
+                f'http_request_duration_seconds_bucket{{{labels},le="+Inf"}} {count}'
+            )
+            lines.append(f"http_request_duration_seconds_count{{{labels}}} {count}")
+            duration_sum = duration_sums[(method, route, status)]
+            lines.append(
+                f"http_request_duration_seconds_sum{{{labels}}} {duration_sum:.9f}"
+            )
+        return "\n".join(lines) + "\n"
+
+
+class HttpMetricsMiddleware(BaseHTTPMiddleware):
+    """Record timings and status against route templates, never raw request paths."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        started = monotonic()
+        response = await call_next(request)
+        route = getattr(request.scope.get("route"), "path", "unmatched")
+        request.app.state.http_metrics.observe(
+            request.method, route, response.status_code, monotonic() - started
+        )
+        return response
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -140,12 +208,16 @@ def create_app(
         await asyncio.to_thread(warm_pdf_renderer)
         app.state.engine = engine_factory(configured.database_url)
         app.state.redis_state = redis_factory(configured.redis_state_url, decode_responses=True)
-        app.state.llm_provider = build_llm_provider(configured, redis=app.state.redis_state)
+        app.state.redis_cache = redis_factory(configured.redis_cache_url, decode_responses=True)
+        app.state.llm_provider = build_llm_provider(configured, redis=app.state.redis_cache)
         app.state.tts_provider = build_tts_provider(configured)
         try:
             queue_registry = f"osa:{configured.app_env}:qregistry"
-            if configured.worker_database_url and not await app.state.redis_state.sismember(
-                queue_registry, "ready"
+            has_worker_registry = callable(getattr(app.state.redis_state, "sismember", None))
+            if (
+                configured.worker_database_url
+                and has_worker_registry
+                and not await app.state.redis_state.sismember(queue_registry, "ready")
             ):
                 lock_key = f"osa:{configured.app_env}:qrebuild-lock"
                 acquired = await app.state.redis_state.set(lock_key, "api-startup", nx=True, ex=60)
@@ -153,7 +225,7 @@ def create_app(
                     from app.workers.main import rebuild_all
 
                     try:
-                        worker_engine = create_async_engine(configured.worker_database_url)
+                        worker_engine = create_engine(configured.worker_database_url)
                         try:
                             async with worker_engine.begin() as connection:
                                 await rebuild_all(
@@ -173,6 +245,7 @@ def create_app(
             if isinstance(app.state.llm_provider, GeminiProvider):
                 await app.state.llm_provider.aclose()
             await app.state.engine.dispose()
+            await app.state.redis_cache.aclose()
             await app.state.redis_state.aclose()
 
     app = FastAPI(
@@ -185,12 +258,14 @@ def create_app(
     )
     app.state.settings = configured
     app.state.llm_background_tasks = set()
+    app.state.http_metrics = HttpMetrics()
     app.state.stt_provider = build_stt_provider(configured)
     app.state.llm_provider = MockLLM()
     app.state.tts_provider = build_tts_provider(configured)
     app.state.memory_limiter = InMemorySlidingWindow()
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
+    app.add_middleware(HttpMetricsMiddleware)
     app.add_middleware(RequestBodyLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
@@ -252,6 +327,16 @@ def create_app(
                 detail=f"Unavailable dependency: {', '.join(failures)}",
             )
         return JSONResponse({"status": "ready"})
+
+    @app.get("/metrics", include_in_schema=False, response_class=PlainTextResponse)
+    async def metrics(request: Request) -> PlainTextResponse:
+        """Expose process-local HTTP metrics for private-network Prometheus scraping."""
+        if not configured.metrics_enabled:
+            return PlainTextResponse("Not found", status_code=404)
+        return PlainTextResponse(
+            request.app.state.http_metrics.render(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     return app
 

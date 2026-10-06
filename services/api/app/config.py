@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     kiosk_token_hours: int = 12
     patient_session_hours: int = 2
     max_request_body_bytes: int = 1_048_576
+    metrics_enabled: bool = False
     urgent_bonus_min: int = 360
     priority_bonus_min: int = 45
     vulnerable_bonus_min: int = 15

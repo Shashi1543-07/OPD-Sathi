@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 
 
 def create_engine(database_url: str) -> AsyncEngine:
-    return create_async_engine(database_url, pool_pre_ping=True)
+    return create_async_engine(
+        database_url,
+        pool_pre_ping=True,
+        connect_args={"server_settings": {"statement_timeout": "5000"}},
+    )
 
 
 async def ping_database(engine: AsyncEngine) -> None:

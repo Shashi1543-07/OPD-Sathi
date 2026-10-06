@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: OPD Saathi
+    orgId: 1
+    folder: OPD Saathi
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

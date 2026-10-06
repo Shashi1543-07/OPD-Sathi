@@ -14,6 +14,7 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
         ("GET", "/healthz"),
         ("GET", "/readyz"),
+        ("GET", "/metrics"),
         ("POST", "/auth/login"),
         ("POST", "/auth/refresh"),
         ("POST", "/auth/logout"),
@@ -68,6 +69,8 @@ async def authentication_gate(request: Request) -> None:
     if request.scope.get("type") == "websocket":
         return
     path = request.url.path
+    if path == "/metrics" and getattr(request.app.state.settings, "metrics_enabled", False):
+        return
     if (request.method.upper(), path) in PUBLIC_ROUTES or (
         request.method.upper() == "GET"
         and re.fullmatch(r"/status/[A-Za-z0-9_-]{43}(?:/stream)?", path) is not None

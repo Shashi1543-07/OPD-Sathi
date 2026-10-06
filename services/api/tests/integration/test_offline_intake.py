@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import Settings
 from app.core.security import digest_secret
-from app.db.session import set_hospital_scope
+from app.db.session import create_engine as create_application_engine, set_hospital_scope
 from app.domain.interview.consent import get_consent_copy
 from app.main import create_app
 
@@ -29,6 +29,18 @@ def _database_settings() -> Settings:
     return base.model_copy(
         update={"database_url": app_url, "migrations_database_url": migrator_url}
     )
+
+
+@pytest.mark.asyncio
+async def test_application_engine_enforces_five_second_statement_timeout() -> None:
+    settings = _database_settings()
+    engine = create_application_engine(settings.database_url)
+    try:
+        async with engine.connect() as connection:
+            timeout = await connection.scalar(text("SHOW statement_timeout"))
+        assert timeout == "5s"
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

@@ -11,9 +11,10 @@ from arq import cron
 from arq.connections import RedisSettings
 from arq.worker import run_worker
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import get_settings
+from app.db.session import create_engine
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
 from app.notifications.providers import build_notification_provider
@@ -195,7 +196,7 @@ async def rebuild_all(connection: AsyncConnection, client: Any, *, settings: Any
 async def on_startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
     database_url = settings.worker_database_url or settings.database_url
-    engine = create_async_engine(database_url, pool_pre_ping=True)
+    engine = create_engine(database_url)
     client = redis.from_url(  # type: ignore[no-untyped-call]
         settings.redis_state_url, decode_responses=True
     )
