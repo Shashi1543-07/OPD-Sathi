@@ -207,7 +207,7 @@ class GeminiProvider:
                     break
                 if attempt:
                     self.metrics.retries += 1
-                    delay = min(random.uniform(0.1, 0.3), max(0.0, remaining / 5))
+                    delay = min(random.SystemRandom().uniform(0.1, 0.3), max(0.0, remaining / 5))
                     await asyncio.sleep(delay)
                     remaining = deadline - monotonic()
                     if remaining <= 0:
