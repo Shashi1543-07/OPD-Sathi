@@ -954,6 +954,7 @@ class IntakeRepository:
         age: int,
         sex: str,
         phone: str | None,
+        sms_opt_in: bool = False,
         name: str | None = None,
     ) -> None:
         name_enc = (
@@ -975,6 +976,8 @@ class IntakeRepository:
             else None
         )
         phone_hmac = lookup_digest(phone, key=self.settings.app_hmac_key_bytes) if phone else None
+        if sms_opt_in and not phone:
+            raise ValueError("notification opt-in requires a phone number")
         current_year = datetime.now(ZoneInfo("Asia/Kolkata")).year
         await self.connection.execute(
             text(
@@ -1001,6 +1004,18 @@ class IntakeRepository:
                 "WHERE hospital_id = :hospital_id AND id = :visit_id"
             ),
             {"age": age, "hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        await self.connection.execute(
+            text(
+                "UPDATE visits SET sms_opt_in = :sms_opt_in, "
+                "sms_opt_in_at = CASE WHEN :sms_opt_in THEN now() ELSE NULL END "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {
+                "sms_opt_in": sms_opt_in and phone is not None,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+            },
         )
 
     async def record_danger_tiles(

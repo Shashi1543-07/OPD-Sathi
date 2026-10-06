@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     tts_provider: str = "mock"
     tts_model: str = "bulbul:v3"
     store_audio: bool = False
+    notification_provider: str = "console"
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_from_number: str = ""
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
     llm_provider: str = "mock"
     llm_model: str = "gemini-3.8-flash"
     llm_fallback_model: str = "gemini-3.5-flash-lite"
@@ -61,6 +67,17 @@ class Settings(BaseSettings):
             raise ValueError("TTS_PROVIDER must be mock, sarvam, or google")
         if self.llm_provider not in {"mock", "gemini"}:
             raise ValueError("LLM_PROVIDER must be mock or gemini")
+        if self.notification_provider not in {"console", "twilio", "whatsapp"}:
+            raise ValueError("NOTIFICATION_PROVIDER must be console, twilio, or whatsapp")
+        if self.notification_provider == "twilio" and not all(
+            value.strip()
+            for value in (self.twilio_account_sid, self.twilio_auth_token, self.twilio_from_number)
+        ):
+            raise ValueError("Twilio credentials and sender are required when enabled")
+        if self.notification_provider == "whatsapp" and not all(
+            value.strip() for value in (self.whatsapp_access_token, self.whatsapp_phone_number_id)
+        ):
+            raise ValueError("WhatsApp credentials are required when enabled")
         if not 1 <= self.llm_max_calls_per_session <= 30:
             raise ValueError("LLM_MAX_CALLS_PER_SESSION must be between 1 and 30")
         if not 1 <= self.llm_max_output_tokens <= 1024:

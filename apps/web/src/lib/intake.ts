@@ -164,7 +164,13 @@ export const intake = {
         granted,
       }),
     }),
-  identity: (age: number, sex: string, phone?: string, name?: string) =>
+  identity: (
+    age: number,
+    sex: string,
+    phone?: string,
+    name?: string,
+    smsOptIn = false,
+  ) =>
     patientRequest<{ next: string }>("/identity", {
       method: "POST",
       body: JSON.stringify({
@@ -172,6 +178,7 @@ export const intake = {
         sex,
         phone: phone || null,
         name: name || null,
+        sms_opt_in: smsOptIn,
       }),
     }),
   dangerSigns: (tileIds: string[]) =>

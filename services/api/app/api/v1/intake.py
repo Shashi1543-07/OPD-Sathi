@@ -8,7 +8,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, Request, Response, status
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 from redis.exceptions import RedisError
 from sqlalchemy import text
 
@@ -86,6 +86,13 @@ class IdentityPayload(StrictPayload):
     age: StrictInt = Field(ge=0, le=120)
     sex: Literal["female", "male", "other", "unknown"]
     phone: str | None = Field(default=None, pattern=r"^[6-9][0-9]{9}$")
+    sms_opt_in: bool = False
+
+    @model_validator(mode="after")
+    def require_phone_for_sms(self) -> "IdentityPayload":
+        if self.sms_opt_in and not self.phone:
+            raise ValueError("a phone number is required to receive queue updates")
+        return self
 
 
 class DangerSignsPayload(StrictPayload):
@@ -904,6 +911,7 @@ async def save_identity(
                 age=payload.age,
                 sex=payload.sex,
                 phone=payload.phone,
+                sms_opt_in=payload.sms_opt_in,
                 name=payload.name if state.get("assisted") is True else None,
             )
     except Exception as exc:

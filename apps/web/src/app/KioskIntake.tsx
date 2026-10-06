@@ -43,6 +43,7 @@ export function KioskIntake() {
   const [name, setName] = useState("");
   const [sex, setSex] = useState("unknown");
   const [phone, setPhone] = useState("");
+  const [smsOptIn, setSmsOptIn] = useState(false);
   const [tiles, setTiles] = useState<DangerOption[]>([]);
   const [selectedTiles, setSelectedTiles] = useState<string[]>([]);
   const [question, setQuestion] = useState<Question>();
@@ -475,6 +476,16 @@ export function KioskIntake() {
                 setPhone(event.target.value.replace(/\D/g, ""))
               }
             />
+            <label className="intake-notification-opt-in" htmlFor="intake-sms-opt-in">
+              <input
+                id="intake-sms-opt-in"
+                type="checkbox"
+                checked={smsOptIn}
+                disabled={!phone}
+                onChange={(event) => setSmsOptIn(event.target.checked)}
+              />
+              {t("smsOptIn", { ns: "kiosk" })}
+            </label>
             <button
               className="ui-button ui-button--primary ui-button--kiosk"
               type="button"
@@ -493,6 +504,7 @@ export function KioskIntake() {
                     sex,
                     phone || undefined,
                     session?.assisted ? name.trim() : undefined,
+                    smsOptIn,
                   );
                   setTiles((await intake.dangerTiles()).tiles);
                   move("danger");

@@ -132,5 +132,6 @@
   "queueToken": "Your queue token",
   "statusLink": "Scan to see your queue status",
   "printReceipt": "Print receipt",
-  "statusQrLabel": "Queue status QR code"
+  "statusQrLabel": "Queue status QR code",
+  "smsOptIn": "Send me queue updates by SMS (optional; off by default). Messages contain my token and queue position only."
 }

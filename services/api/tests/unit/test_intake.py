@@ -72,9 +72,7 @@ async def test_intake_routes_reject_all_nonconsented_patient_actions(
 async def test_assisted_session_is_department_scoped_and_marks_nurse_channel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    hospital_id, nurse_id, department_id, visit_id, patient_id = (
-        uuid4() for _ in range(5)
-    )
+    hospital_id, nurse_id, department_id, visit_id, patient_id = (uuid4() for _ in range(5))
 
     class Connection:
         async def __aenter__(self) -> "Connection":
@@ -111,6 +109,7 @@ async def test_assisted_session_is_department_scoped_and_marks_nurse_channel(
     connection = Connection()
     redis = Redis()
     audits: list[dict[str, object]] = []
+
     async def no_tenant_scope(*_args: object, **_kwargs: object) -> None:
         return None
 
@@ -187,6 +186,22 @@ def test_intake_payload_rejects_boolean_as_age_or_answer() -> None:
         intake.IdentityPayload.model_validate({"age": True, "sex": "unknown"})
     with pytest.raises(ValueError):
         intake.AnswerPayload.model_validate({"question_id": "severity", "answer": True})
+
+
+def test_sms_opt_in_requires_valid_phone_and_defaults_to_off() -> None:
+    payload = intake.IdentityPayload.model_validate({"age": 42, "sex": "unknown"})
+    assert payload.sms_opt_in is False
+    with pytest.raises(ValueError):
+        intake.IdentityPayload.model_validate({"age": 42, "sex": "unknown", "sms_opt_in": True})
+    opted_in = intake.IdentityPayload.model_validate(
+        {
+            "age": 42,
+            "sex": "unknown",
+            "phone": "9876543210",
+            "sms_opt_in": True,
+        }
+    )
+    assert opted_in.sms_opt_in is True
 
 
 def test_intake_rejects_oversized_answer_without_echoing_it() -> None:
