@@ -614,14 +614,21 @@ class CaseSheetRepository:
     async def get(
         self, *, hospital_id: UUID, visit_id: UUID, for_update: bool = False
     ) -> dict[str, Any] | None:
+        statement = (
+            text(
+                "SELECT id, data, version FROM case_sheets "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id FOR UPDATE"
+            )
+            if for_update
+            else text(
+                "SELECT id, data, version FROM case_sheets "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+            )
+        )
         row = (
             (
                 await self.connection.execute(
-                    text(
-                        "SELECT id, data, version FROM case_sheets "
-                        "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
-                        + (" FOR UPDATE" if for_update else "")
-                    ),
+                    statement,
                     {"hospital_id": hospital_id, "visit_id": visit_id},
                 )
             )

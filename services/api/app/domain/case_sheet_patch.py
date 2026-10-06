@@ -34,7 +34,8 @@ def _pointer_tokens(pointer: str) -> list[str]:
 
 
 def _array_index(token: str, length: int, *, inserting: bool) -> int:
-    if inserting and token == "-":
+    # RFC 6902 uses this JSON Pointer token to append to an array.
+    if inserting and token == "-":  # nosec B105
         return length
     if not re.fullmatch(r"0|[1-9][0-9]*", token):
         raise CaseSheetPatchError("Array paths must use a valid numeric index.")
