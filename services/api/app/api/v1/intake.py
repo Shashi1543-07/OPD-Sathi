@@ -15,6 +15,7 @@ from sqlalchemy import text
 from app.ai.extraction import extract_case_sheet_patch, merge_enriched_case_sheet
 from app.ai.prompts.builders import QuestionCandidate
 from app.ai.question_choice import select_question_id
+from app.ai.redflag_opinion import combine_redflag_opinions, second_opinion_flags
 from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
 from app.core.errors import ApiProblemError
@@ -128,6 +129,7 @@ async def _evaluate_visit(
     visit_id: UUID,
     answers: dict[str, str | int],
     tile_ids: list[str],
+    request: Request | None = None,
 ) -> tuple[list[RedFlag], Route, list[dict[str, Any]]]:
     """Persist new rule events and monotonically raise urgency inside the visit transaction."""
     row = (
@@ -135,7 +137,7 @@ async def _evaluate_visit(
             await connection.execute(
                 text(
                     "SELECT v.age_years, v.pregnant, v.department_id, v.status, v.urgency, "
-                    "v.token_label, "
+                    "v.token_label, v.language, "
                     "v.urgency_reasons, p.sex FROM visits v JOIN patients p "
                     "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
                     "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
@@ -150,16 +152,33 @@ async def _evaluate_visit(
         return [], route_department(""), []
     text_answer = " ".join(str(value) for value in answers.values() if isinstance(value, str))
     severity_value = answers.get("severity")
-    flags = evaluate(
-        text_answer,
-        facts=PatientFacts(
-            age=row["age_years"],
-            sex=row["sex"],
-            pregnant=row["pregnant"],
-            severity=severity_value if isinstance(severity_value, int) else None,
-            tile_ids=tuple(_DANGER_TILE_RULE_IDS.get(tile_id, tile_id) for tile_id in tile_ids),
-        ),
+    facts = PatientFacts(
+        age=row["age_years"],
+        sex=row["sex"],
+        pregnant=row["pregnant"],
+        severity=severity_value if isinstance(severity_value, int) else None,
+        tile_ids=tuple(_DANGER_TILE_RULE_IDS.get(tile_id, tile_id) for tile_id in tile_ids),
     )
+    provider = request.app.state.llm_provider if request is not None else None
+    if (
+        request is not None
+        and request.app.state.settings.llm_enabled
+        and getattr(provider, "name", "mock") == "gemini"
+        and text_answer.strip()
+    ):
+        rules_task = asyncio.create_task(asyncio.to_thread(evaluate, text_answer, facts=facts))
+        opinion_task = asyncio.create_task(
+            second_opinion_flags(
+                provider,
+                transcript=text_answer,
+                language=str(row.get("language", "en")),
+                session_id=str(visit_id),
+            )
+        )
+        flags, opinion = await asyncio.gather(rules_task, opinion_task)
+        flags = combine_redflag_opinions(flags, opinion)
+    else:
+        flags = evaluate(text_answer, facts=facts)
     route_result = route_department(
         text_answer,
         age=row["age_years"],
@@ -392,6 +411,7 @@ async def _finish_interview(
             visit_id=visit_id,
             answers=interview_state.answers,
             tile_ids=list(interview_state.red_flag_ids),
+            request=request,
         )
         data = _patient_case_sheet(data, flags, route_result)
         case_sheet_id = await CaseSheetRepository(connection, request.app.state.settings).save(
@@ -858,6 +878,7 @@ async def save_danger_signs(
             visit_id=visit_id,
             answers={},
             tile_ids=payload.tile_ids,
+            request=request,
         )
     await _publish_alerts(
         request.app.state.redis_state,
@@ -1062,6 +1083,7 @@ async def submit_answer(
                 visit_id=visit_id,
                 answers=next_state.answers,
                 tile_ids=next_state.red_flag_ids,
+                request=request,
             )
         state["interview"] = next_state.model_dump(mode="json")
         state.pop("ai_selected_question", None)
@@ -1129,6 +1151,7 @@ async def correct_interview_answer(
             visit_id=visit_id,
             answers=updated.answers,
             tile_ids=updated.red_flag_ids,
+            request=request,
         )
         if state.get("phase") == "summary":
             data = _patient_case_sheet(data, flags, route_result)
@@ -1202,6 +1225,7 @@ async def confirm_summary(
             visit_id=visit_id,
             answers=interview_state.answers,
             tile_ids=interview_state.red_flag_ids,
+            request=request,
         )
         case_data = _patient_case_sheet(saved["data"], flags, route_result)
         if route_result.department_code != "NURSE_TRIAGE":

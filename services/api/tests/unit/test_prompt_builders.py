@@ -27,7 +27,7 @@ def test_builds_all_four_versioned_prompt_tasks() -> None:
         "redflag_opinion",
         "department_classification",
     ]
-    assert {prompt.version for prompt in prompts} == {"1"}
+    assert [prompt.version for prompt in prompts] == ["1", "1", "2", "1"]
     assert all(len(prompt.prompt_hash) == 64 for prompt in prompts)
     assert all("UNTRUSTED_DATA_JSON=" in prompt.text for prompt in prompts)
 

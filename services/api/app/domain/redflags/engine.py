@@ -56,7 +56,7 @@ class PatientFacts:
 class RedFlag:
     id: str
     level: Literal["priority", "urgent"]
-    source: Literal["tile", "rule"]
+    source: Literal["tile", "rule", "llm"]
     evidence: str
     reason_en: str
     visible_to_patient: bool = True
