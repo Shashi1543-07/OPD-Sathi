@@ -104,6 +104,26 @@ async def test_gemini_uses_json_schema_and_records_only_aggregate_usage() -> Non
 
 
 @pytest.mark.asyncio
+async def test_gemini_redacts_pii_before_sending_prompt() -> None:
+    client = FakeClient([FakeResponse({"ok": True})])
+    provider = GeminiProvider(
+        api_key="synthetic-test-key",
+        model="gemini-primary-test",
+        fallback_model="gemini-fallback-test",
+        client=client,
+    )
+    prompt = "Patient call +91 9876543210, email user@example.com, ID 2345 6789 0123."
+    await provider.generate_json(prompt, SCHEMA)
+    sent_prompt = client.models.calls[0][1]
+    assert "+91 9876543210" not in sent_prompt
+    assert "user@example.com" not in sent_prompt
+    assert "2345 6789 0123" not in sent_prompt
+    assert "[REDACTED_PHONE]" in sent_prompt
+    assert "[REDACTED_EMAIL]" in sent_prompt
+    assert "[REDACTED_ID]" in sent_prompt
+
+
+@pytest.mark.asyncio
 async def test_gemini_rejects_json_that_does_not_match_schema() -> None:
     client = FakeClient([FakeResponse({"ok": "yes", "diagnosis": "invented"})])
     provider = GeminiProvider(

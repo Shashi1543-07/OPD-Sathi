@@ -13,6 +13,7 @@ from app.ai.providers.llm.base import (
     LLMUnavailableError,
     SessionCallBudget,
 )
+from app.ai.providers.llm.redaction import redact_pii
 
 MAX_TIMEOUT_SECONDS = 2.5
 MAX_OUTPUT_TOKENS = 1024
@@ -131,7 +132,7 @@ class GeminiProvider:
         )
         return await self._client.models.generate_content(
             model=model,
-            contents=prompt,
+            contents=redact_pii(prompt),
             config=config,
         )
 
