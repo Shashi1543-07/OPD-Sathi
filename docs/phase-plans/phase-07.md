@@ -1,6 +1,6 @@
 # Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Phase 7 implementation and local acceptance gates are complete on `phase-07-consoles`; backend-wide coverage is **80.0% (2,548/3,184 statements)**, meeting the playbook's 80% target. Waiting for the human's `approve phase 7` before Phase 8. All data and accounts used in automated and manual checks are synthetic.
+**Status:** Phase 7 is complete and merged to `main` as `16d4952` after backend, frontend, and security CI passed. Backend-wide coverage is **80.0% (2,548/3,184 statements)**, meeting the playbook's 80% target. All data and accounts used in automated and manual checks are synthetic.
 
 ## Work order
 
@@ -93,7 +93,7 @@
 
 ## Acceptance gate
 
-The Phase 7 role/access, conflict, PDF, queue, audit, axe, and coverage checks pass. Backend-wide coverage is **80.0% (2,548/3,184 statements)** against the **80%** target; combined `app/core` + `app/domain` coverage is **97%** against the **95%** target. The code and local acceptance gates are complete; wait for the human's `approve phase 7` before beginning Phase 8.
+The Phase 7 role/access, conflict, PDF, queue, audit, axe, and coverage checks pass. Backend-wide coverage is **80.0% (2,548/3,184 statements)** against the **80%** target; combined `app/core` + `app/domain` coverage is **97%** against the **95%** target. Backend, frontend, and security CI passed, and PR #5 is merged to `main` as `16d4952`.
 
 ## Human verification
 

@@ -1,0 +1,33 @@
+# Phase 8 — Voice input
+
+**Status:** In progress on `phase-08-voice`, branched from merged Phase 7 commit `16d4952`. Step 8.1 is complete. Sarvam's current Realtime STT docs and provider decision are recorded in ADR 003. No real API key was supplied; the implementation stays on Mock until one is configured.
+
+## Work order
+
+1. [x] **8.1 Provider docs and decision:** check the current official Sarvam STT docs; record endpoints, auth, models, audio formats, and supported app languages. Keep Mock active because no provider key was supplied.
+2. [ ] **8.2 STT adapters:** define `STTProvider`, fixture-driven `MockSTT`, the Sarvam realtime and clip adapters, provider chain, circuit breaker, and metrics.
+3. [ ] **8.3 Audio WebSocket:** authenticated endpoint, per-kiosk request limits, frame size limit, 60-second utterance cap, idle timeout, backpressure, and no-audio-storage default.
+4. [ ] **8.4 Browser capture:** microphone explanation and permission handling, 16 kHz mono PCM16 AudioWorklet frames, voice activity detection, level meter, and 60-second cap.
+5. [ ] **8.5 Interview integration:** voice orb states, live transcript, final submission as `input_mode=voice`, tap-to-edit, and low-confidence review prompt.
+6. [ ] **8.6 Mixed language:** pass UI language as the recognition language, accept code-mixing, and preserve the transcript's original script without translation.
+7. [ ] **8.7 Safe fallback:** switch to touch and typing within three seconds on provider failure, absent partials, or open circuit; keep nurse-assisted entry available.
+8. [ ] **8.8 Evaluation:** document the 80-utterance consenting-speaker recording script and implement Mock CI evaluation. Keep recordings ignored and out of Git.
+9. [ ] **8.9 Verification:** protocol/provider tests and Chromium fake-audio Playwright coverage.
+
+## Step 8.1 verification
+
+- Official Sarvam documentation checked on 2026-10-06. See [ADR 003](../DECISIONS.md#adr-003--sarvam-real-time-speech-recognition) for source links and endpoint choices.
+- The Realtime endpoint is selected because it streams partial transcripts; the legacy endpoint only returns final text. The selected PCM16 mono 16 kHz format matches the planned browser worklet.
+- No real Sarvam API key was supplied. No live request or audio recording was attempted; Mock remains the default.
+
+## Gate
+
+Protocol/provider tests pass; the voice Playwright flow passes; touch fallback appears within three seconds; no audio persists when `STORE_AUDIO=false`. Report live WER, keyword recall, and latency if a real provider key and consenting recordings are available. Do not claim live-provider accuracy without measuring it.
+
+## Manual verification
+
+Use synthetic cases. Speak in Hindi, Marathi, and English and inspect the live text. Try a noisy room, deny microphone permission, and disconnect the network during an utterance; each failure must return to touch and typing. Confirm audio is absent from persistent storage. Live Sarvam checks require a configured key and consenting speakers.
+
+## Next phase preview
+
+Phase 9 adds constrained language-model assistance for question selection, extraction, and red-flag review, with deterministic fallbacks and explicit safety checks.

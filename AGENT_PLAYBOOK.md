@@ -214,20 +214,20 @@ The architecture from the planning stage stays the **target**. To keep the build
 
 Keep the **module boundaries** exactly as the architecture shows (voice, AI, queue, case, auth, notifications) so splitting a module into its own service later is a mechanical change.
 
-## C3. External provider facts (checked on 5 October 2026 — re-check before coding each adapter)
+## C3. External provider facts (checked on 6 October 2026 — re-check before coding each adapter)
 
 Provider details change often. Before writing each adapter, fetch the current official docs, then record what you found in `docs/DECISIONS.md` (ADR "Provider: X").
 
 | Provider | What was found | Official docs |
 |---|---|---|
-| Sarvam speech to text (streaming) | WebSocket at `wss://api.sarvam.ai/speech-to-text/ws`; API key sent in the `Api-Subscription-Key` header; default model listed as `saaras:v3`; the FAQ at check time said streaming supports **Hindi and Marathi only** | `https://docs.sarvam.ai` (index: `/llms.txt`; an MCP server for coding agents is at `https://docs.sarvam.ai/_mcp/server`) |
-| Sarvam speech to text (REST) | `https://api.sarvam.ai/speech-to-text` for clips up to 30 seconds; a batch API for longer audio; invalid keys return HTTP 403, not 401 | same |
+| Sarvam speech to text (realtime streaming) | WebSocket at `wss://api.sarvam.ai/speech-to-text-realtime/ws`; `Api-Subscription-Key` header; default model `saaras:v3-realtime` (or `saaras:v4`); English (`en-IN`), Hindi (`hi-IN`), Marathi (`mr-IN`) and additional Indic languages; mono `linear16` at 16 kHz; partial and final transcript events | `https://docs.sarvam.ai/api-reference/speech-to-text/transcribe/realtime/ws` |
+| Sarvam speech to text (REST) | `https://api.sarvam.ai/speech-to-text`, `saaras:v4` default (or `saaras:v3`), original-language `transcribe` mode, multipart clips up to 30 seconds; WAV, MP3, AAC, FLAC, OGG, WebM and other documented formats; a batch API handles longer audio; invalid keys return HTTP 403, not 401 | `https://docs.sarvam.ai/api/getting-started/models/saaras` |
 | Gemini LLM | Docs listed `gemini-3.8-flash` and `gemini-3.5-flash-lite` as current Flash-class stable models, with structured (JSON) output supported | `https://ai.google.dev/gemini-api/docs/models` |
 | Sarvam text to speech | Not verified in this check — read the docs index first | `https://docs.sarvam.ai` |
 
 **Consequences you must implement:**
 
-- English and any language without streaming support use the **REST path on short clips** (client-side voice-activity detection ends the clip, maximum 30 seconds, ideally under 15).
+- Use the realtime streaming path for partial transcripts in the supported languages; use REST only for short clips when a one-shot transcript is needed (maximum 30 seconds, ideally under 15).
 - Model names live in environment variables (`LLM_MODEL`, `LLM_FALLBACK_MODEL`, `STT_MODEL`, `TTS_MODEL`). Never hardcode them in business logic.
 - If a doc contradicts this table, trust the doc, write the ADR, and tell the human.
 

@@ -134,11 +134,11 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 - [x] 7.7 Add audited multilingual PDF export and text-content tests.
 - [x] 7.8 Complete loading/empty/error states and print styles.
 - [x] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests; full browser regression 107/107, axe 0 serious/critical, 5,000-row update 18.90 ms, and all case-sheet/transcript read audit assertions pass.
-- [x] Gate: role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage pass; backend-wide coverage is 80.0% (2,548/3,184 statements) against the 80% target, and combined core/domain coverage is 97% against the 95% target. See the [Phase 7 report](docs/phase-reports/phase-07.md). Waiting for the human's `approve phase 7` before Phase 8.
+- [x] Gate: role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage pass; backend-wide coverage is 80.0% (2,548/3,184 statements) against the 80% target, and combined core/domain coverage is 97% against the 95% target. PR #5 passed backend, frontend, and security and merged to `main` as `16d4952`.
 
 ## Phase 8 — Voice input
 
-- [ ] 8.1 Re-check current official Sarvam STT docs and record provider ADR; use mock if no key is available.
+- [x] 8.1 Re-check current official Sarvam STT docs and record provider ADR; no live key was supplied, so Mock stays active.
 - [ ] 8.2 Add STT interface, mock/Sarvam adapters, provider chain, circuit breaker, and metrics.
 - [ ] 8.3 Add authenticated, rate-limited audio WebSocket with frame/time limits and no-audio-storage default.
 - [ ] 8.4 Capture/resample browser microphone audio and handle permission/VAD states.

@@ -1,6 +1,6 @@
 # Phase 7 — Doctor and nurse consoles, PDF (2026-10-06; `phase-07-consoles`; `059fd38`)
 
-**Status:** Phase 7 implementation and local acceptance gates are complete on `phase-07-consoles`, committed as `059fd38`. Backend-wide coverage is **80.0% (2,548/3,184 statements)**, meeting the playbook's **80%** target. Phase 6 is integrated into `main` as merge commit `0c833c3`; all Phase 7 test data is synthetic.
+**Status:** Phase 7 implementation and local acceptance gates are complete and merged into `main` as `16d4952` through PR #5. The final hosted backend, frontend, and security checks passed on `14bc2df`. Backend-wide coverage is **80.0% (2,548/3,184 statements)**, meeting the playbook's **80%** target. Phase 6 is integrated into `main` as `0c833c3`; all Phase 7 test data is synthetic.
 
 ## Completed work
 
@@ -91,7 +91,7 @@ The complete local backend suite was also attempted: **318 passed**, one Redis w
 
 ## Acceptance gate
 
-All Phase 7 local gates pass, including backend-wide coverage at **80.0%**, browser regression (**107 passed**), focused Phase 7 E2E (**5 passed**), accessibility (**0 serious/critical findings** on the 3 staff screens), PDF (**1 A4 page**, **79.93 ms p95**), and large-queue update (**18.90 ms**, limit **100 ms**). The human owner can follow the synthetic manual verification steps in [the Phase 7 plan](../phase-plans/phase-07.md). Phase 8 must wait for `approve phase 7`.
+All Phase 7 local gates pass, including backend-wide coverage at **80.0%**, browser regression (**107 passed**), focused Phase 7 E2E (**5 passed**), accessibility (**0 serious/critical findings** on the 3 staff screens), PDF (**1 A4 page**, **79.93 ms p95**), and large-queue update (**18.90 ms**, limit **100 ms**). Backend, frontend, and security CI passed on `14bc2df`; PR #5 merged into `main` as `16d4952`. The synthetic manual verification steps are in [the Phase 7 plan](../phase-plans/phase-07.md).
 
 ## Manual verification
 
@@ -99,4 +99,4 @@ Use only the synthetic seeded hospital. Sign in as a doctor, open a queued visit
 
 ## Next phase preview
 
-Phase 8 adds speech-to-text adapters, beginning with current provider documentation and an ADR, then mock/provider fallbacks, bounded audio transport, microphone permission and voice activity states, transcript editing, and multilingual voice tests. It must wait for the human's `approve phase 7`.
+Phase 8 adds speech-to-text adapters, beginning with the current provider docs and ADR 003, then mock/provider fallbacks, bounded audio transport, microphone permission and voice activity states, transcript editing, and multilingual voice tests. Phase 8 is underway on `phase-08-voice`.
