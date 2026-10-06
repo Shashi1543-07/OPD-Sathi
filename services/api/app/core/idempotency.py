@@ -36,6 +36,7 @@ class IdempotencyStore:
         actor_id: UUID,
         body: dict[str, Any],
         operation: Callable[[], Awaitable[dict[str, Any]]],
+        response_fields_once: frozenset[str] = frozenset(),
     ) -> dict[str, Any]:
         client_key = request.headers.get("Idempotency-Key", "")
         if not 1 <= len(client_key) <= 200 or any(ord(char) < 33 for char in client_key):
@@ -103,8 +104,15 @@ class IdempotencyStore:
 
         try:
             response = await operation()
+            cached_response = {
+                key: value for key, value in response.items() if key not in response_fields_once
+            }
             complete = json.dumps(
-                {"body_hash": body_hash, "state": "complete", "response": response},
+                {
+                    "body_hash": body_hash,
+                    "state": "complete",
+                    "response": cached_response,
+                },
                 sort_keys=True,
                 separators=(",", ":"),
                 default=str,

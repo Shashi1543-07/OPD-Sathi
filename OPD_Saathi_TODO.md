@@ -126,11 +126,11 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 ## Phase 7 — Doctor/nurse consoles and PDF
 
 - [x] 7.1 Finalize staff layout and role-based navigation; guarded admin, doctor, and nurse routes pass the 18-combination access matrix.
-- [ ] 7.2 Build live, virtualized staff queue board with filters and alert controls.
-- [ ] 7.3 Add audited, versioned case-sheet read/edit API with conflict detection.
-- [ ] 7.4 Build doctor consult view, edits, transcript access, and consult actions.
-- [ ] 7.5 Build nurse assisted registration, alerts, overrides, and no-show actions.
-- [ ] 7.6 Build admin user, kiosk, and department screens.
+- [x] 7.2 Build live, virtualized staff queue board with filters and alert controls.
+- [x] 7.3 Add audited, versioned case-sheet read/edit API with conflict detection.
+- [x] 7.4 Build doctor consult view, edits, transcript access, and consult actions.
+- [x] 7.5 Build nurse assisted registration, alerts, overrides, and no-show actions.
+- [x] 7.6 Build admin user, kiosk, and department screens.
 - [ ] 7.7 Add audited multilingual PDF export and text-content tests.
 - [ ] 7.8 Complete loading/empty/error states and print styles.
 - [ ] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests.

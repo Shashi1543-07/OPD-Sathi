@@ -277,6 +277,63 @@ async def test_idempotency_replays_and_rejects_changed_body() -> None:
 
 
 @pytest.mark.asyncio
+async def test_idempotency_does_not_replay_one_time_response_fields() -> None:
+    from app.core.idempotency import IdempotencyStore
+
+    class FakeRedis:
+        def __init__(self) -> None:
+            self.values: dict[str, str] = {}
+
+        async def get(self, key: str) -> str | None:
+            return self.values.get(key)
+
+        async def set(self, key: str, value: str, *, ex: int, nx: bool) -> bool:
+            del ex
+            if nx and key in self.values:
+                return False
+            self.values[key] = value
+            return True
+
+        async def eval(self, script: str, key_count: int, key: str, *args: object) -> int:
+            assert key_count == 1
+            stored = json.loads(self.values[key])
+            if "ARGV[2]" in script:
+                if stored.get("owner") != args[0]:
+                    return 0
+                self.values[key] = str(args[1])
+                return 1
+            return 0
+
+    class TestRequest:
+        headers = {"Idempotency-Key": "synthetic-one-time-kiosk"}
+        method = "POST"
+        url = SimpleNamespace(path="/admin/kiosks")
+
+    redis = FakeRedis()
+    store = IdempotencyStore(redis)
+    operation_count = 0
+
+    async def operation() -> dict[str, str]:
+        nonlocal operation_count
+        operation_count += 1
+        return {"id": "synthetic-kiosk", "activation_code": "one-time-secret"}
+
+    args = {
+        "hospital_id": uuid4(),
+        "actor_id": uuid4(),
+        "body": {"label": "Synthetic kiosk"},
+        "operation": operation,
+        "response_fields_once": frozenset({"activation_code"}),
+    }
+    first = await store.execute(TestRequest(), **args)  # type: ignore[arg-type]
+    replay = await store.execute(TestRequest(), **args)  # type: ignore[arg-type]
+
+    assert first["activation_code"] == "one-time-secret"
+    assert replay == {"id": "synthetic-kiosk"}
+    assert operation_count == 1
+
+
+@pytest.mark.asyncio
 async def test_auth_dependency_helpers_and_invalid_bearer() -> None:
     from types import SimpleNamespace
 

@@ -1,6 +1,6 @@
 # Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1–7.5 are implemented on draft PR #5; Step 7.6 is next. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
+**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1–7.6 are implemented on draft PR #5. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
 
 ## Work order
 
@@ -9,7 +9,7 @@
 3. [x] **7.3 Case-sheet API:** audited reads, schema-validated JSON Patch updates guarded by `If-Match`, doctor source metadata, conflict response, and audit diff.
 4. [x] **7.4 Doctor consult view:** reading-order case sheet, confidence/source details, edit and conflict flows, audited transcript view, consult actions, and keyboard controls.
 5. [x] **7.5 Nurse console:** assisted registration, alert review, queue overrides, and no-show flow.
-6. [ ] **7.6 Admin screens:** user, kiosk, and department management with activation secrets shown only once.
+6. [x] **7.6 Admin screens:** user, kiosk, and department management with activation secrets shown only once.
 7. [ ] **7.7 PDF:** A4 multilingual case sheet through WeasyPrint, with the required history-only disclaimer; audit access and validate extracted text.
 8. [ ] **7.8 UI states:** loading, empty, error, and print states.
 9. [ ] **7.9 Browser/access gates:** doctor, nurse, and admin flows; role access matrix; two-browser edit conflict; PDF content; axe and large-queue responsiveness.
@@ -50,6 +50,13 @@
 - The API verifies the nurse is active and has an active department assignment through `IntakeRepository`; session state and patient access remain visit- and hospital-scoped. Redis startup failure cancels the placeholder visit.
 - Nurse queue access provides alert acknowledgement, routing confirmation, reasoned urgency override, and no-show actions through the existing department-scoped queue API.
 - Verification: intake API unit tests **5 passed**; frontend **26 tests passed across 8 files**; Ruff, strict mypy, Bandit, TypeScript, ESLint, locale parity (**269 keys per language**), production build, and `git diff --check` passed.
+
+### Step 7.6 verification
+
+- Added the administrator screen for paginated department, staff-user, and kiosk lists; create forms; activation/deactivation controls; translated English, Hindi, and Marathi labels; request loading/error/empty states; and an in-memory-only kiosk activation code display.
+- Kiosk creation returns its activation code in the initial response. Idempotency storage removes the one-time field before caching, so a retry with the same key cannot retrieve the secret again.
+- Verification: `npm --prefix apps/web test -- --reporter=dot` — **27 passed across 9 files**; `npm --prefix apps/web run typecheck` and `lint` passed; `check-locales` reported **310 keys per language**. `.venv/Scripts/python.exe -m pytest services/api/tests/unit/test_domain_data.py -q` — **53 passed**; Ruff passed and strict mypy reported **50 source files, no issues**.
+- The full Prettier check currently reports **77** style warnings across existing generated output and untouched files. The changed Phase 7.6 source files were formatted individually; unrelated files were left unchanged.
 
 ## Acceptance gate
 

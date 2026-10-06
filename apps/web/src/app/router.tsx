@@ -9,6 +9,7 @@ import { KioskIntake } from "./KioskIntake";
 import { StaffQueueBoard } from "./StaffQueueBoard";
 import { DoctorConsultation } from "./DoctorConsultation";
 import { NurseConsole } from "./NurseConsole";
+import { AdminConsole } from "./AdminConsole";
 import {
   StaffLanding,
   StaffPageGate,
@@ -77,7 +78,7 @@ export const router = createBrowserRouter([
         path: "settings",
         element: (
           <StaffPageGate page="settings">
-            <StaffPlaceholderPage page="settings" />
+            <AdminConsole />
           </StaffPageGate>
         ),
       },

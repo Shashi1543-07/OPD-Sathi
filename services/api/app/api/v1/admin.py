@@ -182,6 +182,7 @@ async def _create(
         actor_id=actor_id,
         body=idempotency_body,
         operation=operation,
+        response_fields_once=frozenset({"activation_code"}),
     )
     return response
 
