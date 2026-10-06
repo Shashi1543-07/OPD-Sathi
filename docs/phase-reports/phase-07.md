@@ -1,6 +1,6 @@
-# Phase 7 progress report
+# Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Phase 7 implementation and browser/API acceptance checks are complete on `phase-07-consoles`. The phase acceptance gate remains open because backend-wide coverage measured **67%**, below the playbook's **80%** target. Phase 6 is integrated into `main` as merge commit `0c833c3`; all Phase 7 test data is synthetic.
+**Status:** Phase 7 implementation and local acceptance gates are complete on `phase-07-consoles` (final coverage-gate commit pending). Backend-wide coverage is **80.0% (2,548/3,184 statements)**, meeting the playbook's **80%** target. Phase 6 is integrated into `main` as merge commit `0c833c3`; all Phase 7 test data is synthetic.
 
 ## Completed work
 
@@ -77,13 +77,20 @@ The complete local backend suite was also attempted: **318 passed**, one Redis w
 - Two-browser doctor editing returns **409** for the stale edit and the merge/reapply flow succeeds. PDF download and browser print visibility pass. Nurse consent is displayed before identity fields; no identity request is sent until the consent action. Admin kiosk activation code appears once and disappears after dismissal.
 - axe measured **0 serious/critical** findings each on doctor, nurse, and admin screens. The 5,000-row queue renders fewer than **50** rows; its urgent WebSocket update applied in **18.90 ms** (limit **<100 ms**).
 - Backend command: `docker compose run --rm -T --no-deps -e WORKER_DATABASE_URL= -v /mnt/c/Users/lenovo/Downloads/OPD-Sathi:/workspace -w /workspace api python -m pytest services/api/tests --cov=services/api/app --cov-report=term-missing -q` — **340 passed**. Case-sheet reads, transcript reads, and PDF exports have explicit audit assertions; case-sheet and transcript content is not copied into audit metadata.
-- Coverage: combined `app/core` + `app/domain` **97%** (threshold **95%**, pass); backend overall **67%** (threshold **80%**, fail). The tested Phase 7 features pass; the overall acceptance gate remains open until backend-wide test coverage reaches 80%. No coverage threshold was changed.
+- Initial 7.9 coverage measurement, before step 7.10: combined `app/core` + `app/domain` **97%** (threshold **95%**, pass); backend overall **67%** (threshold **80%**, not yet met). Step 7.10 below records the final passing result; no coverage threshold was changed.
 - Frontend commands: `npm --prefix apps/web test -- --reporter=dot` (**32 passed**), `npm --prefix apps/web run e2e -- --workers=1` (**107 passed**), `typecheck`, `lint`, `check-locales` (**316 keys/language**), `check-contrast` (**12 pairs**), and `build` (all pass).
 - Screenshots: [doctor print view](../screenshots/phase-07/doctor-consultation-print.png), [nurse consent before identity](../screenshots/phase-07/nurse-consent-before-identity.png), [identity after consent](../screenshots/phase-07/nurse-identity-after-consent.png), [one-time kiosk code](../screenshots/phase-07/admin-kiosk-one-time-code.png), and [code dismissed](../screenshots/phase-07/admin-kiosk-code-dismissed.png).
 
-## Remaining acceptance work
+### 7.10 Backend-wide coverage completion
 
-Increase backend-wide coverage from **67%** to at least **80%** with real tests and rerun the full backend coverage command. The human owner should also follow the synthetic manual verification steps in [the Phase 7 plan](../phase-plans/phase-07.md). Do not proceed to Phase 8 until the open coverage gate is resolved and the human explicitly approves Phase 7.
+- Added backend tests for admin, auth login, intake helper and route branches, queue operations, and encrypted repository behavior.
+- Testing found two defects and both are fixed: selected intake danger tiles now reach the corresponding existing red-flag rules, and the staff queue returns department catalog entries instead of the last department's visit rows.
+- Full backend command: `docker compose run --rm -T --no-deps -e WORKER_DATABASE_URL= -v /mnt/c/Users/lenovo/Downloads/OPD-Sathi:/workspace -w /workspace api python -m pytest services/api/tests --cov=services/api/app --cov-report=term-missing -q` — **366 passed**, 0 failed, 0 skipped; **80.0% (2,548/3,184 statements)** against the unchanged **80%** threshold. One Starlette/httpx deprecation warning.
+- `ruff check services/api/app services/api/tests`, `mypy --strict services/api/app` (**51 source files, no issues**), and `bandit -q -r services/api/app` passed. `app/core` + `app/domain` remains **97%** against the **95%** threshold.
+
+## Acceptance gate
+
+All Phase 7 local gates pass, including backend-wide coverage at **80.0%**, browser regression (**107 passed**), focused Phase 7 E2E (**5 passed**), accessibility (**0 serious/critical findings** on the 3 staff screens), PDF (**1 A4 page**, **79.93 ms p95**), and large-queue update (**18.90 ms**, limit **100 ms**). The human owner can follow the synthetic manual verification steps in [the Phase 7 plan](../phase-plans/phase-07.md). Phase 8 must wait for `approve phase 7`.
 
 ## Manual verification
 
@@ -91,4 +98,4 @@ Use only the synthetic seeded hospital. Sign in as a doctor, open a queued visit
 
 ## Next phase preview
 
-Phase 8 adds speech-to-text adapters, beginning with current provider documentation and an ADR, then mock/provider fallbacks, bounded audio transport, microphone permission and voice activity states, transcript editing, and multilingual voice tests. It must wait until Phase 7's backend-wide coverage gate reaches **80%** and the human replies `approve phase 7`.
+Phase 8 adds speech-to-text adapters, beginning with current provider documentation and an ADR, then mock/provider fallbacks, bounded audio transport, microphone permission and voice activity states, transcript editing, and multilingual voice tests. It must wait for the human's `approve phase 7`.

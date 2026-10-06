@@ -44,6 +44,14 @@ from app.domain.routing.engine import route as route_department
 router = APIRouter(prefix="/intake", tags=["intake"])
 _SESSION_TTL_FACTOR = 60 * 60
 MAX_ANSWER_CHARACTERS = 500
+_DANGER_TILE_RULE_IDS = {
+    "chest_pain": "DS_CHEST",
+    "breathing_difficulty": "DS_BREATH",
+    "heavy_bleeding": "DS_BLEED",
+    "fainting": "DS_FIT",
+    "seizure": "DS_FIT",
+    "sudden_weakness": "DS_STROKE",
+}
 
 
 class StrictPayload(BaseModel):
@@ -143,7 +151,7 @@ async def _evaluate_visit(
             sex=row["sex"],
             pregnant=row["pregnant"],
             severity=severity_value if isinstance(severity_value, int) else None,
-            tile_ids=tuple(tile_ids),
+            tile_ids=tuple(_DANGER_TILE_RULE_IDS.get(tile_id, tile_id) for tile_id in tile_ids),
         ),
     )
     route_result = route_department(

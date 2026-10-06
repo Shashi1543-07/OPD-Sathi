@@ -1,6 +1,6 @@
 # Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Phase 7 implementation is complete on `phase-07-consoles`; the final acceptance gate remains open because backend-wide coverage is 67%, below the playbook's 80% target. All data and accounts used in automated and manual checks are synthetic.
+**Status:** Phase 7 implementation and local acceptance gates are complete on `phase-07-consoles`; backend-wide coverage is **80.0% (2,548/3,184 statements)**, meeting the playbook's 80% target. Waiting for the human's `approve phase 7` before Phase 8. All data and accounts used in automated and manual checks are synthetic.
 
 ## Work order
 
@@ -13,6 +13,7 @@
 7. [x] **7.7 PDF:** A4 multilingual case sheet through WeasyPrint, with the required history-only disclaimer; audit access and validate extracted text.
 8. [x] **7.8 UI states:** loading, empty, error, and print states.
 9. [x] **7.9 Browser/access gates:** doctor, nurse, and admin flows; role access matrix; two-browser edit conflict; PDF content; axe and large-queue responsiveness.
+10. [x] **7.10 Backend-wide coverage gate:** add tests for uncovered auth, intake, queue, and repository behavior; fix defects revealed by those tests; rerun the full backend suite at the unchanged 80% threshold.
 
 ### Step 7.1 verification
 
@@ -78,13 +79,20 @@
 - Full frontend Playwright regression: **107 passed**. The 18 role/page combinations pass; doctor and nurse route restrictions, two-browser **409** conflict/reapply flow, PDF download, print visibility, nurse consent-before-identity, and admin kiosk secret dismissal pass.
 - Focused Phase 7 Playwright run: **5 passed**. axe reported **0 serious/critical findings** on doctor, nurse, and admin screens. The virtualized queue rendered fewer than **50** rows from a **5,000-row** fixture; its urgent WebSocket update applied in **18.90 ms** (limit **<100 ms**).
 - Backend container suite: **340 passed**. `case_sheet.read`, `transcript.read`, and PDF export audit assertions pass. PDF checks recorded above: **1 A4 page**, required synthetic content, p95 **79.93 ms** (limit **1,500 ms**).
-- Coverage from the full backend run: combined `app/core` + `app/domain` **97%** (limit **95%**); backend-wide **67%** (playbook limit **80%**). The Phase 7 functionality checks pass, but the project-wide coverage gate remains open. No threshold was changed.
+- Initial 7.9 coverage measurement, before step 7.10: combined `app/core` + `app/domain` **97%** (limit **95%**); backend-wide **67%** (playbook limit **80%**). Step 7.10 below closes the coverage gap without changing the threshold.
 - Frontend: **32 unit tests passed**; TypeScript, ESLint, locale parity (**316 keys per language**), contrast (**12 pairs**), and production build passed. Bundle: **479.04 kB** JavaScript (**149.44 kB gzip**).
 - Browser evidence: [doctor print view](../screenshots/phase-07/doctor-consultation-print.png), [nurse consent before identity](../screenshots/phase-07/nurse-consent-before-identity.png), [nurse identity after consent](../screenshots/phase-07/nurse-identity-after-consent.png), [one-time kiosk code](../screenshots/phase-07/admin-kiosk-one-time-code.png), and [code dismissed](../screenshots/phase-07/admin-kiosk-code-dismissed.png). The PDF screenshot is [here](../screenshots/phase-07/case-sheet-synthetic.png).
 
+### Step 7.10 verification
+
+- Added focused backend tests for admin lifecycle/helper paths, successful and failed login, patient intake answer/correction/read/cancel flows, queue routing/status/alert flows, and encrypted patient/case-sheet repository behavior.
+- The tests exposed and fixed two defects: intake danger-tile IDs are now mapped to the existing red-flag rule IDs before evaluation, and the staff queue keeps its department catalog separate from per-department visit rows.
+- Full backend command: `docker compose run --rm -T --no-deps -e WORKER_DATABASE_URL= -v /mnt/c/Users/lenovo/Downloads/OPD-Sathi:/workspace -w /workspace api python -m pytest services/api/tests --cov=services/api/app --cov-report=term-missing -q` — **366 passed**, 0 failed, 0 skipped; **2,548/3,184 statements = 80.0%** (threshold **80%**, pass). One existing Starlette/httpx deprecation warning remains.
+- `ruff check services/api/app services/api/tests`, `mypy --strict services/api/app` (**51 source files, no issues**), and `bandit -q -r services/api/app` all passed. The combined `app/core` + `app/domain` gate remains **97%** against **95%**.
+
 ## Acceptance gate
 
-The Phase 7 role/access, conflict, PDF, queue, audit, axe, and `app/core` + `app/domain` coverage checks passed. The acceptance gate is **not complete**: backend-wide coverage measured **67%**, below the playbook's **80%** target. Raise real backend test coverage without lowering the threshold, then rerun the full coverage command before considering Phase 7 complete.
+The Phase 7 role/access, conflict, PDF, queue, audit, axe, and coverage checks pass. Backend-wide coverage is **80.0% (2,548/3,184 statements)** against the **80%** target; combined `app/core` + `app/domain` coverage is **97%** against the **95%** target. The code and local acceptance gates are complete; wait for the human's `approve phase 7` before beginning Phase 8.
 
 ## Human verification
 

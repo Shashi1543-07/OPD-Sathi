@@ -134,7 +134,7 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 - [x] 7.7 Add audited multilingual PDF export and text-content tests.
 - [x] 7.8 Complete loading/empty/error states and print styles.
 - [x] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests; full browser regression 107/107, axe 0 serious/critical, 5,000-row update 18.90 ms, and all case-sheet/transcript read audit assertions pass.
-- [ ] Gate: role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and combined core/domain coverage pass; backend-wide coverage is 67% against the 80% target. See the [Phase 7 report](docs/phase-reports/phase-07.md).
+- [x] Gate: role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage pass; backend-wide coverage is 80.0% (2,548/3,184 statements) against the 80% target, and combined core/domain coverage is 97% against the 95% target. See the [Phase 7 report](docs/phase-reports/phase-07.md). Waiting for the human's `approve phase 7` before Phase 8.
 
 ## Phase 8 — Voice input
 

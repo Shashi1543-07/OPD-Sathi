@@ -271,7 +271,7 @@ async def staff_queue(
                 department_id,
             )
 
-        department_rows = (
+        department_records = (
             (
                 await connection.execute(
                     text(
@@ -291,12 +291,12 @@ async def staff_queue(
             .all()
         )
         if department_id is not None and department_id not in {
-            row["id"] for row in department_rows
+            row["id"] for row in department_records
         }:
             raise _problem(404, "NOT_FOUND", "Department not found", "Choose an active department.")
         repository = QueueRepository(connection, request.app.state.settings)
         rows = await repository.queued_visits(hospital_id=hospital_id, department_id=department_id)
-        active_department_ids = {row["id"] for row in department_rows}
+        active_department_ids = {row["id"] for row in department_records}
         rows = [row for row in rows if row["department_id"] in active_department_ids]
     if status is not None:
         rows = [row for row in rows if row["status"] == status]
@@ -304,14 +304,14 @@ async def staff_queue(
     for row in rows:
         groups.setdefault(row["department_id"], []).append(row)
     items = []
-    for department, department_rows in sorted(groups.items(), key=lambda group: str(group[0])):
-        department_rows.sort(
+    for department, group_rows in sorted(groups.items(), key=lambda group: str(group[0])):
+        group_rows.sort(
             key=lambda item: (
                 _queue_score(item, request.app.state.settings),
                 str(item["visit_id"]),
             )
         )
-        for index, row in enumerate(department_rows, 1):
+        for index, row in enumerate(group_rows, 1):
             case_sheet = row.get("case_sheet_data") or {}
             complaint = case_sheet.get("chief_complaint") or {}
             items.append(
@@ -346,7 +346,7 @@ async def staff_queue(
         "limit": limit,
         "departments": [
             {"id": str(row["id"]), "code": row["code"], "name": row["name_en"]}
-            for row in department_rows
+            for row in department_records
         ],
     }
 
