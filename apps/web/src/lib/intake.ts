@@ -101,6 +101,24 @@ function patientRequest<T>(path: string, options: RequestInit = {}) {
   );
 }
 
+function connectAudio(onMessage: (message: MessageEvent<string>) => void) {
+  const session = getPatientSession();
+  if (!session) throw new Error("No active patient session");
+  const origin = apiOrigin.replace(/\/$/, "");
+  const socketUrl =
+    `${origin}/ws/intake/${encodeURIComponent(session.visit_id)}/audio`
+      .replace(/^https:/, "wss:")
+      .replace(/^http:/, "ws:");
+  const socket = new WebSocket(socketUrl);
+  socket.addEventListener("message", onMessage);
+  socket.addEventListener("open", () => {
+    socket.send(
+      JSON.stringify({ type: "auth", token: session.patient_access_token }),
+    );
+  });
+  return socket;
+}
+
 export const intake = {
   isKioskActivated: () => Boolean(getKioskToken()),
   activate: async (activationCode: string) => {
@@ -167,7 +185,12 @@ export const intake = {
   dangerTiles: () => patientRequest<{ tiles: DangerTile[] }>("/danger-tiles"),
   nextQuestion: () =>
     patientRequest<IntakeResponse>("/interview/next-question"),
-  answer: (questionId: string, answer: string | number | null, skip = false) =>
+  answer: (
+    questionId: string,
+    answer: string | number | null,
+    skip = false,
+    inputMode: "touch" | "voice" = "touch",
+  ) =>
     patientRequest<IntakeResponse>("/interview/answers", {
       method: "POST",
       headers: { "Idempotency-Key": crypto.randomUUID() },
@@ -175,18 +198,23 @@ export const intake = {
         question_id: questionId,
         answer,
         skip,
-        input_mode: "touch",
+        input_mode: inputMode,
       }),
     }),
-  correct: (questionId: string, answer: string | number) =>
+  correct: (
+    questionId: string,
+    answer: string | number,
+    inputMode: "touch" | "voice" = "touch",
+  ) =>
     patientRequest<IntakeResponse>("/interview/answers", {
       method: "PATCH",
       body: JSON.stringify({
         question_id: questionId,
         answer,
-        input_mode: "touch",
+        input_mode: inputMode,
       }),
     }),
+  connectAudio,
   confirm: () =>
     patientRequest<{
       confirmed: boolean;

@@ -24,10 +24,10 @@ class MockSTT:
         self.delay_seconds = delay_seconds
         self.fail = fail
 
-    def _transcript(self, language_code: str) -> str:
+    def _transcript(self, language_code: str) -> str | None:
         values = self.transcripts.get(language_code, ())
         if not values:
-            return "Synthetic voice transcript"
+            return None
         return values[0]
 
     def stream(
@@ -49,6 +49,8 @@ class MockSTT:
         if not received_audio:
             raise STTUnavailableError("no audio frames received")
         transcript = self._transcript(language_code)
+        if transcript is None:
+            raise STTUnavailableError("no mock transcript fixture configured")
         midpoint = max(1, len(transcript) // 2)
         yield STTEvent(type="partial", text=transcript[:midpoint], language_code=language_code)
         yield STTEvent(type="partial", text=transcript, language_code=language_code)
@@ -74,6 +76,7 @@ class MockSTT:
             raise STTUnavailableError("mock provider failure")
         if not audio:
             raise STTUnavailableError("audio clip is empty")
-        return STTTranscript(
-            text=self._transcript(language_code), language_code=language_code, confidence=0.95
-        )
+        transcript = self._transcript(language_code)
+        if transcript is None:
+            raise STTUnavailableError("no mock transcript fixture configured")
+        return STTTranscript(text=transcript, language_code=language_code, confidence=0.95)

@@ -8,7 +8,7 @@
 2. [x] **8.2 STT adapters:** define `STTProvider`, fixture-driven `MockSTT`, the Sarvam realtime and clip adapters, provider chain, circuit breaker, and metrics.
 3. [x] **8.3 Audio WebSocket:** authenticated endpoint, per-kiosk request limits, frame size limit, 60-second utterance cap, idle timeout, backpressure, and no-audio-storage default.
 4. [x] **8.4 Browser capture:** microphone permission handling, 16 kHz mono PCM16 AudioWorklet frames, voice activity detection, level meter, and 60-second cap.
-5. [ ] **8.5 Interview integration:** voice orb states, live transcript, final submission as `input_mode=voice`, tap-to-edit, and low-confidence review prompt.
+5. [x] **8.5 Interview integration:** voice orb states, live transcript, final submission as `input_mode=voice`, tap-to-edit, and transcript review prompt.
 6. [ ] **8.6 Mixed language:** pass UI language as the recognition language, accept code-mixing, and preserve the transcript's original script without translation.
 7. [ ] **8.7 Safe fallback:** switch to touch and typing within three seconds on provider failure, absent partials, or open circuit; keep nurse-assisted entry available.
 8. [ ] **8.8 Evaluation:** document the 80-utterance consenting-speaker recording script and implement Mock CI evaluation. Keep recordings ignored and out of Git.
@@ -24,20 +24,26 @@
 
 - Added the provider contract, Mock and Sarvam adapters, a five-failure/30-second circuit breaker, and aggregate counters that exclude audio, transcript text, and patient identifiers.
 - Live provider errors produce an unavailable result for the touch/typing flow; they never substitute synthetic Mock text.
-- Seven protocol tests pass, Ruff passes for the STT package and tests, and strict mypy passes for the STT package. Full backend tests on Windows report **356 passed, 13 failed, 3 errors, 1 skipped**; the failures are existing environment gates (Postgres/Redis integration services unavailable, temporary-directory permission errors, and WeasyPrint native libraries missing).
+- Eight provider tests pass, Ruff passes for the STT package and tests, and strict mypy passes for the STT package. Mock without an explicit fixture returns unavailable instead of synthetic patient text. Full backend tests on Windows report **356 passed, 13 failed, 3 errors, 1 skipped**; the failures are environment gates (Postgres/Redis integration services unavailable, temporary-directory permission errors, and WeasyPrint native libraries missing).
 - Full app/test Ruff lint and strict app mypy pass. Repository-wide `ruff format --check` identifies five previously unformatted files outside the Phase 8 change; all Phase 8 files are formatted.
 
 ## Step 8.3 verification
 
 - Added `/ws/intake/{visit_id}/audio`: it requires the patient token for that exact visit, a consented live session, and matching session language before accepting audio.
 - The socket caps each PCM16 frame at 8,192 bytes, limits utterances to 60 seconds and idle periods to 15 seconds, rate-limits connections, and atomically caps each kiosk at four concurrent audio sockets. It relays transcript events only; audio is not persisted.
-- Three socket tests cover successful streaming and slot release, pre-consent rejection, and kiosk capacity enforcement. Combined provider and socket tests: **10 passed**. Full app strict mypy and full app/test Ruff checks pass.
+- Three socket tests cover successful streaming and slot release, pre-consent rejection, and kiosk capacity enforcement. Current combined provider and socket tests: **11 passed**. Full app strict mypy and full app/test Ruff checks pass.
 
 ## Step 8.4 verification
 
 - Added browser microphone capture through AudioWorklet. It converts mono input to 16 kHz PCM16, sends 100 ms frames in memory, reports the input level, ends after 1.2 seconds of silence, and caps capture at 60 seconds.
 - Microphone denial and unsupported browser APIs produce stable error codes for localized UI handling. Capture stops the media tracks and closes the audio context; the code does not write audio to browser storage.
 - Capture unit tests: **2 passed**. ESLint and TypeScript project build pass.
+
+## Step 8.5 verification
+
+- Wired microphone permission, connection, recording, processing, review, and fallback states into the patient interview. Partials update the answer field in place so the patient can correct it before submission; voice answers are submitted with `input_mode=voice`.
+- Transcripts are always reviewable. Sarvam reports language detection confidence only in adaptive-language mode; because this flow requests a specific language, a missing transcript confidence also asks the patient to review the text instead of pretending language confidence measures transcription accuracy.
+- Added matching English, Hindi, and Marathi strings. Interview/audio unit tests: **3 passed**; full frontend suite: **35 passed** across 11 files. Locale parity (331 keys/language), ESLint, and TypeScript project build pass.
 
 ## Gate
 

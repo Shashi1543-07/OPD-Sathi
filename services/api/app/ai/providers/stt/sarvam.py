@@ -118,7 +118,7 @@ class SarvamSTT:
                 language_code=language_code,
             )
         if event_type == "transcript.final":
-            confidence = message.get("language_confidence")
+            confidence = message.get("transcript_confidence")
             return STTEvent(
                 type="final",
                 text=text if isinstance(text, str) else "",
@@ -165,7 +165,7 @@ class SarvamSTT:
             raise STTUnavailableError("Sarvam clip STT is unavailable") from exc
         if not isinstance(payload, dict) or not isinstance(payload.get("transcript"), str):
             raise STTUnavailableError("Sarvam returned an invalid clip transcript")
-        confidence = payload.get("language_confidence")
+        confidence = payload.get("transcript_confidence")
         return STTTranscript(
             text=payload["transcript"],
             language_code=language_code,

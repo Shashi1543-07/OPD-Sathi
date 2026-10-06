@@ -18,6 +18,7 @@ _MAX_FRAME_BYTES = 8192
 _MAX_UTTERANCE_SECONDS = 60
 _IDLE_SECONDS = 15
 _KIOSK_SOCKET_LIMIT = 4
+_KIOSK_SOCKET_RATE = 60
 _LANGUAGES = {"en": "en-IN", "hi": "hi-IN", "mr": "mr-IN"}
 _RESERVE_SCRIPT = """
 local now = tonumber(ARGV[1])
@@ -132,7 +133,7 @@ async def intake_audio_socket(websocket: WebSocket, visit_id: UUID) -> None:
             redis,
             websocket.app.state.memory_limiter,
             key=f"osa:{settings.app_env}:stt-connect:{kiosk_id}",
-            limit=12,
+            limit=_KIOSK_SOCKET_RATE,
             window_seconds=60,
             fail_closed=False,
         )

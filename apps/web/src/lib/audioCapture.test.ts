@@ -21,7 +21,9 @@ describe("startMicrophoneCapture", () => {
       value: {
         getUserMedia: vi
           .fn()
-          .mockRejectedValue(new DOMException("Permission denied", "NotAllowedError")),
+          .mockRejectedValue(
+            new DOMException("Permission denied", "NotAllowedError"),
+          ),
       },
     });
     Object.defineProperty(window, "AudioWorkletNode", {

@@ -31,6 +31,13 @@ async def test_mock_streams_fixture_without_exposing_audio() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mock_without_fixture_never_invents_a_patient_transcript() -> None:
+    mock = MockSTT()
+    with pytest.raises(STTUnavailableError, match="fixture configured"):
+        [event async for event in mock.stream(_frames(b"audio"), "en-IN")]
+
+
+@pytest.mark.asyncio
 async def test_chain_opens_after_five_provider_failures_and_reports_unavailable() -> None:
     metrics = STTMetrics()
     primary = MockSTT(fail=True)
@@ -87,7 +94,7 @@ async def test_sarvam_realtime_auth_audio_framing_and_events(
             yield json.dumps({"event": "vad.speech_start"})
             yield json.dumps({"event": "transcript.partial", "text": "hello"})
             yield json.dumps(
-                {"event": "transcript.final", "text": "hello there", "language_confidence": 0.9}
+                {"event": "transcript.final", "text": "hello there", "transcript_confidence": 0.9}
             )
 
     socket = Socket()
@@ -129,7 +136,7 @@ async def test_sarvam_clip_uses_multipart_and_validates_response(
         captured["headers"] = request.headers
         captured["body"] = request.read()
         return httpx.Response(
-            200, json={"transcript": "synthetic clip", "language_confidence": 0.8}
+            200, json={"transcript": "synthetic clip", "transcript_confidence": 0.8}
         )
 
     async_client = httpx.AsyncClient

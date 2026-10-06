@@ -5,6 +5,7 @@ export type CaptureStopReason = "manual" | "silence" | "limit";
 export type CaptureCallbacks = {
   onLevel?: (level: number) => void;
   onStop?: (reason: CaptureStopReason) => void;
+  stream?: MediaStream;
 };
 
 export type StopCapture = () => Promise<void>;
@@ -105,14 +106,16 @@ export async function startMicrophoneCapture(
   };
 
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
+    stream =
+      callbacks.stream ??
+      (await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      }));
     context = new AudioContext();
     const moduleUrl = URL.createObjectURL(
       new Blob([WORKLET_SOURCE], { type: "text/javascript" }),
@@ -131,8 +134,16 @@ export async function startMicrophoneCapture(
     gain = context.createGain();
     gain.gain.value = 0;
     node.port.onmessage = (message: MessageEvent) => {
-      const data = message.data as { type?: string; value?: number; data?: ArrayBuffer };
-      if (data.type === "frame" && data.data && socket.readyState === WebSocket.OPEN) {
+      const data = message.data as {
+        type?: string;
+        value?: number;
+        data?: ArrayBuffer;
+      };
+      if (
+        data.type === "frame" &&
+        data.data &&
+        socket.readyState === WebSocket.OPEN
+      ) {
         socket.send(data.data);
       } else if (data.type === "level") {
         callbacks.onLevel?.(data.value ?? 0);

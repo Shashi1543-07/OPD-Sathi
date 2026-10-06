@@ -9,7 +9,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app.ai.providers.stt.factory import build_stt_provider
+from app.ai.providers.stt.chain import STTProviderChain
+from app.ai.providers.stt.mock import MockSTT
 from app.api.v1.audio import router
 from app.config import Settings
 from app.core.ratelimit import InMemorySlidingWindow
@@ -56,7 +57,8 @@ def _socket_app(*, language: str = "en", phase: str = "interview", reserve_resul
     app.state.settings = settings
     app.state.redis_state = redis
     app.state.memory_limiter = InMemorySlidingWindow()
-    app.state.stt_provider = build_stt_provider(settings)
+    mock = MockSTT(transcripts={"en-IN": ["synthetic spoken answer"]})
+    app.state.stt_provider = STTProviderChain(mock, mock)
     token = issue_access_token(
         subject=visit_id,
         role="patient",

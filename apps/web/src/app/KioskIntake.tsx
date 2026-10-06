@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { DangerTile, FacesScale, VoiceOrb } from "../components/ui";
@@ -12,9 +12,16 @@ import {
 } from "../lib/intake";
 import { useLanguageStore } from "../languageStore";
 import { QRCodeSVG } from "qrcode.react";
+import {
+  CaptureError,
+  startMicrophoneCapture,
+  type StopCapture,
+} from "../lib/audioCapture";
 
 type Stage =
   "consent" | "identity" | "danger" | "interview" | "summary" | "done" | "help";
+type VoiceState =
+  "idle" | "connecting" | "recording" | "processing" | "review" | "fallback";
 
 function languageFrom(copy?: ConsentCopy) {
   return copy?.language ?? "en";
@@ -43,6 +50,13 @@ export function KioskIntake() {
   >([]);
   const [editing, setEditing] = useState<Question>();
   const [answer, setAnswer] = useState<string | number>("");
+  const [answerMode, setAnswerMode] = useState<"touch" | "voice">("touch");
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [voiceLevel, setVoiceLevel] = useState(0);
+  const [voiceText, setVoiceText] = useState("");
+  const [voiceError, setVoiceError] = useState("");
+  const voiceSocket = useRef<WebSocket | null>(null);
+  const stopCapture = useRef<StopCapture | null>(null);
   const [caseSheet, setCaseSheet] = useState<CaseSheet>();
   const [readback, setReadback] = useState("");
   const [queueToken, setQueueToken] = useState<{
@@ -117,6 +131,149 @@ export function KioskIntake() {
   }
 
   const currentQuestion = editing ?? question;
+
+  useEffect(
+    () => () => {
+      void stopCapture.current?.();
+      voiceSocket.current?.close();
+    },
+    [],
+  );
+
+  async function startVoice() {
+    if (!consent || !currentQuestion || voiceState === "connecting") return;
+    setVoiceError("");
+    setVoiceText("");
+    setVoiceState("connecting");
+    let media: MediaStream | undefined;
+    let socket: WebSocket | undefined;
+    let releaseReady: (() => void) | undefined;
+    let rejectReady: ((cause: Error) => void) | undefined;
+    let readyResolved = false;
+    try {
+      if (!navigator.mediaDevices?.getUserMedia)
+        throw new CaptureError("unsupported");
+      // Request permission directly from the patient's button tap.
+      media = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      const ready = new Promise<void>((resolve, reject) => {
+        releaseReady = () => {
+          readyResolved = true;
+          resolve();
+        };
+        rejectReady = reject;
+      });
+      socket = intake.connectAudio((event) => {
+        let packet: {
+          type?: string;
+          text?: string;
+          confidence?: number;
+        };
+        try {
+          packet = JSON.parse(event.data) as typeof packet;
+        } catch {
+          packet = { type: "error" };
+        }
+        if (packet.type === "ready") {
+          releaseReady?.();
+          return;
+        }
+        if (packet.type === "error" || packet.type === "fallback") {
+          if (!readyResolved) {
+            rejectReady?.(new Error("connection_failed"));
+          } else {
+            setVoiceError(t("voiceFallback", { ns: "kiosk" }));
+            setVoiceState("fallback");
+            void stopCapture.current?.();
+            stopCapture.current = null;
+            socket?.close();
+            voiceSocket.current = null;
+          }
+          return;
+        }
+        if (packet.type === "partial" || packet.type === "final") {
+          const transcript = packet.text ?? "";
+          setVoiceText(transcript);
+          setAnswer(transcript);
+          setAnswerMode("voice");
+          if (packet.type === "final") {
+            void stopCapture.current?.();
+            stopCapture.current = null;
+            socket?.close();
+            voiceSocket.current = null;
+            setVoiceLevel(0);
+            setVoiceState(
+              packet.confidence === undefined || packet.confidence < 0.65
+                ? "review"
+                : "idle",
+            );
+          }
+        }
+      });
+      voiceSocket.current = socket;
+      socket.addEventListener("close", () => {
+        if (!readyResolved) rejectReady?.(new Error("connection_failed"));
+      });
+      socket.addEventListener("error", () => {
+        if (!readyResolved) rejectReady?.(new Error("connection_failed"));
+      });
+      let readyTimer: number | undefined;
+      try {
+        await Promise.race([
+          ready,
+          new Promise<never>((_, reject) => {
+            readyTimer = window.setTimeout(
+              () => reject(new Error("connection_failed")),
+              10_000,
+            );
+          }),
+        ]);
+      } finally {
+        if (readyTimer !== undefined) window.clearTimeout(readyTimer);
+      }
+      socket.send(
+        JSON.stringify({
+          type: "start",
+          lang: consent.language,
+          question_id: currentQuestion.id,
+        }),
+      );
+      stopCapture.current = await startMicrophoneCapture(socket, {
+        stream: media,
+        onLevel: setVoiceLevel,
+        onStop: () => setVoiceState("processing"),
+      });
+      media = undefined;
+      setVoiceState("recording");
+    } catch (cause) {
+      media?.getTracks().forEach((track) => track.stop());
+      socket?.close();
+      voiceSocket.current = null;
+      const code =
+        cause instanceof CaptureError
+          ? cause.code
+          : cause instanceof DOMException && cause.name === "NotAllowedError"
+            ? "permission_denied"
+            : cause instanceof DOMException && cause.name === "NotFoundError"
+              ? "unsupported"
+              : "connection_failed";
+      setVoiceError(
+        code === "permission_denied"
+          ? t("voicePermissionDenied", { ns: "kiosk" })
+          : code === "unsupported"
+            ? t("voiceUnsupported", { ns: "kiosk" })
+            : t("voiceFallback", { ns: "kiosk" }),
+      );
+      setVoiceState("fallback");
+    }
+  }
+
   const onPrevious = () => {
     const previous = answered.at(-1);
     if (!previous) return;
@@ -128,9 +285,16 @@ export function KioskIntake() {
     if (!currentQuestion) return;
     await run(async () => {
       const response = editing
-        ? await intake.correct(editing.id, answer)
-        : await intake.answer(currentQuestion.id, skip ? null : answer, skip);
+        ? await intake.correct(editing.id, answer, answerMode)
+        : await intake.answer(
+            currentQuestion.id,
+            skip ? null : answer,
+            skip,
+            answerMode,
+          );
       acceptInterviewResponse(response);
+      setAnswerMode("touch");
+      setVoiceState("idle");
     });
   };
 
@@ -332,13 +496,61 @@ export function KioskIntake() {
                 rows={4}
                 value={String(answer)}
                 placeholder={t("answerPlaceholder", { ns: "kiosk" })}
-                onChange={(event) => setAnswer(event.target.value)}
+                onChange={(event) => {
+                  if (voiceState === "recording") {
+                    void stopCapture.current?.();
+                    stopCapture.current = null;
+                    voiceSocket.current?.close();
+                    voiceSocket.current = null;
+                    setVoiceState("idle");
+                  }
+                  setAnswer(event.target.value);
+                  setAnswerMode("touch");
+                }}
               />
             )}
             <div className="kiosk-interview-tools">
-              <VoiceOrb disabled />
-              <span>{t("voiceComing", { ns: "kiosk" })}</span>
+              <VoiceOrb
+                disabled={
+                  busy ||
+                  currentQuestion.input === "scale" ||
+                  voiceState === "connecting" ||
+                  voiceState === "processing"
+                }
+                active={voiceState === "recording"}
+                label={t(
+                  voiceState === "recording" ? "voiceStop" : "voiceStart",
+                  { ns: "kiosk" },
+                )}
+                onClick={() =>
+                  voiceState === "recording"
+                    ? void stopCapture.current?.()
+                    : void startVoice()
+                }
+              />
+              <div>
+                <p aria-live="polite">
+                  {currentQuestion.input === "scale"
+                    ? t("voiceScale", { ns: "kiosk" })
+                    : t(`voiceState_${voiceState}`, { ns: "kiosk" })}
+                </p>
+                {voiceState === "recording" && (
+                  <progress
+                    aria-label={t("voiceLevel", { ns: "kiosk" })}
+                    max={0.1}
+                    value={Math.min(voiceLevel, 0.1)}
+                  />
+                )}
+              </div>
             </div>
+            <p>{t("voicePermissionExplain", { ns: "kiosk" })}</p>
+            <p className="ui-sr-only" aria-live="polite">
+              {voiceText}
+            </p>
+            {voiceError && <p role="status">{voiceError}</p>}
+            {voiceState === "review" && (
+              <p role="status">{t("voiceLowConfidence", { ns: "kiosk" })}</p>
+            )}
             <div className="welcome-actions">
               {!editing && answered.length > 0 && (
                 <button

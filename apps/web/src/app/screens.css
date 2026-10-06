@@ -629,6 +629,11 @@
   opacity: 0.75;
 }
 
+.ui-voice-orb.is-active {
+  background: #b42318;
+  box-shadow: 0 0 0 0.3rem rgb(180 35 24 / 18%);
+}
+
 .kiosk-readback,
 .kiosk-summary {
   padding: 1rem;

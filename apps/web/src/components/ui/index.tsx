@@ -5,6 +5,7 @@ import {
   Clock3,
   Headphones,
   LoaderCircle,
+  Mic,
   Volume2,
 } from "lucide-react";
 import {
@@ -618,19 +619,27 @@ export function ReadAloudStubNote() {
 
 export function VoiceOrb({
   disabled = true,
+  active = false,
+  label,
+  onClick,
 }: {
   disabled?: boolean;
+  active?: boolean;
+  label?: string;
+  onClick?: () => void;
 }) {
   const { t } = useTranslation("kiosk");
   return (
     <button
-      className="ui-voice-orb"
+      className={`ui-voice-orb${active ? " is-active" : ""}`}
       type="button"
       disabled={disabled}
-      aria-label={t("voiceComing")}
-      title={t("voiceComing")}
+      aria-label={label ?? t("voiceComing")}
+      aria-pressed={active}
+      title={label ?? t("voiceComing")}
+      onClick={onClick}
     >
-      <Headphones aria-hidden="true" />
+      <Mic aria-hidden="true" />
     </button>
   );
 }
