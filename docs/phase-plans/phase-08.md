@@ -7,7 +7,7 @@
 1. [x] **8.1 Provider docs and decision:** check the current official Sarvam STT docs; record endpoints, auth, models, audio formats, and supported app languages. Keep Mock active because no provider key was supplied.
 2. [x] **8.2 STT adapters:** define `STTProvider`, fixture-driven `MockSTT`, the Sarvam realtime and clip adapters, provider chain, circuit breaker, and metrics.
 3. [x] **8.3 Audio WebSocket:** authenticated endpoint, per-kiosk request limits, frame size limit, 60-second utterance cap, idle timeout, backpressure, and no-audio-storage default.
-4. [ ] **8.4 Browser capture:** microphone explanation and permission handling, 16 kHz mono PCM16 AudioWorklet frames, voice activity detection, level meter, and 60-second cap.
+4. [x] **8.4 Browser capture:** microphone permission handling, 16 kHz mono PCM16 AudioWorklet frames, voice activity detection, level meter, and 60-second cap.
 5. [ ] **8.5 Interview integration:** voice orb states, live transcript, final submission as `input_mode=voice`, tap-to-edit, and low-confidence review prompt.
 6. [ ] **8.6 Mixed language:** pass UI language as the recognition language, accept code-mixing, and preserve the transcript's original script without translation.
 7. [ ] **8.7 Safe fallback:** switch to touch and typing within three seconds on provider failure, absent partials, or open circuit; keep nurse-assisted entry available.
@@ -32,6 +32,12 @@
 - Added `/ws/intake/{visit_id}/audio`: it requires the patient token for that exact visit, a consented live session, and matching session language before accepting audio.
 - The socket caps each PCM16 frame at 8,192 bytes, limits utterances to 60 seconds and idle periods to 15 seconds, rate-limits connections, and atomically caps each kiosk at four concurrent audio sockets. It relays transcript events only; audio is not persisted.
 - Three socket tests cover successful streaming and slot release, pre-consent rejection, and kiosk capacity enforcement. Combined provider and socket tests: **10 passed**. Full app strict mypy and full app/test Ruff checks pass.
+
+## Step 8.4 verification
+
+- Added browser microphone capture through AudioWorklet. It converts mono input to 16 kHz PCM16, sends 100 ms frames in memory, reports the input level, ends after 1.2 seconds of silence, and caps capture at 60 seconds.
+- Microphone denial and unsupported browser APIs produce stable error codes for localized UI handling. Capture stops the media tracks and closes the audio context; the code does not write audio to browser storage.
+- Capture unit tests: **2 passed**. ESLint and TypeScript project build pass.
 
 ## Gate
 

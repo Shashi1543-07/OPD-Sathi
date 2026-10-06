@@ -141,6 +141,7 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 - [x] 8.1 Re-check current official Sarvam STT docs and record provider ADR; no live key was supplied, so Mock stays active.
 - [x] 8.2 Add STT interface, mock/Sarvam adapters, provider chain, circuit breaker, and metrics (7 provider tests pass; live outage does not produce synthetic transcript).
 - [x] 8.3 Add authenticated, rate-limited audio WebSocket with frame/time limits and no-audio-storage default (3 socket tests pass; four concurrent sockets per kiosk).
+- [x] 8.4 Capture/resample browser microphone audio and handle permission/VAD states (16 kHz mono PCM16 worklet; 2 unit tests pass).
 - [ ] 8.4 Capture/resample browser microphone audio and handle permission/VAD states.
 - [ ] 8.5 Integrate live transcript, editing, confidence check, and voice UI states.
 - [ ] 8.6 Support mixed-language speech without changing the original script.
