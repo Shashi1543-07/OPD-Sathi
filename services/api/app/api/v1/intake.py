@@ -197,6 +197,7 @@ async def _evaluate_visit(
     if (
         request is not None
         and tenant_llm_enabled
+        and provider is not None
         and getattr(provider, "name", "mock") == "gemini"
         and text_answer.strip()
     ):

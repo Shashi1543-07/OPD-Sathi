@@ -57,8 +57,17 @@ eval:
 eval-interview:
 	PYTHONPATH=$(API_DIR) python eval/interview/evaluate.py
 
-eval-extraction eval-adversarial eval-redflags-llm eval-live:
-	@echo "$@ is not available until its implementation phase."
+eval-extraction:
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/extraction/evaluate.py
+
+eval-adversarial:
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/adversarial/evaluate.py
+
+eval-redflags-llm:
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/redflags_llm/evaluate.py
+
+eval-live:
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/live/evaluate.py --confirm-live
 
 eval-stt:
 	PYTHONPATH=$(API_DIR) $(PYTHON) eval/stt/evaluate.py
