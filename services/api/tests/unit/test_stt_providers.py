@@ -158,3 +158,10 @@ async def test_sarvam_rejects_unsupported_language() -> None:
     provider = SarvamSTT(api_key="synthetic-key")
     with pytest.raises(STTUnavailableError, match="unsupported language"):
         [event async for event in provider.stream(_frames(b"audio"), "ta-IN")]
+
+
+def test_sarvam_preserves_mixed_script_transcript_verbatim() -> None:
+    mixed = "मुझे fever और खाँसी है"
+    event = SarvamSTT._event({"event": "transcript.final", "text": mixed}, "hi-IN")
+    assert event is not None
+    assert event.text == mixed
