@@ -1,7 +1,7 @@
 """Fixture-driven local STT provider for CI and safe demos."""
 
 import asyncio
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterable
 
 from app.ai.providers.stt.base import STTEvent, STTTranscript, STTUnavailableError
 
@@ -30,12 +30,14 @@ class MockSTT:
             return "Synthetic voice transcript"
         return values[0]
 
-    def stream(self, frames: AsyncIterable[bytes], language_code: str) -> AsyncIterator[STTEvent]:
+    def stream(
+        self, frames: AsyncIterable[bytes], language_code: str
+    ) -> AsyncGenerator[STTEvent, None]:
         return self._stream(frames, language_code)
 
     async def _stream(
         self, frames: AsyncIterable[bytes], language_code: str
-    ) -> AsyncIterator[STTEvent]:
+    ) -> AsyncGenerator[STTEvent, None]:
         received_audio = False
         async for frame in frames:
             if frame:

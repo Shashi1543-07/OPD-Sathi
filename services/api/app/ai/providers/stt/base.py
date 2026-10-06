@@ -1,6 +1,6 @@
 """Shared STT protocol and event types; transcripts are never logged here."""
 
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterable
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -38,7 +38,7 @@ class STTProvider(Protocol):
 
     def stream(
         self, frames: AsyncIterable[bytes], language_code: str
-    ) -> AsyncIterator[STTEvent]: ...
+    ) -> AsyncGenerator[STTEvent, None]: ...
 
     async def transcribe_clip(
         self,

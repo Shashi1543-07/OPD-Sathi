@@ -17,7 +17,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
+from app.ai.providers.stt.factory import build_stt_provider
 from app.api.v1 import admin as admin_api
+from app.api.v1 import audio as audio_api
 from app.api.v1 import audit as audit_api
 from app.api.v1 import auth as auth_api
 from app.api.v1 import case_sheets as case_sheets_api
@@ -168,6 +170,7 @@ def create_app(
         dependencies=[Depends(authentication_gate)],
     )
     app.state.settings = configured
+    app.state.stt_provider = build_stt_provider(configured)
     app.state.memory_limiter = InMemorySlidingWindow()
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
@@ -203,6 +206,7 @@ def create_app(
     app.include_router(audit_api.router)
     app.include_router(admin_api.router)
     app.include_router(intake_api.router)
+    app.include_router(audio_api.router)
     app.include_router(queue_api.router)
     app.include_router(case_sheets_api.router)
 

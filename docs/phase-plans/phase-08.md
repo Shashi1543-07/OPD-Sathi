@@ -6,7 +6,7 @@
 
 1. [x] **8.1 Provider docs and decision:** check the current official Sarvam STT docs; record endpoints, auth, models, audio formats, and supported app languages. Keep Mock active because no provider key was supplied.
 2. [x] **8.2 STT adapters:** define `STTProvider`, fixture-driven `MockSTT`, the Sarvam realtime and clip adapters, provider chain, circuit breaker, and metrics.
-3. [ ] **8.3 Audio WebSocket:** authenticated endpoint, per-kiosk request limits, frame size limit, 60-second utterance cap, idle timeout, backpressure, and no-audio-storage default.
+3. [x] **8.3 Audio WebSocket:** authenticated endpoint, per-kiosk request limits, frame size limit, 60-second utterance cap, idle timeout, backpressure, and no-audio-storage default.
 4. [ ] **8.4 Browser capture:** microphone explanation and permission handling, 16 kHz mono PCM16 AudioWorklet frames, voice activity detection, level meter, and 60-second cap.
 5. [ ] **8.5 Interview integration:** voice orb states, live transcript, final submission as `input_mode=voice`, tap-to-edit, and low-confidence review prompt.
 6. [ ] **8.6 Mixed language:** pass UI language as the recognition language, accept code-mixing, and preserve the transcript's original script without translation.
@@ -26,6 +26,12 @@
 - Live provider errors produce an unavailable result for the touch/typing flow; they never substitute synthetic Mock text.
 - Seven protocol tests pass, Ruff passes for the STT package and tests, and strict mypy passes for the STT package. Full backend tests on Windows report **356 passed, 13 failed, 3 errors, 1 skipped**; the failures are existing environment gates (Postgres/Redis integration services unavailable, temporary-directory permission errors, and WeasyPrint native libraries missing).
 - Full app/test Ruff lint and strict app mypy pass. Repository-wide `ruff format --check` identifies five previously unformatted files outside the Phase 8 change; all Phase 8 files are formatted.
+
+## Step 8.3 verification
+
+- Added `/ws/intake/{visit_id}/audio`: it requires the patient token for that exact visit, a consented live session, and matching session language before accepting audio.
+- The socket caps each PCM16 frame at 8,192 bytes, limits utterances to 60 seconds and idle periods to 15 seconds, rate-limits connections, and atomically caps each kiosk at four concurrent audio sockets. It relays transcript events only; audio is not persisted.
+- Three socket tests cover successful streaming and slot release, pre-consent rejection, and kiosk capacity enforcement. Combined provider and socket tests: **10 passed**. Full app strict mypy and full app/test Ruff checks pass.
 
 ## Gate
 

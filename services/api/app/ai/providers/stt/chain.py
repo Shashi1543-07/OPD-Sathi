@@ -1,6 +1,6 @@
 """Provider selection, a small circuit breaker, and privacy-safe counters."""
 
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterable
 from dataclasses import dataclass, field
 from time import monotonic
 
@@ -69,12 +69,14 @@ class STTProviderChain:
         if self._circuit.failures >= self.failure_threshold:
             self._circuit.opened_at = monotonic()
 
-    def stream(self, frames: AsyncIterable[bytes], language_code: str) -> AsyncIterator[STTEvent]:
+    def stream(
+        self, frames: AsyncIterable[bytes], language_code: str
+    ) -> AsyncGenerator[STTEvent, None]:
         return self._stream(frames, language_code)
 
     async def _stream(
         self, frames: AsyncIterable[bytes], language_code: str
-    ) -> AsyncIterator[STTEvent]:
+    ) -> AsyncGenerator[STTEvent, None]:
         self.metrics.requests += 1
         # Live audio cannot be replayed safely after a provider consumed it. On
         # failure, signal the client to offer touch/typing rather than fabricate.

@@ -3,7 +3,7 @@
 import asyncio
 import base64
 import json
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterable
 from urllib.parse import urlencode
 
 import httpx
@@ -47,12 +47,14 @@ class SarvamSTT:
         )
         return f"{_REALTIME_URL}?{params}"
 
-    def stream(self, frames: AsyncIterable[bytes], language_code: str) -> AsyncIterator[STTEvent]:
+    def stream(
+        self, frames: AsyncIterable[bytes], language_code: str
+    ) -> AsyncGenerator[STTEvent, None]:
         return self._stream(frames, language_code)
 
     async def _stream(
         self, frames: AsyncIterable[bytes], language_code: str
-    ) -> AsyncIterator[STTEvent]:
+    ) -> AsyncGenerator[STTEvent, None]:
         url = self._realtime_url(language_code)
         try:
             async with connect(
