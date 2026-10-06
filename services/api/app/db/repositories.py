@@ -611,13 +611,16 @@ class CaseSheetRepository:
             raise RuntimeError("saved case sheet was not found in the current tenant")
         return result
 
-    async def get(self, *, hospital_id: UUID, visit_id: UUID) -> dict[str, Any] | None:
+    async def get(
+        self, *, hospital_id: UUID, visit_id: UUID, for_update: bool = False
+    ) -> dict[str, Any] | None:
         row = (
             (
                 await self.connection.execute(
                     text(
-                        "SELECT id, data FROM case_sheets "
+                        "SELECT id, data, version FROM case_sheets "
                         "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+                        + (" FOR UPDATE" if for_update else "")
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},
                 )
@@ -636,7 +639,45 @@ class CaseSheetRepository:
             key=self.settings.app_data_key_bytes,
             associated_data=f"case_sheets:data:{visit_id}",
         )
-        return {"id": row["id"], "data": json.loads(plaintext)}
+        return {
+            "id": row["id"],
+            "data": json.loads(plaintext),
+            "version": row["version"],
+        }
+
+    async def replace_if_version(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        expected_version: int,
+        data: dict[str, Any],
+        editor_id: UUID,
+    ) -> int | None:
+        encrypted_data = encrypt_field(
+            json.dumps(data, separators=(",", ":")),
+            key=self.settings.app_data_key_bytes,
+            associated_data=f"case_sheets:data:{visit_id}",
+        )
+        result = await self.connection.execute(
+            text(
+                "UPDATE case_sheets SET data = CAST(:data AS jsonb), "
+                "schema_version = :schema_version, "
+                "version = version + 1, last_edited_by = :editor_id "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                "AND version = :expected_version RETURNING version"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "data": json.dumps({"ciphertext": encrypted_data}),
+                "schema_version": str(data["schema_version"]),
+                "editor_id": editor_id,
+                "expected_version": expected_version,
+            },
+        )
+        updated_version = result.scalar_one_or_none()
+        return int(updated_version) if updated_version is not None else None
 
     async def confirm(self, *, hospital_id: UUID, visit_id: UUID) -> bool:
         result = await self.connection.execute(

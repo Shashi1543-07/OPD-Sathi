@@ -1,12 +1,12 @@
 # Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1 and 7.2 are implemented; the Phase 7 PR is draft #5. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
+**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1–7.3 are implemented; the Phase 7 PR is draft #5. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
 
 ## Work order
 
 1. [x] **7.1 Staff layout and role navigation:** real links and route guards for admin, doctor, and nurse pages. Tests cover every role/page combination.
 2. [x] **7.2 Queue board:** department tabs, status filters, urgent pinning, virtual rows, pagination, sequence-aware live updates, connection state, and alert sound preference.
-3. [ ] **7.3 Case-sheet API:** audited reads, schema-validated JSON Patch updates guarded by `If-Match`, doctor source metadata, conflict response, and audit diff.
+3. [x] **7.3 Case-sheet API:** audited reads, schema-validated JSON Patch updates guarded by `If-Match`, doctor source metadata, conflict response, and audit diff.
 4. [ ] **7.4 Doctor consult view:** reading-order case sheet, confidence/source details, edit and conflict flows, audited transcript view, consult actions, and keyboard controls.
 5. [ ] **7.5 Nurse console:** assisted registration, alert review, queue overrides, and no-show flow.
 6. [ ] **7.6 Admin screens:** user, kiosk, and department management with activation secrets shown only once.
@@ -30,6 +30,13 @@
 - `.venv/Scripts/python.exe -m pytest services/api/tests/unit/test_queue_board.py -q`: **3 passed**; Ruff and strict mypy passed.
 - The queue API constrains doctors and nurses to their assigned active department. Admins can switch among active departments. The list is paginated, virtualized, urgent-first, and updates from contiguous websocket sequence deltas; a sequence gap triggers a fresh page.
 - The complete backend suite was attempted locally: **318 passed**, one existing Redis websocket latency integration failed to subscribe in this environment, and three tests could not create temporary directories under the default Windows pytest temp root. Required hosted CI for PR #5 is the authoritative cross-platform gate.
+
+### Step 7.3 verification
+
+- `services/api/tests/unit/test_case_sheet_patch.py` and `services/api/tests/unit/test_case_sheet_api.py`: **12 passed**.
+- Case-sheet reads are limited to doctors/nurses in their assigned department and create an audit event. Writes are doctor-only, require a positive `If-Match` version, lock and compare the current row version, validate the complete `CaseSheet`, update doctor provenance, and audit changed paths/operations without copying clinical values into audit metadata.
+- Conflict responses use **409**; missing version uses **428**. Reads and successful writes return the current strong ETag.
+- Ruff, strict mypy, and regenerated OpenAPI TypeScript types passed. Hosted PR #5 CI has not yet run against this 7.3 increment.
 
 ## Acceptance gate
 

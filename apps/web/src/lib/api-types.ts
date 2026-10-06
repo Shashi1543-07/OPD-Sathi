@@ -595,10 +595,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/visits/{visit_id}/case-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Case Sheet */
+        get: operations["get_case_sheet_visits__visit_id__case_sheet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Case Sheet */
+        patch: operations["patch_case_sheet_visits__visit_id__case_sheet_patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AddOrReplace */
+        AddOrReplace: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "add" | "replace";
+            /** Path */
+            path: string;
+            /** Value */
+            value: unknown;
+        };
         /** AnswerPayload */
         AnswerPayload: {
             /** Question Id */
@@ -616,6 +646,53 @@ export interface components {
              * @enum {string}
              */
             input_mode: "touch" | "text" | "voice" | "nurse";
+        };
+        /** CaseSheet */
+        CaseSheet: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "1.0";
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "hi" | "mr";
+            chief_complaint: components["schemas"]["TextPair"];
+            hpi: components["schemas"]["HPI"];
+            past_history?: components["schemas"]["PastHistory"];
+            /** Medications */
+            medications?: components["schemas"]["Medication"][];
+            /** Allergies */
+            allergies?: components["schemas"]["TextPair"][];
+            /** Family History */
+            family_history?: components["schemas"]["TextPair"][];
+            social?: components["schemas"]["SocialHistory"];
+            women_health?: components["schemas"]["WomenHealth"] | null;
+            /** Red Flags */
+            red_flags?: components["schemas"]["RedFlag"][];
+            routing: components["schemas"]["Routing"];
+            /** Field Meta */
+            field_meta?: {
+                [key: string]: components["schemas"]["FieldMeta"];
+            };
+            /**
+             * Disclaimer
+             * @default Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis.
+             */
+            disclaimer: string;
+        };
+        /** CaseSheetResponse */
+        CaseSheetResponse: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /** Version */
+            version: number;
+            case_sheet: components["schemas"]["CaseSheet"];
         };
         /** ConsentPayload */
         ConsentPayload: {
@@ -663,6 +740,47 @@ export interface components {
             /** Is Active */
             is_active?: boolean | null;
         };
+        /** Duration */
+        Duration: {
+            /** Value */
+            value: number;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "minute" | "hour" | "day" | "week" | "month" | "year";
+        };
+        /** FieldMeta */
+        FieldMeta: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "patient_voice" | "patient_touch" | "patient_text" | "nurse" | "doctor" | "document";
+            /** Confidence */
+            confidence: number;
+            /** Confirmed */
+            confirmed: boolean;
+        };
+        /** HPI */
+        HPI: {
+            onset?: components["schemas"]["TextPair"] | null;
+            duration?: components["schemas"]["Duration"] | null;
+            location?: components["schemas"]["TextPair"] | null;
+            character?: components["schemas"]["TextPair"] | null;
+            /** Severity 0 10 */
+            severity_0_10?: number | null;
+            /** Aggravating */
+            aggravating?: components["schemas"]["TextPair"][];
+            /** Relieving */
+            relieving?: components["schemas"]["TextPair"][];
+            radiation?: components["schemas"]["TextPair"] | null;
+            timing?: components["schemas"]["TextPair"] | null;
+            /** Associated Symptoms */
+            associated_symptoms?: components["schemas"]["TextPair"][];
+            /** Pertinent Negatives */
+            pertinent_negatives?: components["schemas"]["TextPair"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -709,6 +827,18 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** Medication */
+        Medication: {
+            /** Name */
+            name: string;
+            /** Dose */
+            dose?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "patient_stated" | "document" | "nurse" | "doctor";
+        };
         /** OverridePayload */
         OverridePayload: {
             /** Reason */
@@ -716,10 +846,71 @@ export interface components {
             /** Urgency */
             urgency?: ("routine" | "priority" | "urgent") | null;
         };
+        /** PastHistory */
+        PastHistory: {
+            /** Conditions */
+            conditions?: string[];
+            /** Surgeries */
+            surgeries?: string[];
+        };
+        /** RedFlag */
+        RedFlag: {
+            /** Id */
+            id: string;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "priority" | "urgent";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "tile" | "rule" | "llm" | "nurse";
+            /** Evidence */
+            evidence: string;
+            /** Reason En */
+            reason_en?: string | null;
+        };
+        /** Remove */
+        Remove: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            op: "remove";
+            /** Path */
+            path: string;
+        };
         /** RouteConfirmPayload */
         RouteConfirmPayload: {
             /** Reason */
             reason: string;
+        };
+        /** Routing */
+        Routing: {
+            /** Department Code */
+            department_code: string;
+            /** Confidence */
+            confidence: number;
+            /** Reason En */
+            reason_en: string;
+            /** Needs Nurse Confirmation */
+            needs_nurse_confirmation: boolean;
+        };
+        /** SocialHistory */
+        SocialHistory: {
+            tobacco?: components["schemas"]["TextPair"] | null;
+            alcohol?: components["schemas"]["TextPair"] | null;
+        };
+        /** TextPair */
+        TextPair: {
+            /** Text Original */
+            text_original: string;
+            /** Text En */
+            text_en: string;
+            /** Confidence */
+            confidence?: number | null;
         };
         /** UserCreate */
         UserCreate: {
@@ -760,6 +951,13 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WomenHealth */
+        WomenHealth: {
+            /** Pregnant */
+            pregnant?: boolean | null;
+            /** Lmp */
+            lmp?: string | null;
         };
     };
     responses: never;
@@ -1940,6 +2138,74 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_case_sheet_visits__visit_id__case_sheet_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseSheetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_case_sheet_visits__visit_id__case_sheet_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json-patch+json": (components["schemas"]["AddOrReplace"] | components["schemas"]["Remove"])[];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseSheetResponse"];
                 };
             };
             /** @description Validation Error */
