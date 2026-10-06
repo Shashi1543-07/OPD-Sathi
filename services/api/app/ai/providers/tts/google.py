@@ -2,7 +2,7 @@
 
 import asyncio
 import base64
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 
@@ -14,6 +14,16 @@ class CredentialsLike(Protocol):
     token: str | None
 
     def refresh(self, request: Any) -> None: ...
+
+
+def _load_default_credentials() -> CredentialsLike:
+    """Load Google credentials in a worker thread without exposing provider internals."""
+    import google.auth
+
+    credentials, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    return cast(CredentialsLike, credentials)
 
 
 class GoogleTTS:
@@ -33,13 +43,10 @@ class GoogleTTS:
     async def _access_token(self) -> str:
         credentials = self.credentials
         if credentials is None:
-            import google.auth
+            credentials = await asyncio.to_thread(_load_default_credentials)
+        if not credentials.valid:
             from google.auth.transport.requests import Request as GoogleAuthRequest
 
-            credentials, _ = await asyncio.to_thread(
-                google.auth.default, scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
-        if not credentials.valid:
             await asyncio.to_thread(credentials.refresh, GoogleAuthRequest())
         if not credentials.token:
             raise RuntimeError("Google authentication did not return an access token")
