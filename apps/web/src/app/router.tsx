@@ -8,6 +8,7 @@ import { PatientStatus } from "./PatientStatus";
 import { KioskIntake } from "./KioskIntake";
 import { StaffQueueBoard } from "./StaffQueueBoard";
 import { DoctorConsultation } from "./DoctorConsultation";
+import { NurseConsole } from "./NurseConsole";
 import {
   StaffLanding,
   StaffPageGate,
@@ -60,7 +61,7 @@ export const router = createBrowserRouter([
         path: "patients",
         element: (
           <StaffPageGate page="patients">
-            <StaffPlaceholderPage page="patients" />
+            <NurseConsole />
           </StaffPageGate>
         ),
       },

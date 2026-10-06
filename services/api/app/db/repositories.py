@@ -813,6 +813,20 @@ class IntakeRepository:
         self.connection = connection
         self.settings = settings
 
+    async def active_nurse_department(
+        self, *, hospital_id: UUID, nurse_id: UUID
+    ) -> UUID | None:
+        department_id = await self.connection.scalar(
+            text(
+                "SELECT d.id FROM users u JOIN departments d "
+                "ON d.hospital_id = u.hospital_id AND d.id = u.department_id "
+                "WHERE u.hospital_id = :hospital_id AND u.id = :nurse_id "
+                "AND u.role = 'nurse' AND u.is_active = true AND d.is_active = true"
+            ),
+            {"hospital_id": hospital_id, "nurse_id": nurse_id},
+        )
+        return department_id if isinstance(department_id, UUID) else None
+
     async def kiosk_is_active(self, *, hospital_id: UUID, kiosk_id: UUID) -> bool:
         result = await self.connection.scalar(
             text(
@@ -840,6 +854,24 @@ class IntakeRepository:
         patient_id = await PatientRepository(self.connection, self.settings).create(
             hospital_id=hospital_id,
             name="Kiosk visitor",
+            phone=None,
+            preferred_language=language,
+        )
+        visit_id = await VisitRepository(self.connection, self.settings).create(
+            hospital_id=hospital_id,
+            patient_id=patient_id,
+            department_id=department_id,
+            service_date=datetime.now(ZoneInfo("Asia/Kolkata")).date(),
+            language=language,
+        )
+        return visit_id, patient_id
+
+    async def create_assisted_session(
+        self, *, hospital_id: UUID, department_id: UUID, language: str
+    ) -> tuple[UUID, UUID]:
+        patient_id = await PatientRepository(self.connection, self.settings).create(
+            hospital_id=hospital_id,
+            name="Pending nurse-assisted visitor",
             phone=None,
             preferred_language=language,
         )
@@ -881,6 +913,7 @@ class IntakeRepository:
         version: str,
         text_sha256: str,
         granted: bool,
+        channel: str = "kiosk",
     ) -> None:
         existing = await self.connection.scalar(
             text(
@@ -894,7 +927,7 @@ class IntakeRepository:
             text(
                 "INSERT INTO consents (id, hospital_id, visit_id, language, text_version, "
                 "text_sha256, granted, granted_at, channel) VALUES (:id, :hospital_id, :visit_id, "
-                ":language, :version, :text_sha256, :granted, :granted_at, 'kiosk')"
+                ":language, :version, :text_sha256, :granted, :granted_at, :channel)"
             ),
             {
                 "id": uuid7(),
@@ -905,6 +938,7 @@ class IntakeRepository:
                 "text_sha256": text_sha256,
                 "granted": granted,
                 "granted_at": datetime.now(UTC) if granted else None,
+                "channel": channel,
             },
         )
 
@@ -917,7 +951,17 @@ class IntakeRepository:
         age: int,
         sex: str,
         phone: str | None,
+        name: str | None = None,
     ) -> None:
+        name_enc = (
+            encrypt_field(
+                name,
+                key=self.settings.app_data_key_bytes,
+                associated_data=f"patients:name_enc:{patient_id}",
+            )
+            if name
+            else None
+        )
         phone_enc = (
             encrypt_field(
                 phone,
@@ -931,7 +975,8 @@ class IntakeRepository:
         current_year = datetime.now(ZoneInfo("Asia/Kolkata")).year
         await self.connection.execute(
             text(
-                "UPDATE patients SET phone_enc = :phone_enc, phone_hmac = :phone_hmac, "
+                "UPDATE patients SET name_enc = coalesce(:name_enc, name_enc), "
+                "phone_enc = :phone_enc, phone_hmac = :phone_hmac, "
                 "year_of_birth = :year_of_birth, sex = :sex, preferred_language = "
                 "(SELECT language FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id) "
                 "WHERE hospital_id = :hospital_id AND id = :patient_id"
@@ -939,6 +984,7 @@ class IntakeRepository:
             {
                 "phone_enc": phone_enc,
                 "phone_hmac": phone_hmac,
+                "name_enc": name_enc,
                 "year_of_birth": current_year - age,
                 "sex": sex,
                 "hospital_id": hospital_id,

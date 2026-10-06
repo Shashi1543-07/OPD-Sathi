@@ -81,6 +81,7 @@
   "consentContinue": "I agree and want to continue",
   "consentDecline": "I do not agree",
   "identityTitle": "A few basic details",
+  "patientNameLabel": "Patient name",
   "ageLabel": "Age in years",
   "sexLabel": "Sex",
   "sexFemale": "Female",

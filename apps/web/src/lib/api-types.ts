@@ -225,6 +225,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/intake/assisted-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Assisted Session */
+        post: operations["create_assisted_session_intake_assisted_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/consent": {
         parameters: {
             query?: never;
@@ -720,6 +737,14 @@ export interface components {
             /** Granted */
             granted: boolean;
         };
+        /** CreateAssistedSessionPayload */
+        CreateAssistedSessionPayload: {
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "hi" | "mr";
+        };
         /** CreateSessionPayload */
         CreateSessionPayload: {
             /**
@@ -805,6 +830,8 @@ export interface components {
         };
         /** IdentityPayload */
         IdentityPayload: {
+            /** Name */
+            name?: string | null;
             /** Age */
             age: number;
             /**
@@ -1419,6 +1446,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CreateSessionPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_assisted_session_intake_assisted_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAssistedSessionPayload"];
             };
         };
         responses: {

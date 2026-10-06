@@ -81,6 +81,7 @@
   "consentContinue": "मैं सहमत हूँ और आगे बढ़ना चाहता/चाहती हूँ",
   "consentDecline": "मैं सहमत नहीं हूँ",
   "identityTitle": "कुछ बुनियादी जानकारी",
+  "patientNameLabel": "मरीज़ का नाम",
   "ageLabel": "उम्र (वर्षों में)",
   "sexLabel": "लिंग",
   "sexFemale": "महिला",

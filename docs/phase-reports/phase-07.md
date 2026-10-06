@@ -1,6 +1,6 @@
 # Phase 7 progress report
 
-**Status:** In progress on `phase-07-consoles`. Phase 6 is integrated into `main` as merge commit `0c833c3`; Phase 7 is tracked by draft PR #5. Steps 7.1–7.4 are implemented and required CI is green; the full Phase 7 acceptance gate is not complete.
+**Status:** In progress on `phase-07-consoles`. Phase 6 is integrated into `main` as merge commit `0c833c3`; Phase 7 is tracked by draft PR #5. Steps 7.1–7.5 are implemented; the full Phase 7 acceptance gate is not complete.
 
 ## Completed work
 
@@ -48,6 +48,13 @@ The complete local backend suite was also attempted: **318 passed**, one Redis w
 - Current local Phase 7.4 gates: frontend **25 tests passed across 7 files**; case-sheet/transcript API **13 tests passed**; typecheck, ESLint, locale parity (**254 keys per language**), production build, Ruff, strict mypy, Bandit, and `git diff --check` passed.
 - Hosted PR #5 CI passed backend, frontend (including E2E, Lighthouse, and generated-type parity), and security at `c990f49`: [Actions run](https://github.com/Shashi1543-07/OPD-Sathi/actions/runs/37411307425).
 
+### 7.5 Nurse console
+
+- Nurses can start assisted registration in English, Hindi, or Marathi. The existing consent screen is shown first; demographic identity fields are submitted only after consent, and the patient's name is required for assisted registration.
+- The API verifies the active nurse's active department assignment, creates a hospital-scoped session with no real identity prefilled, and records consent channel `nurse`. The audit trail records the nurse and visit action without including submitted identity values.
+- Existing nurse queue tools handle red-flag acknowledgement, route confirmation, reasoned urgency override, and no-show. API access is constrained to the nurse's active department.
+- Verification: `pytest services/api/tests/unit/test_intake.py -q` — **5 passed**; `npm test -- --reporter=dot` — **26 passed across 8 files**; Ruff, strict mypy, Bandit, frontend typecheck, ESLint, locale parity (**269 keys per language**), production build, and `git diff --check` passed.
+
 ## Remaining Phase 7 work
 
-Steps 7.5–7.9 remain: nurse console; admin screens; multilingual PDF; UI states and print styling; and full browser/access/performance gates. The 5,000-row render/update-under-100-ms acceptance measurement, full audit assertions, axe run, human verification, and screenshots are still pending.
+Steps 7.6–7.9 remain: admin screens; multilingual PDF; UI states and print styling; and full browser/access/performance gates. The 5,000-row render/update-under-100-ms acceptance measurement, full audit assertions, axe run, human verification, and screenshots are still pending.

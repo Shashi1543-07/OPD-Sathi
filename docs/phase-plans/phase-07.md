@@ -1,6 +1,6 @@
 # Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1–7.4 are implemented on draft PR #5; Step 7.5 is next. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
+**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1–7.5 are implemented on draft PR #5; Step 7.6 is next. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
 
 ## Work order
 
@@ -8,7 +8,7 @@
 2. [x] **7.2 Queue board:** department tabs, status filters, urgent pinning, virtual rows, pagination, sequence-aware live updates, connection state, and alert sound preference.
 3. [x] **7.3 Case-sheet API:** audited reads, schema-validated JSON Patch updates guarded by `If-Match`, doctor source metadata, conflict response, and audit diff.
 4. [x] **7.4 Doctor consult view:** reading-order case sheet, confidence/source details, edit and conflict flows, audited transcript view, consult actions, and keyboard controls.
-5. [ ] **7.5 Nurse console:** assisted registration, alert review, queue overrides, and no-show flow.
+5. [x] **7.5 Nurse console:** assisted registration, alert review, queue overrides, and no-show flow.
 6. [ ] **7.6 Admin screens:** user, kiosk, and department management with activation secrets shown only once.
 7. [ ] **7.7 PDF:** A4 multilingual case sheet through WeasyPrint, with the required history-only disclaimer; audit access and validate extracted text.
 8. [ ] **7.8 UI states:** loading, empty, error, and print states.
@@ -43,6 +43,13 @@
 - Added the doctor-only, department-scoped transcript endpoint. Interview text is decrypted by the repository and each read is audited without copying transcript text into the audit record.
 - Replaced the consultations placeholder with a case-sheet view in reading order, confidence/source metadata, inline edits, a 409 reload/reapply dialog, audited transcript panel, Start/Done actions, print shortcut, and N/E/P keyboard controls.
 - Doctor consultation tests: **2 passed**, including versioned edits and conflict reapplication. The full frontend suite, typecheck, ESLint, locale parity, production build, E2E, Lighthouse, contrast, generated-type parity, backend, and security checks passed at `c990f49`: [Actions run](https://github.com/Shashi1543-07/OPD-Sathi/actions/runs/37411307425). Broader role-matrix and two-browser edit checks remain in Step 7.9.
+
+### Step 7.5 verification
+
+- Added nurse-only assisted registration. It uses the existing intake flow and requires the patient to review and accept the selected-language consent before name and demographic details can be entered. Consent is stored with channel `nurse`; audit entries identify the nurse without including patient details.
+- The API verifies the nurse is active and has an active department assignment through `IntakeRepository`; session state and patient access remain visit- and hospital-scoped. Redis startup failure cancels the placeholder visit.
+- Nurse queue access provides alert acknowledgement, routing confirmation, reasoned urgency override, and no-show actions through the existing department-scoped queue API.
+- Verification: intake API unit tests **5 passed**; frontend **26 tests passed across 8 files**; Ruff, strict mypy, Bandit, TypeScript, ESLint, locale parity (**269 keys per language**), production build, and `git diff --check` passed.
 
 ## Acceptance gate
 
