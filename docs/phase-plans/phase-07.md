@@ -1,6 +1,6 @@
 # Phase 7 — Doctor and nurse consoles, PDF
 
-**Status:** Active on `phase-07-consoles` from merged `main` (Phase 6 merged as PR #4). Steps 7.1–7.6 are implemented on draft PR #5. Step 7.1 uses role-filtered links and guarded routes, with tests for all 18 role/page combinations. All data and accounts used in automated and manual checks must be synthetic.
+**Status:** Phase 7 implementation is complete on `phase-07-consoles`; the final acceptance gate remains open because backend-wide coverage is 67%, below the playbook's 80% target. All data and accounts used in automated and manual checks are synthetic.
 
 ## Work order
 
@@ -12,7 +12,7 @@
 6. [x] **7.6 Admin screens:** user, kiosk, and department management with activation secrets shown only once.
 7. [x] **7.7 PDF:** A4 multilingual case sheet through WeasyPrint, with the required history-only disclaimer; audit access and validate extracted text.
 8. [x] **7.8 UI states:** loading, empty, error, and print states.
-9. [ ] **7.9 Browser/access gates:** doctor, nurse, and admin flows; role access matrix; two-browser edit conflict; PDF content; axe and large-queue responsiveness.
+9. [x] **7.9 Browser/access gates:** doctor, nurse, and admin flows; role access matrix; two-browser edit conflict; PDF content; axe and large-queue responsiveness.
 
 ### Step 7.1 verification
 
@@ -73,9 +73,18 @@
 - Verification: frontend **32 tests passed across 9 files**. Tests now exercise queue and doctor loading/empty/error states. TypeScript, ESLint, locale parity (**316 keys per language**), contrast checks (**12 pairs**), production build, and `git diff --check` passed. Production bundle: **478.99 kB** JavaScript (**149.43 kB gzip**).
 - Browser print visibility and the broader doctor/nurse/admin/accessibility/performance flows are measured in Step 7.9.
 
+### Step 7.9 verification
+
+- Full frontend Playwright regression: **107 passed**. The 18 role/page combinations pass; doctor and nurse route restrictions, two-browser **409** conflict/reapply flow, PDF download, print visibility, nurse consent-before-identity, and admin kiosk secret dismissal pass.
+- Focused Phase 7 Playwright run: **5 passed**. axe reported **0 serious/critical findings** on doctor, nurse, and admin screens. The virtualized queue rendered fewer than **50** rows from a **5,000-row** fixture; its urgent WebSocket update applied in **18.90 ms** (limit **<100 ms**).
+- Backend container suite: **340 passed**. `case_sheet.read`, `transcript.read`, and PDF export audit assertions pass. PDF checks recorded above: **1 A4 page**, required synthetic content, p95 **79.93 ms** (limit **1,500 ms**).
+- Coverage from the full backend run: combined `app/core` + `app/domain` **97%** (limit **95%**); backend-wide **67%** (playbook limit **80%**). The Phase 7 functionality checks pass, but the project-wide coverage gate remains open. No threshold was changed.
+- Frontend: **32 unit tests passed**; TypeScript, ESLint, locale parity (**316 keys per language**), contrast (**12 pairs**), and production build passed. Bundle: **479.04 kB** JavaScript (**149.44 kB gzip**).
+- Browser evidence: [doctor print view](../screenshots/phase-07/doctor-consultation-print.png), [nurse consent before identity](../screenshots/phase-07/nurse-consent-before-identity.png), [nurse identity after consent](../screenshots/phase-07/nurse-identity-after-consent.png), [one-time kiosk code](../screenshots/phase-07/admin-kiosk-one-time-code.png), and [code dismissed](../screenshots/phase-07/admin-kiosk-code-dismissed.png). The PDF screenshot is [here](../screenshots/phase-07/case-sheet-synthetic.png).
+
 ## Acceptance gate
 
-Follow Phase 7 in `AGENT_PLAYBOOK.md`. Measure the full role/access matrix, 409 edit conflict and merge dialog, PDF p95 ≤1.5 s and required text, rendering a 5,000-row queue with an update applied in <100 ms, audit entries for every case-sheet and transcript read, axe with zero serious/critical findings, and the applicable coverage thresholds. Record commands, counts, results, screenshots, and known limits in `docs/phase-reports/phase-07.md` before the phase is considered complete.
+The Phase 7 role/access, conflict, PDF, queue, audit, axe, and `app/core` + `app/domain` coverage checks passed. The acceptance gate is **not complete**: backend-wide coverage measured **67%**, below the playbook's **80%** target. Raise real backend test coverage without lowering the threshold, then rerun the full coverage command before considering Phase 7 complete.
 
 ## Human verification
 

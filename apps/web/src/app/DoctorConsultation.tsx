@@ -206,48 +206,50 @@ export function DoctorConsultation() {
       <div className="consult-field" key={path}>
         <dt>{label}</dt>
         <dd>
-          {editing ? (
-            <textarea
-              aria-label={label}
-              value={draft.value}
-              onChange={(event) =>
-                setDraft({ path, value: event.target.value })
-              }
-            />
-          ) : (
-            text
-          )}
+          <div className="consult-field-value">
+            {editing ? (
+              <textarea
+                aria-label={label}
+                value={draft.value}
+                onChange={(event) =>
+                  setDraft({ path, value: event.target.value })
+                }
+              />
+            ) : (
+              text
+            )}
+          </div>
           <small>
             {metadata
               ? `${metadata.source} · ${Math.round(metadata.confidence * 100)}%`
               : t("sourceUnrecorded")}
           </small>
-        </dd>
-        {editing ? (
-          <div className="consult-field-actions">
+          {editing ? (
+            <div className="consult-field-actions">
+              <button
+                type="button"
+                onClick={() => void saveEdit()}
+                disabled={saving || !draft.value.trim()}
+              >
+                {t("saveEdit")}
+              </button>
+              <button type="button" onClick={() => setDraft(undefined)}>
+                {t("cancelEdit")}
+              </button>
+            </div>
+          ) : editable ? (
             <button
+              ref={index === 0 ? firstEditRef : undefined}
               type="button"
-              onClick={() => void saveEdit()}
-              disabled={saving || !draft.value.trim()}
+              className="consult-edit"
+              onClick={() =>
+                setDraft({ path, value: text === emptyText ? "" : text })
+              }
             >
-              {t("saveEdit")}
+              {t("editField")}
             </button>
-            <button type="button" onClick={() => setDraft(undefined)}>
-              {t("cancelEdit")}
-            </button>
-          </div>
-        ) : editable ? (
-          <button
-            ref={index === 0 ? firstEditRef : undefined}
-            type="button"
-            className="consult-edit"
-            onClick={() =>
-              setDraft({ path, value: text === emptyText ? "" : text })
-            }
-          >
-            {t("editField")}
-          </button>
-        ) : null}
+          ) : null}
+        </dd>
       </div>
     );
   }

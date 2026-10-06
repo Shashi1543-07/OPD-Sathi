@@ -1,6 +1,6 @@
 # Phase 7 progress report
 
-**Status:** In progress on `phase-07-consoles`. Phase 6 is integrated into `main` as merge commit `0c833c3`; Phase 7 is tracked by draft PR #5. Steps 7.1–7.5 are implemented; the full Phase 7 acceptance gate is not complete.
+**Status:** Phase 7 implementation and browser/API acceptance checks are complete on `phase-07-consoles`. The phase acceptance gate remains open because backend-wide coverage measured **67%**, below the playbook's **80%** target. Phase 6 is integrated into `main` as merge commit `0c833c3`; all Phase 7 test data is synthetic.
 
 ## Completed work
 
@@ -55,6 +55,40 @@ The complete local backend suite was also attempted: **318 passed**, one Redis w
 - Existing nurse queue tools handle red-flag acknowledgement, route confirmation, reasoned urgency override, and no-show. API access is constrained to the nurse's active department.
 - Verification: `pytest services/api/tests/unit/test_intake.py -q` — **5 passed**; `npm test -- --reporter=dot` — **26 passed across 8 files**; Ruff, strict mypy, Bandit, frontend typecheck, ESLint, locale parity (**269 keys per language**), production build, and `git diff --check` passed.
 
-## Remaining Phase 7 work
+### 7.6 Administrator console
 
-Steps 7.6–7.9 remain: admin screens; multilingual PDF; UI states and print styling; and full browser/access/performance gates. The 5,000-row render/update-under-100-ms acceptance measurement, full audit assertions, axe run, human verification, and screenshots are still pending.
+- The administrator manages hospital departments, staff accounts, and kiosks. Activation codes are held in the current screen state; retrying an idempotent kiosk create cannot replay its secret.
+- Verification: frontend **27 tests across 9 files**, strict TypeScript, ESLint, locale parity (**310 keys per language**), 53 domain-data API tests, Ruff, and strict mypy passed.
+
+### 7.7 Multilingual case-sheet PDF
+
+- Added audited, department-scoped `GET /visits/{id}/case-sheet.pdf`, an A4 template with English, Hindi, and Marathi labels, token and attention reasons, history sections, and the history-only footer. The doctor screen downloads through authenticated API requests.
+- Verification: PDF/API **7 tests passed**; extracted text contained the synthetic Hindi complaint, queue number, attention reason, and disclaimer. `pdfinfo` reported **1 A4 page**. Across 25 warmed renders, p50 was **64.94 ms**, p95 **79.93 ms**, max **82.08 ms** (limit **1,500 ms**).
+- Screenshot: [synthetic A4 case sheet](../screenshots/phase-07/case-sheet-synthetic.png), rendered and visually checked.
+
+### 7.8 Loading, empty, error, and print states
+
+- Queue and doctor views expose loading, empty, and retry states. Print CSS keeps the case sheet and footer visible while hiding navigation, editing controls, conflict dialog, and transcript.
+- Verification: frontend **32 tests across 9 files**; typecheck, ESLint, locale parity (**316 keys per language**), contrast (**12 pairs**), and production build passed. Bundle: **479.04 kB** JavaScript (**149.44 kB gzip**).
+
+### 7.9 Browser, access, audit, and performance results
+
+- Full browser regression: **107 passed**. Focused Phase 7 browser suite: **5 passed**. Existing role/navigation tests cover all **18 role/page combinations**; doctor and nurse route restrictions pass.
+- Two-browser doctor editing returns **409** for the stale edit and the merge/reapply flow succeeds. PDF download and browser print visibility pass. Nurse consent is displayed before identity fields; no identity request is sent until the consent action. Admin kiosk activation code appears once and disappears after dismissal.
+- axe measured **0 serious/critical** findings each on doctor, nurse, and admin screens. The 5,000-row queue renders fewer than **50** rows; its urgent WebSocket update applied in **18.90 ms** (limit **<100 ms**).
+- Backend command: `docker compose run --rm -T --no-deps -e WORKER_DATABASE_URL= -v /mnt/c/Users/lenovo/Downloads/OPD-Sathi:/workspace -w /workspace api python -m pytest services/api/tests --cov=services/api/app --cov-report=term-missing -q` — **340 passed**. Case-sheet reads, transcript reads, and PDF exports have explicit audit assertions; case-sheet and transcript content is not copied into audit metadata.
+- Coverage: combined `app/core` + `app/domain` **97%** (threshold **95%**, pass); backend overall **67%** (threshold **80%**, fail). The tested Phase 7 features pass; the overall acceptance gate remains open until backend-wide test coverage reaches 80%. No coverage threshold was changed.
+- Frontend commands: `npm --prefix apps/web test -- --reporter=dot` (**32 passed**), `npm --prefix apps/web run e2e -- --workers=1` (**107 passed**), `typecheck`, `lint`, `check-locales` (**316 keys/language**), `check-contrast` (**12 pairs**), and `build` (all pass).
+- Screenshots: [doctor print view](../screenshots/phase-07/doctor-consultation-print.png), [nurse consent before identity](../screenshots/phase-07/nurse-consent-before-identity.png), [identity after consent](../screenshots/phase-07/nurse-identity-after-consent.png), [one-time kiosk code](../screenshots/phase-07/admin-kiosk-one-time-code.png), and [code dismissed](../screenshots/phase-07/admin-kiosk-code-dismissed.png).
+
+## Remaining acceptance work
+
+Increase backend-wide coverage from **67%** to at least **80%** with real tests and rerun the full backend coverage command. The human owner should also follow the synthetic manual verification steps in [the Phase 7 plan](../phase-plans/phase-07.md). Do not proceed to Phase 8 until the open coverage gate is resolved and the human explicitly approves Phase 7.
+
+## Manual verification
+
+Use only the synthetic seeded hospital. Sign in as a doctor, open a queued visit, edit a history field, export its PDF, and confirm the footer and one-page layout. Open the same visit in a second browser, save an edit in the first, then verify the second sees a conflict and can reapply its edit. Sign in as a nurse and verify consent appears before identity entry; review an alert and use an override only with a reason. Sign in as admin, create a synthetic kiosk, copy the activation code, dismiss it, and confirm it no longer appears. Never enter real patient information.
+
+## Next phase preview
+
+Phase 8 adds speech-to-text adapters, beginning with current provider documentation and an ADR, then mock/provider fallbacks, bounded audio transport, microphone permission and voice activity states, transcript editing, and multilingual voice tests. It must wait until Phase 7's backend-wide coverage gate reaches **80%** and the human replies `approve phase 7`.

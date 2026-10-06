@@ -920,15 +920,22 @@
   border-bottom: 1px solid var(--border);
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(120px, 1fr) 3fr auto;
+  grid-template-columns: minmax(120px, 1fr) 3fr;
   padding: 12px 0;
 }
 .consult-field dt {
   font-weight: 700;
 }
 .consult-field dd {
+  align-items: start;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
   margin: 0;
   overflow-wrap: anywhere;
+}
+.consult-field-value {
+  grid-column: 1 / -1;
 }
 .consult-field dd small,
 .consult-transcript small,
@@ -946,7 +953,9 @@
 .consult-field-actions {
   display: flex;
   gap: 6px;
-  grid-column: 2 / -1;
+  grid-column: 2;
+  grid-row: 2;
+  justify-content: end;
 }
 .consult-sheet section {
   border-bottom: 1px solid var(--border);

@@ -133,8 +133,8 @@ Code and local tests for steps 5.1–5.10 are recorded in the [Phase 5 report](d
 - [x] 7.6 Build admin user, kiosk, and department screens.
 - [x] 7.7 Add audited multilingual PDF export and text-content tests.
 - [x] 7.8 Complete loading/empty/error states and print styles.
-- [ ] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests.
-- [ ] Gate: complete role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and coverage thresholds.
+- [x] 7.9 Add doctor/nurse/admin Playwright and access/conflict tests; full browser regression 107/107, axe 0 serious/critical, 5,000-row update 18.90 ms, and all case-sheet/transcript read audit assertions pass.
+- [ ] Gate: role matrix, edit conflict, PDF latency/content, large queue/live update, audit, accessibility, and combined core/domain coverage pass; backend-wide coverage is 67% against the 80% target. See the [Phase 7 report](docs/phase-reports/phase-07.md).
 
 ## Phase 8 — Voice input
 
