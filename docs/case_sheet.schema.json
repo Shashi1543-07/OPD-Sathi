@@ -53,6 +53,11 @@
         "confirmed": {
           "title": "Confirmed",
           "type": "boolean"
+        },
+        "ai_assisted": {
+          "default": false,
+          "title": "Ai Assisted",
+          "type": "boolean"
         }
       },
       "required": [
