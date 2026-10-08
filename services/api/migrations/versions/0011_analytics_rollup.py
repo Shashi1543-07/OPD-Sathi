@@ -95,5 +95,9 @@ def downgrade() -> None:
     op.execute("REVOKE SELECT (hospital_id, visit_id, created_at) ON public.interview_turns "
                 "FROM osa_analytics_worker")
     op.execute("SET ROLE osa_analytics_worker")
-    op.execute("DROP SCHEMA osa_analytics CASCADE")
+    # The schema itself belongs to database bootstrap (init-db.sh), so only drop what
+    # this revision created; otherwise a later upgrade has nowhere to build the views.
+    op.execute("DROP VIEW IF EXISTS osa_analytics.analytics_daily_department_tenant")
+    op.execute("DROP MATERIALIZED VIEW IF EXISTS osa_analytics.analytics_daily_department")
+    op.execute("REVOKE USAGE ON SCHEMA osa_analytics FROM osa_app")
     op.execute("RESET ROLE")

@@ -62,6 +62,11 @@ test("staff case sheet shows source, confidence and AI assistance accessibly", a
       },
     }),
   );
+  await page.route(
+    (url) => new URL(url).pathname === "/queue",
+    (route) =>
+      route.fulfill({ json: { items: [], departments: [], next_cursor: null, limit: 50 } }),
+  );
   await page.route(`**/visits/${visitId}/transcript`, (route) =>
     route.fulfill({ json: { visit_id: visitId, turns: [] } }),
   );

@@ -131,6 +131,30 @@ async def _limit_request(
         )
 
 
+@router.get("/auth/hospitals")
+async def hospital_directory(request: Request) -> dict[str, Any]:
+    """List hospital names for the staff sign-in picker (no staff or patient data)."""
+    settings: Settings = request.app.state.settings
+    if not settings.public_hospital_directory or not settings.worker_database_url:
+        return {"items": []}
+    engine = getattr(request.app.state, "directory_engine", None)
+    if engine is None:
+        from app.db.session import create_engine
+
+        engine = create_engine(settings.worker_database_url)
+        request.app.state.directory_engine = engine
+    try:
+        async with engine.connect() as connection:
+            rows = (
+                await connection.execute(
+                    text("SELECT id, name FROM hospitals ORDER BY created_at LIMIT 50")
+                )
+            ).all()
+    except Exception:
+        return {"items": []}
+    return {"items": [{"id": str(row.id), "name": row.name} for row in rows]}
+
+
 @router.post("/auth/login")
 async def login(payload: LoginPayload, request: Request, response: Response) -> dict[str, Any]:
     settings: Settings = request.app.state.settings

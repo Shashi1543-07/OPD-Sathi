@@ -104,6 +104,11 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
 
   async function setupDoctor(page: Page) {
     await mockStaffSession(page, "doctor");
+    await page.route(
+      (url) => isQueueApiRequest(url.href),
+      (route) =>
+        route.fulfill({ json: { items: [], departments: [], next_cursor: null, limit: 50 } }),
+    );
     await page.route(`**/visits/${visitId}/transcript`, (route) =>
       route.fulfill({ json: { visit_id: visitId, turns: [] } }),
     );
@@ -142,7 +147,10 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
         value: string;
       }[];
       for (const operation of operations) {
-        if (operation.path === "/chief_complaint/text_original") {
+        if (
+          operation.path === "/chief_complaint/text_original" ||
+          operation.path === "/chief_complaint/text_en"
+        ) {
           shared.caseSheet.chief_complaint.text_original = operation.value;
           shared.caseSheet.chief_complaint.text_en = operation.value;
         }
@@ -189,9 +197,10 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain(visitId);
   await first.emulateMedia({ media: "print" });
-  await expect(first.locator(".consult-sheet")).toBeVisible();
-  await expect(first.locator(".consult-transcript")).toBeHidden();
-  await expect(first.locator(".consult-header")).toBeHidden();
+  await expect(first.locator(".cx-sheet")).toBeVisible();
+  await expect(first.locator(".cx-transcript")).toBeHidden();
+  await expect(first.locator(".cx-actions")).toBeHidden();
+  await expect(first.locator(".cx-rail")).toBeHidden();
   await saveScreenshot(first, "doctor-consultation-print.png");
 
   await firstContext.close();
@@ -203,6 +212,9 @@ test("nurse assisted registration presents consent before collecting identity", 
 }) => {
   await mockStaffSession(page, "nurse");
   let identitySubmissions = 0;
+  await page.route((url) => url.pathname === "/patients", (route) =>
+    route.fulfill({ json: { items: [], limit: 200 } }),
+  );
   await page.route("**/intake/assisted-sessions", (route) =>
     route.fulfill({
       json: {
@@ -228,7 +240,7 @@ test("nurse assisted registration presents consent before collecting identity", 
 
   await page.goto("/staff/patients");
   await expect(
-    page.getByRole("heading", { name: "Nurse console" }),
+    page.getByRole("heading", { name: "Patients", exact: true }),
   ).toBeVisible();
   await runAxe(page);
   await page
@@ -237,12 +249,12 @@ test("nurse assisted registration presents consent before collecting identity", 
   await expect(
     page.getByText("Synthetic consent text for the test patient."),
   ).toBeVisible();
-  await expect(page.getByLabel("Patient name")).toHaveCount(0);
+  await expect(page.getByLabel("Patient's full name")).toHaveCount(0);
   await saveScreenshot(page, "nurse-consent-before-identity.png");
   await page
-    .getByRole("button", { name: "I agree and want to continue" })
+    .getByRole("button", { name: "I agree, continue" })
     .click();
-  await expect(page.getByLabel("Patient name")).toBeVisible();
+  await expect(page.getByLabel("Patient's full name")).toBeVisible();
   expect(identitySubmissions).toBe(0);
   await saveScreenshot(page, "nurse-identity-after-consent.png");
 });
@@ -283,6 +295,36 @@ test("administrator creates a kiosk and dismisses its one-time activation code",
   await page.getByRole("button", { name: "I copied the code" }).click();
   await expect(page.getByText("synthetic-one-time-activation")).toHaveCount(0);
   await saveScreenshot(page, "admin-kiosk-code-dismissed.png");
+});
+
+test("admin Judge Mode lands on reports and keeps the staff explainer visible", async ({
+  page,
+}) => {
+  await mockStaffSession(page, "admin");
+  await page.route("**/analytics/summary", (route) =>
+    route.fulfill({
+      json: {
+        patients: 12,
+        average_wait_seconds: 240,
+        average_consult_seconds: 360,
+        urgent_count: 2,
+        language_mix: { hi: 8, en: 4 },
+        average_interview_seconds: 90,
+        confirmed_without_edits_percent: 75,
+        doctor_edit_rate_percent: 25,
+        department_load: [],
+      },
+    }),
+  );
+  await page.route("**/analytics/timeseries?days=30", (route) =>
+    route.fulfill({ json: { days: 30, items: [] } }),
+  );
+
+  await page.goto("/staff?demo=1");
+  await expect(page).toHaveURL(/\/staff\/reports\?demo=1$/);
+  await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
+  await page.getByText("How it works").click();
+  await expect(page.getByText(/Approved interview questions collect/)).toBeVisible();
 });
 
 test("doctor and nurse routes stay inside their role access map", async ({
@@ -377,8 +419,8 @@ test("5,000-row virtual queue applies a live urgent update in under 100 ms", asy
   await expect(
     page.getByRole("region", { name: "Queue patients" }),
   ).toBeVisible();
-  await expect(page.locator(".staff-queue-item").first()).toBeVisible();
-  const renderedRows = await page.locator(".staff-queue-item").count();
+  await expect(page.locator(".qb-item").first()).toBeVisible();
+  const renderedRows = await page.locator(".qb-item").count();
   expect(renderedRows).toBeLessThan(50);
 
   await page.evaluate(() => {
@@ -405,7 +447,7 @@ test("5,000-row virtual queue applies a live urgent update in under 100 ms", asy
       ],
     }),
   );
-  await expect(page.locator(".staff-queue-item--urgent strong")).toHaveText(
+  await expect(page.locator(".qb-item--urgent strong")).toHaveText(
     "GEN-0001",
   );
   const elapsed = await page.evaluate(

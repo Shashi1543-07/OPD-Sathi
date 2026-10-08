@@ -3,6 +3,7 @@
 from typing import Any
 
 from app.ai.providers.llm.base import LLMProvider
+from app.ai.providers.llm.demo_safe import DemoSafeLLM
 from app.ai.providers.llm.gemini import GeminiProvider, RedisSessionCallBudget
 from app.ai.providers.llm.mock import MockLLM
 from app.config import Settings
@@ -15,7 +16,9 @@ def build_llm_provider(
     client: Any | None = None,
 ) -> LLMProvider:
     """Return a fixture-only Mock unless Gemini is explicitly enabled."""
-    if settings.llm_provider == "mock":
+    if settings.provider_mode == "demo-safe":
+        return DemoSafeLLM()
+    if settings.resolved_llm_provider == "mock":
         return MockLLM()
     if not settings.gemini_api_key.strip():
         raise ValueError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
@@ -30,4 +33,7 @@ def build_llm_provider(
         max_calls_per_session=settings.llm_max_calls_per_session,
         max_output_tokens=settings.llm_max_output_tokens,
         client=client,
+        tts_model=settings.gemini_tts_model,
+        tts_voice=settings.gemini_tts_voice,
+        thinking_level=settings.llm_thinking_level,
     )

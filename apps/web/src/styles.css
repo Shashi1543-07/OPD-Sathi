@@ -1,29 +1,56 @@
 @import "tailwindcss";
 @import "./styles/tokens.css";
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html {
   min-width: 320px;
-  min-height: 100%;
+  height: 100%;
   font-family: var(--font-family-sans);
   font-size: 100%;
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
   background: var(--bg);
+  color: var(--navy-900);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
 }
 
 body {
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100%;
   margin: 0;
   color: var(--navy-900);
   background: var(--bg);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-staff);
   line-height: var(--line-height-latin);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar customization with legacy fallback */
+* {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+@supports not (scrollbar-color: auto) {
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 button,
@@ -31,10 +58,11 @@ input,
 select,
 textarea {
   font: inherit;
+  color: inherit;
 }
 
 button {
-  color: inherit;
+  cursor: pointer;
 }
 
 button:focus-visible,
@@ -43,7 +71,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: var(--focus-width) solid var(--info);
+  outline: var(--focus-width) solid var(--primary);
   outline-offset: var(--focus-gap);
   box-shadow: 0 0 0 calc(var(--focus-gap) + var(--focus-width)) var(--surface);
 }
@@ -53,10 +81,32 @@ textarea:focus-visible,
   background: var(--primary-tint);
 }
 
+/* Typography Hierarchy */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--navy-900);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+  text-wrap: balance;
+  margin: 0;
+}
+
+p, li {
+  text-wrap: pretty;
+}
+
+.eyebrow {
+  color: var(--primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
 .shell {
   width: min(calc(100% - 2 * var(--space-4)), 56rem);
-  margin: clamp(var(--space-8), 10vh, var(--space-16)) auto;
-  padding: clamp(var(--space-4), 4vw, var(--space-8));
+  margin: clamp(var(--space-6), 6vh, var(--space-12)) auto;
+  padding: clamp(var(--space-4), 3vw, var(--space-6));
   border: 1px solid var(--border);
   border-radius: var(--radius-card-value);
   background: var(--surface);
@@ -64,51 +114,19 @@ textarea:focus-visible,
 }
 
 [data-layout="kiosk"] {
-  min-height: 100vh;
+  min-height: 100dvh;
   font-size: var(--font-size-kiosk);
   line-height: var(--line-height-latin);
 }
 
 [data-layout="staff"] {
-  min-height: 100vh;
+  height: 100dvh;
   font-size: var(--font-size-staff);
   line-height: var(--line-height-latin);
 }
 
 [data-layout="staff"] table {
   font-size: var(--font-size-staff-table);
-}
-
-.eyebrow {
-  color: var(--primary);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-h1 {
-  margin: 0.4em 0 0.5em;
-  color: var(--navy-900);
-  font-size: clamp(2rem, 6vw, var(--font-size-kiosk-headline));
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
-@media (min-width: 48rem) {
-  [data-layout="kiosk"] {
-    padding: var(--space-8);
-  }
-}
-
-@media (min-width: 80rem) {
-  [data-layout="kiosk"] {
-    padding: var(--space-12) var(--space-16);
-  }
-}
-
-@media (min-width: 85.375rem) {
-  [data-layout="staff"] {
-    padding: var(--space-8);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

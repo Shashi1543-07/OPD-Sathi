@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -22,29 +22,27 @@ const caseSheet = {
     text_en: "sharp synthetic pain",
     confidence: 0.9,
   },
-  hpi: {
-    onset: {
-      text_original: "two days",
-      text_en: "two days",
-      confidence: 0.9,
-    },
-    severity_0_10: 5,
-    associated_symptoms: [],
-  },
+  hpi: { severity_0_10: 5, associated_symptoms: [] },
   past_history: { conditions: [] },
   medications: [],
   allergies: [],
   family_history: [],
   red_flags: [],
-  routing: {
-    department_code: "GENMED",
-    confidence: 0.9,
-    reason_en: "Synthetic routing fixture.",
-    needs_nurse_confirmation: false,
-  },
+};
+const durationQuestion = {
+  id: "duration",
+  input: "text",
+  optional: true,
+  multi: false,
+  prompt: "Since when do you have this problem?",
+  options: [],
 };
 
-async function seedSummary(page: import("@playwright/test").Page) {
+async function seedSummary(page: Page) {
+  await page.route("**/healthz", (route) => route.fulfill({ json: { status: "ok" } }));
+  await page.route("**/intake/capabilities", (route) =>
+    route.fulfill({ json: { stt: "browser", tts: "browser", ai: false } }),
+  );
   await page.addInitScript((session) => {
     sessionStorage.setItem("osa.patient.session", JSON.stringify(session));
   }, patientSession);
@@ -54,47 +52,29 @@ async function seedSummary(page: import("@playwright/test").Page) {
         complete: true,
         case_sheet: caseSheet,
         readback: "Synthetic fixed-template read-back.",
-        answered: [
-          {
-            id: "duration",
-            input: "text",
-            optional: true,
-            prompt: "How long has this been happening?",
-            answer: "two days",
-          },
-        ],
+        answered: [{ ...durationQuestion, answer: "two days" }],
       },
     }),
   );
 }
 
-test("correction returns to the exact question and updates the read-back", async ({
+test("a correction returns to the exact question and updates the read-back", async ({
   page,
 }) => {
   await seedSummary(page);
   let correctionBody: Record<string, unknown> | undefined;
   await page.route("**/intake/sessions/*/interview/answers", async (route) => {
+    expect(route.request().method()).toBe("PATCH");
     correctionBody = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({
       json: {
         complete: true,
         case_sheet: {
           ...caseSheet,
-          hpi: { ...caseSheet.hpi, onset: { text_original: "three days" } },
-          red_flags: [
-            { id: "DS_CHEST", level: "urgent", source: "rule", evidence: "chest pain" },
-          ],
+          red_flags: [{ id: "RF_CHEST_PAIN", level: "priority", source: "rule", evidence: "chest pain" }],
         },
         readback: "Updated synthetic read-back: three days.",
-        answered: [
-          {
-            id: "duration",
-            input: "text",
-            optional: true,
-            prompt: "How long has this been happening?",
-            answer: "three days",
-          },
-        ],
+        answered: [{ ...durationQuestion, answer: "three days" }],
       },
     });
   });
@@ -114,45 +94,56 @@ test("correction returns to the exact question and updates the read-back", async
 
   await page.goto("/kiosk/intake");
   await expect(page.getByText("Synthetic fixed-template read-back.")).toBeVisible();
-  await page.getByRole("button", { name: "Change: How long has this been happening?" }).click();
-  const answer = page.getByRole("textbox", { name: "Type your answer" });
-  await expect(answer).toBeVisible();
+  await page.getByRole("button", { name: "Change: Since when do you have this problem?" }).click();
+  await expect(page.getByRole("heading", { name: durationQuestion.prompt })).toBeVisible();
+  const answer = page.getByRole("textbox");
   await answer.fill("three days");
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: /Save change|Next/ }).click();
   await expect(page.getByText("Updated synthetic read-back: three days.")).toBeVisible();
-  await expect(page.getByText("Please inform the staff at the desk now.")).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: "Please tell the staff at the desk now." })).toBeVisible();
   expect(correctionBody).toMatchObject({ question_id: "duration", answer: "three days" });
+
   const screenshotDir = resolve(process.cwd(), "..", "..", "docs", "screenshots", "phase-10");
   mkdirSync(screenshotDir, { recursive: true });
-  await page.screenshot({
-    path: resolve(screenshotDir, "s6-summary-after-correction.png"),
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "This is correct" }).click();
+  await page.screenshot({ path: resolve(screenshotDir, "s6-summary-after-correction.png"), fullPage: true });
+  await page.getByRole("button", { name: "Yes, this is correct" }).click();
   await expect(page.getByText("SYN-010")).toBeVisible();
   expect(confirmCalls).toBe(1);
 });
 
-test("TTS failure leaves read-back text available without an error message", async ({
-  page,
-}) => {
+test("Listen reads the summary aloud with the browser voice", async ({ page }) => {
   await seedSummary(page);
-  let audioRequests = 0;
-  await page.route("**/readback-audio", async (route) => {
-    audioRequests += 1;
-    await route.fulfill({ status: 503, json: { detail: "synthetic provider failure" } });
+  await page.addInitScript(() => {
+    const spoken: Array<{ text: string; lang: string }> = [];
+    Object.defineProperty(window, "__spokenPrompts", { value: spoken });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        cancel() {},
+        getVoices: () => [],
+        speak(utterance: SpeechSynthesisUtterance) {
+          spoken.push({ text: utterance.text, lang: utterance.lang });
+        },
+      },
+    });
   });
   await page.goto("/kiosk/intake");
   await expect(page.getByText("Synthetic fixed-template read-back.")).toBeVisible();
-  await page.getByRole("button", { name: "Read aloud" }).click();
-  await expect.poll(() => audioRequests).toBe(1);
-  await expect(page.getByText("Synthetic fixed-template read-back.")).toBeVisible();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  // Voice guidance may already be reading the summary; otherwise tap Listen.
+  const listen = page.locator(".intake-readback").getByRole("button", { name: /Listen/ });
+  if (await listen.isVisible()) await listen.click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __spokenPrompts?: Array<{ text: string; lang: string }> })
+            .__spokenPrompts,
+      ),
+    )
+    .toContainEqual({ text: "Synthetic fixed-template read-back.", lang: "en-IN" });
 });
 
-test("summary idle timeout flags nurse assistance after 90 seconds", async ({
-  page,
-}) => {
+test("a patient idle on the review screen for 90 seconds gets a nurse", async ({ page }) => {
   await page.clock.install();
   await seedSummary(page);
   let assistanceCalls = 0;
@@ -162,7 +153,7 @@ test("summary idle timeout flags nurse assistance after 90 seconds", async ({
   });
   await page.goto("/kiosk/intake");
   await expect(page.getByText("Synthetic fixed-template read-back.")).toBeVisible();
-  await page.clock.fastForward(90_000);
-  await expect(page.getByRole("status")).toHaveText("A nurse will help you");
-  expect(assistanceCalls).toBe(1);
+  await page.clock.fastForward(91_000);
+  await expect(page.getByText("A nurse will help you")).toBeVisible();
+  await expect.poll(() => assistanceCalls).toBe(1);
 });

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const localeRoot = fileURLToPath(new URL("../src/locales/", import.meta.url));
 const languages = ["en", "hi", "mr"];
-const namespaces = ["common", "kiosk", "staff", "status"];
+const namespaces = ["common", "kiosk", "intake", "staff", "status"];
 const flatten = (object, prefix = "") =>
   Object.entries(object).flatMap(([key, value]) => {
     const fullKey = prefix ? `${prefix}.${key}` : key;

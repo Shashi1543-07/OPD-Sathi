@@ -6,6 +6,7 @@ import {
   Headphones,
   LoaderCircle,
   Mic,
+  PhoneCall,
   Volume2,
 } from "lucide-react";
 import {
@@ -53,10 +54,10 @@ export function Button({
   );
 }
 
-const languageNames: { code: Language; label: string }[] = [
-  { code: "hi", label: "हिन्दी" },
-  { code: "mr", label: "मराठी" },
-  { code: "en", label: "English" },
+const languageNames: { code: Language; label: string; subLabel: string }[] = [
+  { code: "hi", label: "हिन्दी", subLabel: "Hindi" },
+  { code: "mr", label: "मराठी", subLabel: "Marathi" },
+  { code: "en", label: "English", subLabel: "English" },
 ];
 
 export function LanguageTile({
@@ -69,20 +70,32 @@ export function LanguageTile({
   const active = useLanguageStore((state) => state.language);
   const setLanguage = useLanguageStore((state) => state.setLanguage);
   const entry = languageNames.find((item) => item.code === language);
+  const isSelected = active === language;
+  const displayLabel = label ?? entry?.label ?? "English";
   return (
     <button
       className="ui-language-tile"
       type="button"
-      aria-pressed={active === language}
+      aria-pressed={isSelected}
+      aria-label={displayLabel}
       onClick={() => setLanguage(language)}
     >
       <span
         className="ui-language-script"
         lang={language === "xa" ? "en" : language}
       >
-        {label ?? entry?.label ?? "English"}
+        {displayLabel}
       </span>
-      {active === language && <Check aria-hidden="true" />}
+      {entry?.subLabel && (
+        <span className="ui-language-subscript" aria-hidden="true">
+          {entry.subLabel}
+        </span>
+      )}
+      {isSelected && (
+        <span className="ui-language-badge" aria-hidden="true">
+          <Check />
+        </span>
+      )}
     </button>
   );
 }
@@ -105,7 +118,7 @@ export function DangerTile({
     >
       <AlertTriangle aria-hidden="true" />
       <span>{label}</span>
-      {selected && <Check aria-hidden="true" />}
+      {selected ? <Check aria-hidden="true" /> : <span aria-hidden="true" />}
     </button>
   );
 }
@@ -319,8 +332,41 @@ export function ConfidenceChip({ value }: { value: number }) {
   );
 }
 
-export function HelpButton({ onClick }: { onClick?: () => void }) {
+export function HelpButton({
+  onClick,
+  variant = "button",
+  tooltipTitle,
+  tooltipDesc,
+}: {
+  onClick?: () => void;
+  variant?: "button" | "tool";
+  tooltipTitle?: string;
+  tooltipDesc?: string;
+}) {
   const { t } = useTranslation("common");
+  const label = tooltipTitle ?? t("callStaff");
+  const fullTitle = tooltipDesc ? `${label} — ${tooltipDesc}` : label;
+
+  if (variant === "tool") {
+    return (
+      <div className="kiosk-tool-item">
+        <button
+          type="button"
+          className="ui-tool-button"
+          onClick={onClick}
+          aria-label={label}
+          title={fullTitle}
+        >
+          <PhoneCall aria-hidden="true" />
+        </button>
+        <div className="ui-tooltip" role="tooltip">
+          <strong>{label}</strong>
+          {tooltipDesc && <span>{tooltipDesc}</span>}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Button
       variant="secondary"
@@ -414,12 +460,16 @@ export function ConfirmDialog({
   children,
   onConfirm,
   onCancel,
+  confirmLabel,
+  cancelLabel,
 }: {
   open: boolean;
   title: string;
   children?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
+  confirmLabel?: string;
+  cancelLabel?: string;
 }) {
   const { t } = useTranslation("common");
   const dialogRef = useRef<HTMLElement>(null);
@@ -439,9 +489,9 @@ export function ConfirmDialog({
         {children && <div>{children}</div>}
         <div className="ui-dialog-actions">
           <Button variant="secondary" onClick={onCancel}>
-            {t("cancel")}
+            {cancelLabel ?? t("cancel")}
           </Button>
-          <Button onClick={onConfirm}>{t("confirm")}</Button>
+          <Button onClick={onConfirm}>{confirmLabel ?? t("confirm")}</Button>
         </div>
       </section>
     </div>

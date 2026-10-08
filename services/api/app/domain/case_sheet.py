@@ -92,6 +92,15 @@ class FieldMeta(StrictModel):
     ai_assisted: bool = False
 
 
+class AISummary(StrictModel):
+    """Doctor-facing English translation produced by the language model; history only."""
+
+    brief_en: Annotated[str, Field(max_length=600)]
+    answers_en: dict[Annotated[str, Field(max_length=80)], Text] = Field(default_factory=dict)
+    model: Annotated[str, Field(max_length=80)] = ""
+    generated_at: Annotated[str, Field(max_length=40)] = ""
+
+
 class CaseSheet(StrictModel):
     schema_version: Literal["1.0"]
     language: Literal["en", "hi", "mr"]
@@ -107,6 +116,11 @@ class CaseSheet(StrictModel):
     routing: Routing
     field_meta: dict[str, FieldMeta] = Field(default_factory=dict)
     patient_confirmation: PatientConfirmation = Field(default_factory=PatientConfirmation)
+    ai_summary: AISummary | None = None
+    # English text of the AI follow-up questions this patient was asked, keyed by id.
+    followup_questions: dict[Annotated[str, Field(max_length=80)], Text] = Field(
+        default_factory=dict
+    )
     disclaimer: Text = (
         "Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis."
     )

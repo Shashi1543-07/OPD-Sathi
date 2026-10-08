@@ -51,6 +51,13 @@ def test_patient_content_cannot_close_the_untrusted_data_boundary() -> None:
 
 def test_prompt_logging_contains_only_task_version_and_template_hash() -> None:
     secret = "synthetic-patient-secret@example.test"
+    # API tests may have enabled structlog's first-use cache in app startup.
+    # This test installs a temporary capture processor, so each logger lookup
+    # must bind against the active test processor instead of a cached PrintLogger.
+    structlog.configure(
+        wrapper_class=structlog.BoundLogger,
+        cache_logger_on_first_use=False,
+    )
     with structlog.testing.capture_logs() as entries:
         prompt = build_extraction_prompt(secret, "en")
     assert len(entries) == 1

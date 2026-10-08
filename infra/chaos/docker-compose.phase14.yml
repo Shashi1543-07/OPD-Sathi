@@ -1,0 +1,36 @@
+# Synthetic Phase 14 acceptance stack. Never shares ports or named volumes
+# with the normal developer stack or the Phase 13 recovery drill.
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:25432:5432"
+    labels:
+      opd-saathi.phase14.isolated: "true"
+
+  redis:
+    ports: !override
+      - "127.0.0.1:26379:6379"
+    labels:
+      opd-saathi.phase14.isolated: "true"
+
+  redis-cache:
+    ports: !override
+      - "127.0.0.1:26380:6379"
+    labels:
+      opd-saathi.phase14.isolated: "true"
+
+  api:
+    ports: !override
+      - "127.0.0.1:28000:8000"
+    labels:
+      opd-saathi.phase14.isolated: "true"
+
+  worker:
+    labels:
+      opd-saathi.phase14.isolated: "true"
+
+volumes:
+  postgres_data:
+    name: opd-saathi-phase14-postgres-data
+  redis_data:
+    name: opd-saathi-phase14-redis-data

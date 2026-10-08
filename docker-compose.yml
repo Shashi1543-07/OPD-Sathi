@@ -88,6 +88,8 @@ services:
     command: ["gunicorn", "app.main:app", "--worker-class", "uvicorn_worker.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "2"]
     environment: &app_environment
       APP_ENV: ${APP_ENV:-development}
+      PROVIDER_MODE: ${PROVIDER_MODE:-standard}
+      DEMO_STORY: ${DEMO_STORY:-hindi-fever}
       METRICS_ENABLED: ${METRICS_ENABLED:-false}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -98,6 +100,31 @@ services:
       MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:${OSA_MIGRATOR_PASSWORD}@postgres:5432/${POSTGRES_DB:-osa}
       REDIS_STATE_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       REDIS_CACHE_URL: redis://:${REDIS_PASSWORD}@redis-cache:6379/0
+      JWT_SECRET: ${JWT_SECRET:-development-only-signing-secret-change-before-deploy}
+      JWT_KID: ${JWT_KID:-k1}
+      CURSOR_HMAC_KEY: ${CURSOR_HMAC_KEY:-development-only-cursor-key-change-before-deploy}
+      # AI and speech: "auto" uses whichever keys are present (Sarvam, then Gemini).
+      LLM_ENABLED: ${LLM_ENABLED:-true}
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      LLM_MODEL: ${LLM_MODEL:-gemini-3.5-flash-lite}
+      LLM_FALLBACK_MODEL: ${LLM_FALLBACK_MODEL:-gemini-3.1-flash-lite}
+      LLM_THINKING_LEVEL: ${LLM_THINKING_LEVEL:-minimal}
+      AI_QUESTION_CHOICE: ${AI_QUESTION_CHOICE:-false}
+      AI_FOLLOWUP_QUESTIONS: ${AI_FOLLOWUP_QUESTIONS:-true}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_TTS_MODEL: ${GEMINI_TTS_MODEL:-gemini-3.8-flash-tts}
+      GEMINI_TTS_VOICE: ${GEMINI_TTS_VOICE:-Kore}
+      STT_PROVIDER: ${STT_PROVIDER:-auto}
+      TTS_PROVIDER: ${TTS_PROVIDER:-auto}
+      TTS_MODEL: ${TTS_MODEL:-bulbul:v3}
+      TTS_VOICE: ${TTS_VOICE:-}
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+      NOTIFICATION_PROVIDER: ${NOTIFICATION_PROVIDER:-console}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -130,6 +157,19 @@ services:
         condition: service_healthy
       worker-role-bootstrap:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "127.0.0.1:${WEB_PORT:-5173}:80"
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
   prometheus:

@@ -13,5 +13,6 @@ All patient-facing consent, question-bank, danger-tile, and red-flag content bel
 | `services/api/app/domain/redflags/rules.yaml` | Clinical appropriateness, false-negative/false-positive risks, urgency, Hindi/Marathi/Hinglish wording | Pending |
 | `services/api/app/domain/routing/engine.py` | Department mapping, age/pregnancy modifiers, ambiguity and nurse-triage behavior | Pending |
 | Red-flag patient messages in `services/api/app/api/v1/intake.py` | Confirm neutral wording and Hindi/Marathi translations | Pending |
+| Phase 14 judge-mode disclaimer and staff “How it works” panel | Clinician safety wording plus Hindi/Marathi translation review before localized use | Pending |
 
 No clinical sign-off is implied by passing automated checks. Track reviewer names, dates, and approved content versions here after review.

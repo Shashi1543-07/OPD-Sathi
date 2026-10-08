@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import redis.asyncio as redis
 import structlog
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,6 +24,7 @@ from app.ai.providers.llm.gemini import GeminiProvider
 from app.ai.providers.llm.mock import MockLLM
 from app.ai.providers.stt.factory import build_stt_provider
 from app.ai.providers.tts.factory import build_tts_provider
+from app.ai.speech import SpeechService
 from app.api.v1 import admin as admin_api
 from app.api.v1 import analytics as analytics_api
 from app.api.v1 import audio as audio_api
@@ -32,8 +33,9 @@ from app.api.v1 import auth as auth_api
 from app.api.v1 import case_sheets as case_sheets_api
 from app.api.v1 import intake as intake_api
 from app.api.v1 import queue as queue_api
+from app.api.v1 import speech as speech_api
 from app.config import Settings, get_settings
-from app.core.auth import authentication_gate
+from app.core.auth import AuthenticationGateMiddleware
 from app.core.errors import (
     ApiProblemError,
     api_problem_exception_handler,
@@ -47,6 +49,7 @@ from app.db.session import create_engine, ping_database
 from app.pdf import warm_pdf_renderer
 
 logger = structlog.get_logger(__name__)
+_READINESS_DEPENDENCY_TIMEOUT_SECONDS = 1.0
 
 
 class HttpMetrics:
@@ -91,14 +94,10 @@ class HttpMetrics:
                 lines.append(
                     f'http_request_duration_seconds_bucket{{{labels},le="{bucket:g}"}} {cumulative}'
                 )
-            lines.append(
-                f'http_request_duration_seconds_bucket{{{labels},le="+Inf"}} {count}'
-            )
+            lines.append(f'http_request_duration_seconds_bucket{{{labels},le="+Inf"}} {count}')
             lines.append(f"http_request_duration_seconds_count{{{labels}}} {count}")
             duration_sum = duration_sums[(method, route, status)]
-            lines.append(
-                f"http_request_duration_seconds_sum{{{labels}}} {duration_sum:.9f}"
-            )
+            lines.append(f"http_request_duration_seconds_sum{{{labels}}} {duration_sum:.9f}")
         return "\n".join(lines) + "\n"
 
 
@@ -211,9 +210,29 @@ def create_app(
         app.state.redis_cache = redis_factory(configured.redis_cache_url, decode_responses=True)
         app.state.llm_provider = build_llm_provider(configured, redis=app.state.redis_cache)
         app.state.tts_provider = build_tts_provider(configured)
+        app.state.speech = SpeechService(configured, app.state.llm_provider)
+        logger.info(
+            "providers_selected",
+            llm=getattr(app.state.llm_provider, "name", "mock"),
+            stt=app.state.speech.stt_mode,
+            tts=app.state.speech.tts_mode,
+        )
         try:
             queue_registry = f"osa:{configured.app_env}:qregistry"
             has_worker_registry = callable(getattr(app.state.redis_state, "sismember", None))
+            if configured.worker_database_url and has_worker_registry:
+                from app.workers.main import close_previous_days
+
+                try:
+                    close_engine = create_engine(configured.worker_database_url)
+                    try:
+                        async with close_engine.begin() as connection:
+                            if await close_previous_days(connection):
+                                await app.state.redis_state.srem(queue_registry, "ready")
+                    finally:
+                        await close_engine.dispose()
+                except Exception as exc:
+                    logger.warning("day_close_out_failed", error_type=type(exc).__name__)
             if (
                 configured.worker_database_url
                 and has_worker_registry
@@ -245,6 +264,9 @@ def create_app(
             if isinstance(app.state.llm_provider, GeminiProvider):
                 await app.state.llm_provider.aclose()
             await app.state.engine.dispose()
+            directory_engine = getattr(app.state, "directory_engine", None)
+            if directory_engine is not None:
+                await directory_engine.dispose()
             await app.state.redis_cache.aclose()
             await app.state.redis_state.aclose()
 
@@ -254,7 +276,6 @@ def create_app(
         docs_url=configured.docs_url,
         openapi_url="/openapi.json" if configured.app_env != "production" else None,
         lifespan=lifespan,
-        dependencies=[Depends(authentication_gate)],
     )
     app.state.settings = configured
     app.state.llm_background_tasks = set()
@@ -262,7 +283,9 @@ def create_app(
     app.state.stt_provider = build_stt_provider(configured)
     app.state.llm_provider = MockLLM()
     app.state.tts_provider = build_tts_provider(configured)
+    app.state.speech = SpeechService(configured, app.state.llm_provider)
     app.state.memory_limiter = InMemorySlidingWindow()
+    app.add_middleware(AuthenticationGateMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
     app.add_middleware(HttpMetricsMiddleware)
@@ -302,6 +325,7 @@ def create_app(
     app.include_router(audio_api.router)
     app.include_router(queue_api.router)
     app.include_router(case_sheets_api.router)
+    app.include_router(speech_api.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
@@ -311,11 +335,17 @@ def create_app(
     async def readyz(request: Request) -> Response:
         failures: list[str] = []
         try:
-            await ping_database(request.app.state.engine)
+            await asyncio.wait_for(
+                ping_database(request.app.state.engine),
+                timeout=_READINESS_DEPENDENCY_TIMEOUT_SECONDS,
+            )
         except Exception:
             failures.append("postgres")
         try:
-            await request.app.state.redis_state.ping()
+            await asyncio.wait_for(
+                request.app.state.redis_state.ping(),
+                timeout=_READINESS_DEPENDENCY_TIMEOUT_SECONDS,
+            )
         except Exception:
             failures.append("redis")
         if failures:

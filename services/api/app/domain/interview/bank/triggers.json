@@ -1,54 +1,70 @@
 {
   "review_status": "draft_needs_clinician_review",
   "always": [
-    "general_context",
-    "family_history",
     "past_history",
     "medications",
-    "allergies"
+    "allergies",
+    "family_history",
+    "general_context"
   ],
-  "max_triggered_modules": 4,
+  "max_triggered_modules": 2,
   "keywords": {
+    "fever": [
+      "fever",
+      "temperature",
+      "बुखार",
+      "ज्वर",
+      "ताप"
+    ],
+    "respiratory": [
+      "breath",
+      "cough",
+      "wheez",
+      "phlegm",
+      "साँस",
+      "सांस",
+      "खाँसी",
+      "खांसी",
+      "श्वास",
+      "खोकला",
+      "धाप",
+      "दम",
+      "कफ"
+    ],
+    "digestive": [
+      "stomach",
+      "abdomen",
+      "belly",
+      "vomit",
+      "loose motion",
+      "diarrh",
+      "acidity",
+      "पेट",
+      "उल्टी",
+      "दस्त",
+      "मितली",
+      "पोट",
+      "उलट्या",
+      "जुलाब",
+      "मळमळ",
+      "ओकारी"
+    ],
+    "urinary": [
+      "urine",
+      "urinat",
+      "पेशाब",
+      "लघवी"
+    ],
     "pain": [
       "pain",
       "ache",
       "sore",
       "दर्द",
-      "दर्दनाक",
-      "तकलीफ़",
+      "दुख",
       "वेदना",
-      "दुखणे",
-      "कळ"
-    ],
-    "fever": [
-      "fever",
-      "temperature",
-      "hot",
-      "बुखार",
-      "ताप",
-      "ज्वर"
-    ],
-    "respiratory": [
-      "breath",
-      "breathing",
-      "cough",
-      "साँस",
-      "श्वास",
-      "खाँसी",
-      "खोकला",
-      "धाप",
-      "दम"
-    ],
-    "digestive": [
-      "stomach",
-      "abdomen",
-      "vomit",
-      "पेट",
-      "उल्टी",
-      "मितली",
-      "पोट",
-      "मळमळ",
-      "ओकारी"
+      "कळ",
+      "तकलीफ़",
+      "headache"
     ],
     "skin": [
       "skin",
@@ -56,39 +72,40 @@
       "itch",
       "त्वचा",
       "खुजली",
+      "दाने",
       "खाज",
-      "पुरळ",
-      "रॅश"
-    ],
-    "urinary": [
-      "urine",
-      "urinary",
-      "?????",
-      "पेशाब",
-      "मूत्र",
-      "लघवी",
-      "जळजळ"
+      "पुरळ"
     ],
     "mobility": [
-      "walk",
-      "walking",
-      "move",
-      "चलना",
-      "चलने",
-      "जोड़",
-      "जोड़ों",
-      "चालणे",
-      "सांधे"
+      "injur",
+      "fall",
+      "fell",
+      "accident",
+      "fracture",
+      "sprain",
+      "bite",
+      "चोट",
+      "गिर",
+      "दुर्घटना",
+      "दुखापत",
+      "पडल",
+      "अपघात",
+      "मोच"
     ],
     "sleep_energy": [
-      "sleep",
       "tired",
+      "weak",
       "fatigue",
-      "नींद",
+      "sleep",
+      "dizz",
+      "कमज़ोरी",
+      "कमजोरी",
       "थकान",
-      "झोप",
+      "नींद",
+      "चक्कर",
+      "अशक्त",
       "थकवा",
-      "दमणूक"
+      "झोप"
     ]
   }
 }

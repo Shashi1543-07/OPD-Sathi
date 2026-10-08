@@ -21,7 +21,8 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 AdminPrincipal = Annotated[dict[str, Any], Depends(require_role("admin"))]
 _KOLKATA = timezone(timedelta(hours=5, minutes=30))
 
-_ROLLUP_SELECT = (
+# Each query is one fixed statement; every value is a bound parameter.
+_ROLLUP_DAY_SQL = (
     "SELECT a.service_date, a.department_id, d.name_en, d.name_hi, d.name_mr, "
     "a.patient_count, a.wait_seconds_total, a.wait_sample_count, "
     "a.consult_seconds_total, a.consult_sample_count, a.urgent_count, "
@@ -29,7 +30,21 @@ _ROLLUP_SELECT = (
     "a.confirmed_without_edits_count, a.doctor_edited_count, a.language_mix "
     "FROM osa_analytics.analytics_daily_department_tenant a JOIN departments d "
     "ON d.hospital_id = a.hospital_id AND d.id = a.department_id "
-    "WHERE a.hospital_id = :hospital_id"
+    "WHERE a.hospital_id = :hospital_id AND a.service_date = :service_date"
+)
+_ROLLUP_RANGE_SQL = (
+    "SELECT a.service_date, a.department_id, d.name_en, d.name_hi, d.name_mr, "
+    "a.patient_count, a.wait_seconds_total, a.wait_sample_count, "
+    "a.consult_seconds_total, a.consult_sample_count, a.urgent_count, "
+    "a.interview_seconds_total, a.interview_sample_count, a.confirmed_count, "
+    "a.confirmed_without_edits_count, a.doctor_edited_count, a.language_mix "
+    "FROM osa_analytics.analytics_daily_department_tenant a JOIN departments d "
+    "ON d.hospital_id = a.hospital_id AND d.id = a.department_id "
+    "WHERE a.hospital_id = :hospital_id "
+    "AND a.service_date >= :start_day AND a.service_date <= :end_day "
+    "AND (CAST(:department_id AS uuid) IS NULL "
+    "OR a.department_id = CAST(:department_id AS uuid)) "
+    "ORDER BY a.service_date, d.name_en"
 )
 
 
@@ -150,7 +165,7 @@ async def analytics_summary(request: Request, principal: AdminPrincipal) -> dict
         rows = (
             (
                 await connection.execute(
-                    text(_ROLLUP_SELECT + " AND a.service_date = :service_date"),
+                    text(_ROLLUP_DAY_SQL),
                     {"hospital_id": hospital_id, "service_date": datetime.now(_KOLKATA).date()},
                 )
             )
@@ -170,19 +185,13 @@ async def analytics_timeseries(
     hospital_id, actor_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
     end_day = datetime.now(_KOLKATA).date()
     start_day = end_day - timedelta(days=days - 1)
-    query = text(
-        _ROLLUP_SELECT
-        + " AND a.service_date >= :start_day AND a.service_date <= :end_day"
-        + (" AND a.department_id = :department_id" if department_id else "")
-        + " ORDER BY a.service_date, d.name_en"
-    )
+    query = text(_ROLLUP_RANGE_SQL)
     params: dict[str, Any] = {
         "hospital_id": hospital_id,
         "start_day": start_day,
         "end_day": end_day,
+        "department_id": department_id,
     }
-    if department_id:
-        params["department_id"] = department_id
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         await _record_view(
@@ -241,12 +250,13 @@ async def analytics_export(
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
             result = await connection.stream(
-                text(
-                    _ROLLUP_SELECT
-                    + " AND a.service_date >= :start_day AND a.service_date <= :end_day "
-                    "ORDER BY a.service_date, d.name_en"
-                ),
-                {"hospital_id": hospital_id, "start_day": start_day, "end_day": end_day},
+                text(_ROLLUP_RANGE_SQL),
+                {
+                    "hospital_id": hospital_id,
+                    "start_day": start_day,
+                    "end_day": end_day,
+                    "department_id": None,
+                },
             )
             async for row in result.mappings():
                 writer.writerow(

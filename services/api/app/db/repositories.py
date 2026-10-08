@@ -374,7 +374,8 @@ class QueueRepository:
                         "op": "upsert",
                         "visit_id": str(visit_id),
                         "department_id": str(row_data["department_id"]),
-                        "notify_token": True,
+                        # This payload flag is not a credential or authentication token.
+                        "notify_token": True,  # nosec B105
                     },
                     separators=(",", ":"),
                 ),
@@ -397,6 +398,7 @@ class QueueRepository:
                 for name in (
                     "id",
                     "hospital_id",
+                    "patient_id",
                     "department_id",
                     "status",
                     "urgency",
@@ -457,7 +459,12 @@ class QueueRepository:
         if department_id is not None:
             statement = statement.where(visits.c.department_id == department_id)
         result = await self.connection.execute(statement)
-        return [dict(row) for row in result.mappings().all()]
+        rows = [dict(row) for row in result.mappings().all()]
+        for row in rows:
+            row["case_sheet_data"] = decrypt_case_sheet(
+                row.get("case_sheet_data"), row["visit_id"], self.settings
+            )
+        return rows
 
     async def queue_estimate_inputs(
         self, *, hospital_id: UUID, department_id: UUID
@@ -565,6 +572,23 @@ class QueueRepository:
             {"id": uuid7(), "hospital_id": hospital_id, "payload": json.dumps(event)},
         )
         return {**dict(row), "visit_id": visit_id, "status": target, "override_reason": reason}
+
+
+def decrypt_case_sheet(stored: Any, visit_id: UUID, settings: Settings) -> dict[str, Any] | None:
+    """Decrypt a stored case sheet column value; None when absent or unreadable."""
+    ciphertext = stored.get("ciphertext") if isinstance(stored, dict) else None
+    if not isinstance(ciphertext, str):
+        return None
+    try:
+        plaintext = decrypt_field(
+            ciphertext,
+            key=settings.app_data_key_bytes,
+            associated_data=f"case_sheets:data:{visit_id}",
+        )
+        value = json.loads(plaintext)
+    except Exception:
+        return None
+    return value if isinstance(value, dict) else None
 
 
 class CaseSheetRepository:

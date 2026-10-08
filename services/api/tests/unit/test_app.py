@@ -1,12 +1,33 @@
 import base64
 from uuid import uuid4
 
+from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.core.auth import PUBLIC_ROUTES
+from app.core.auth import PUBLIC_ROUTES, AuthenticationGateMiddleware
 from app.core.security import issue_access_token
 from app.main import create_app
+
+
+def test_http_authentication_gate_does_not_break_websocket_routes() -> None:
+    app = FastAPI()
+    app.add_middleware(AuthenticationGateMiddleware)
+
+    @app.get("/private")
+    async def private_route():
+        return {"ok": True}
+
+    @app.websocket("/ws")
+    async def websocket_route(websocket: WebSocket):
+        await websocket.accept()
+        await websocket.send_text("route-authenticated")
+        await websocket.close()
+
+    with TestClient(app) as client:
+        assert client.get("/private").status_code == 401
+        with client.websocket_connect("/ws") as websocket:
+            assert websocket.receive_text() == "route-authenticated"
 
 
 class FakeConnection:
@@ -77,10 +98,43 @@ def test_metrics_export_uses_bounded_route_labels_and_prometheus_histogram():
 
 
 def test_metrics_are_disabled_by_default():
-    app = create_app(Settings())
+    app = create_app(Settings(metrics_enabled=False))
     with TestClient(app) as client:
         response = client.get("/metrics")
     assert response.status_code == 404
+
+
+def test_readiness_returns_503_for_dependencies_that_exceed_timeout():
+    import asyncio
+    from time import monotonic
+
+    class SlowConnectionContext:
+        async def __aenter__(self):
+            await asyncio.sleep(5)
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+    class SlowEngine(FakeEngine):
+        def connect(self):
+            return SlowConnectionContext()
+
+    class SlowRedis(FakeRedis):
+        async def ping(self):
+            await asyncio.sleep(5)
+
+    app = create_app(
+        Settings(),
+        engine_factory=lambda _url: SlowEngine(),
+        redis_factory=lambda _url, **_kwargs: SlowRedis(),
+    )
+    started = monotonic()
+    with TestClient(app) as client:
+        response = client.get("/readyz")
+    assert response.status_code == 503
+    assert "postgres" in response.json()["detail"]
+    assert "redis" in response.json()["detail"]
+    assert monotonic() - started < 2.5
 
 
 def test_problem_json_and_request_id():

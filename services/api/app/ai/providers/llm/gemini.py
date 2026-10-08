@@ -2,11 +2,15 @@
 
 import asyncio
 import hashlib
+import io
 import json
 import random
-from collections.abc import Mapping
+import wave
+from collections.abc import Callable, Mapping
 from time import monotonic
 from typing import Any, Protocol, cast
+
+import structlog
 
 from app.ai.output_guard import validate_safe_output
 from app.ai.providers.llm.base import (
@@ -16,13 +20,24 @@ from app.ai.providers.llm.base import (
 )
 from app.ai.providers.llm.redaction import redact_pii
 
-MAX_TIMEOUT_SECONDS = 2.5
+# Interactive callers pass their own small budgets; background summaries may wait longer.
+MAX_TIMEOUT_SECONDS = 20.0
 MAX_OUTPUT_TOKENS = 1024
 SESSION_TTL_SECONDS = 2 * 60 * 60
+_LANGUAGE_NAMES = {"en": "English", "hi": "Hindi", "mr": "Marathi"}
+_TRANSCRIPT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"transcript": {"type": "string", "maxLength": 1000}},
+    "required": ["transcript"],
+    "additionalProperties": False,
+}
+
+Guard = Callable[[Any], None]
+_LOGGER = structlog.get_logger(__name__)
 
 
 class _AsyncModels(Protocol):
-    async def generate_content(self, *, model: str, contents: str, config: object) -> object: ...
+    async def generate_content(self, *, model: str, contents: Any, config: object) -> object: ...
 
 
 class _AsyncClient(Protocol):
@@ -64,6 +79,9 @@ class GeminiProvider:
         max_output_tokens: int = MAX_OUTPUT_TOKENS,
         metrics: LLMMetrics | None = None,
         client: _AsyncClient | None = None,
+        tts_model: str = "gemini-3.8-flash-tts",
+        tts_voice: str = "Kore",
+        thinking_level: str | None = "minimal",
     ) -> None:
         if not api_key.strip():
             raise ValueError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
@@ -79,6 +97,9 @@ class GeminiProvider:
         self.max_calls_per_session = max_calls_per_session
         self.max_output_tokens = max_output_tokens
         self.metrics = metrics or LLMMetrics()
+        self.tts_model = tts_model
+        self.tts_voice = tts_voice
+        self.thinking_level = thinking_level or None
         self._client = client or self._create_client(api_key)
         self._failures = 0
         self._opened_at: float | None = None
@@ -127,19 +148,40 @@ class GeminiProvider:
         status = getattr(error, "code", None) or getattr(error, "status_code", None)
         return isinstance(status, int) and (status in {408, 429} or status >= 500)
 
-    async def _generate(self, prompt: str, schema: Mapping[str, Any], model: str) -> object:
+    def _thinking(self) -> Any:
+        from google.genai import types
+
+        if not self.thinking_level:
+            return None
+        return types.ThinkingConfig(thinking_level=self.thinking_level.upper())
+
+    async def _generate(
+        self, prompt: str | list[Any], schema: Mapping[str, Any], model: str
+    ) -> object:
         from google.genai import types
 
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
             response_json_schema=dict(schema),
             max_output_tokens=self.max_output_tokens,
+            thinking_config=self._thinking(),
         )
-        return await self._client.models.generate_content(
-            model=model,
-            contents=redact_pii(prompt),
-            config=config,
-        )
+        contents = redact_pii(prompt) if isinstance(prompt, str) else prompt
+        try:
+            return await self._client.models.generate_content(
+                model=model, contents=contents, config=config
+            )
+        except Exception as exc:
+            status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+            if self.thinking_level and status == 400 and "think" in str(exc).lower():
+                # Some models reject "minimal"; step down to "low" (still fast) before giving
+                # up on the limit entirely, which can make calls take tens of seconds.
+                self.thinking_level = "low" if self.thinking_level == "minimal" else None
+                config.thinking_config = self._thinking()
+                return await self._client.models.generate_content(
+                    model=model, contents=contents, config=config
+                )
+            raise
 
     @staticmethod
     def _decode_response(response: object) -> tuple[dict[str, Any], int, int]:
@@ -169,13 +211,15 @@ class GeminiProvider:
 
     async def generate_json(
         self,
-        prompt: str,
+        prompt: str | list[Any],
         schema: Mapping[str, Any],
-        timeout: float = MAX_TIMEOUT_SECONDS,
+        timeout: float = 2.5,
         model: str | None = None,
         *,
         session_id: str | None = None,
+        guard: Guard | None = validate_safe_output,
     ) -> dict[str, Any]:
+        """Return schema-valid JSON; ``guard`` re-checks content (None only for transcripts)."""
         self.metrics.requests += 1
         started = monotonic()
         timeout = min(timeout, MAX_TIMEOUT_SECONDS)
@@ -219,12 +263,20 @@ class GeminiProvider:
                     )
                     value, prompt_tokens, response_tokens = self._decode_response(response)
                     self._validate_schema(value, schema)
-                    validate_safe_output(value)
+                    if guard is not None:
+                        guard(value)
                     self.metrics.prompt_tokens += prompt_tokens
                     self.metrics.response_tokens += response_tokens
                     self._record_success()
                     return value
                 except Exception as exc:
+                    # Log only the error class and status; never prompt or output content.
+                    _LOGGER.warning(
+                        "llm_call_failed",
+                        model=candidate_model,
+                        error_type=type(exc).__name__,
+                        status=getattr(exc, "code", None) or getattr(exc, "status_code", None),
+                    )
                     if attempt or not self._retryable(exc):
                         break
             self._record_failure()
@@ -236,3 +288,85 @@ class GeminiProvider:
             raise
         finally:
             self.metrics.latencies_ms.append((monotonic() - started) * 1000)
+
+    async def transcribe(
+        self,
+        audio: bytes,
+        *,
+        mime_type: str,
+        language: str,
+        context: str = "",
+        timeout: float = 12.0,
+        session_id: str | None = None,
+    ) -> str:
+        """Transcribe one short patient clip verbatim in the patient's language and script."""
+        from google.genai import types
+
+        language_name = _LANGUAGE_NAMES.get(language, "English")
+        script = "Devanagari script" if language in {"hi", "mr"} else "Latin script"
+        instructions = (
+            "You are a medical-intake speech transcriber at an Indian government hospital. "
+            f"The patient is answering in {language_name} (they may mix in Hindi or English "
+            f"words). Write exactly what was said, in {script}, without translating, "
+            "summarising, correcting medical facts, or adding anything. If the clip has no "
+            "intelligible speech, return an empty transcript."
+        )
+        if context:
+            instructions += f"\nThe question the patient heard was: {context[:300]}"
+        parts = [types.Part.from_bytes(data=audio, mime_type=mime_type), instructions]
+        result = await self.generate_json(
+            parts, _TRANSCRIPT_SCHEMA, timeout=timeout, session_id=session_id, guard=None
+        )
+        return str(result.get("transcript", "")).strip()
+
+    async def synthesize_speech(self, text: str, *, language: str, timeout: float = 15.0) -> bytes:
+        """Return WAV audio of ``text`` read in a calm voice, or raise LLMUnavailableError."""
+        from google.genai import types
+
+        language_name = _LANGUAGE_NAMES.get(language, "English")
+        prompt = (
+            f"Read the following {language_name} text aloud for a patient in a hospital, "
+            f"in a warm, calm, unhurried voice:\n{text}"
+        )
+        config = types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=self.tts_voice)
+                )
+            ),
+        )
+        # Speech has its own failure handling so a TTS outage never opens the JSON circuit.
+        try:
+            response = await asyncio.wait_for(
+                self._client.models.generate_content(
+                    model=self.tts_model, contents=prompt, config=config
+                ),
+                timeout=min(timeout, MAX_TIMEOUT_SECONDS),
+            )
+            pcm = _first_inline_audio(response)
+        except Exception:
+            raise LLMUnavailableError("speech synthesis is unavailable") from None
+        return _pcm_to_wav(pcm)
+
+
+def _first_inline_audio(response: object) -> bytes:
+    for candidate in getattr(response, "candidates", None) or []:
+        content = getattr(candidate, "content", None)
+        for part in getattr(content, "parts", None) or []:
+            inline = getattr(part, "inline_data", None)
+            data = getattr(inline, "data", None)
+            if isinstance(data, (bytes, bytearray)) and data:
+                return bytes(data)
+    raise ValueError("no audio in response")
+
+
+def _pcm_to_wav(pcm: bytes, *, sample_rate: int = 24_000) -> bytes:
+    """Gemini TTS returns raw 16-bit mono PCM; browsers need a WAV container."""
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(pcm)
+    return output.getvalue()

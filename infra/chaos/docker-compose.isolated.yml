@@ -1,0 +1,59 @@
+# Override for destructive Phase 13 drills. Always use the dedicated project
+# name `opd-saathi-phase13`; project-scoped volumes never reuse the shared stack.
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:15432:5432"
+    labels:
+      opd-saathi.phase13.isolated: "true"
+
+  redis:
+    ports: !override
+      - "127.0.0.1:16379:6379"
+    labels:
+      opd-saathi.phase13.isolated: "true"
+
+  redis-cache:
+    ports: !override
+      - "127.0.0.1:16380:6379"
+    labels:
+      opd-saathi.phase13.isolated: "true"
+
+  api:
+    ports: !override
+      - "127.0.0.1:18000:8000"
+    labels:
+      opd-saathi.phase13.isolated: "true"
+
+  worker:
+    labels:
+      opd-saathi.phase13.isolated: "true"
+
+  redis-restore:
+    image: redis:7.4.2-alpine
+    profiles: [restore]
+    command:
+      [
+        "sh",
+        "-c",
+        "cp /restore/redis-state.rdb /data/dump.rdb && exec redis-server --dir /data --dbfilename dump.rdb --save '' --appendonly no --requirepass \"$$REDIS_PASSWORD\"",
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    volumes:
+      - ./backups/phase13-isolated/redis-state.rdb:/restore/redis-state.rdb:ro
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    labels:
+      opd-saathi.phase13.isolated: "true"
+
+volumes:
+  postgres_data:
+    name: opd-saathi-phase13-postgres-data
+  redis_data:
+    name: opd-saathi-phase13-redis-data

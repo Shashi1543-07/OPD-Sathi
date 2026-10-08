@@ -7,10 +7,54 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Are you currently taking any medicines you want the staff to know about?",
-        "hi": "क्या आप कोई दवा लेते हैं जिसके बारे में कर्मचारियों को बताना चाहेंगे?",
-        "mr": "तुम्ही कोणती औषधे घेत असाल तर कर्मचाऱ्यांना सांगू इच्छिता का?"
-      }
+        "en": "Do you take any medicines regularly? You can also say their names.",
+        "hi": "क्या आप रोज़ कोई दवा लेते हैं? आप दवा का नाम भी बता सकते हैं।",
+        "mr": "तुम्ही नियमित कोणते औषध घेता का? तुम्ही औषधाचे नावही सांगू शकता."
+      },
+      "options": [
+        {
+          "id": "sugar",
+          "label": {
+            "en": "Medicine for sugar",
+            "hi": "शुगर की दवा",
+            "mr": "शुगरचे औषध"
+          }
+        },
+        {
+          "id": "bp",
+          "label": {
+            "en": "Medicine for BP",
+            "hi": "बीपी की दवा",
+            "mr": "बीपीचे औषध"
+          }
+        },
+        {
+          "id": "painkiller",
+          "label": {
+            "en": "Painkillers",
+            "hi": "दर्द की गोली",
+            "mr": "वेदनाशामक गोळी"
+          }
+        },
+        {
+          "id": "thyroid",
+          "label": {
+            "en": "Thyroid medicine",
+            "hi": "थायरॉइड की दवा",
+            "mr": "थायरॉईडचे औषध"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "No regular medicines",
+            "hi": "कोई नियमित दवा नहीं",
+            "mr": "नियमित औषध नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

@@ -16,6 +16,7 @@ from app.config import get_settings
 from app.core.crypto import encrypt_field
 from app.core.ids import stable_uuid7, uuid7
 from app.core.security import create_opaque_secret, digest_secret, hash_password
+from app.db.repositories import CaseSheetRepository
 from app.db.session import set_hospital_scope
 
 
@@ -190,6 +191,8 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                 .all()
             )
             general_medicine_id = next(row["id"] for row in departments if row["code"] == "GENMED")
+            department_ids_by_code = {row["code"]: row["id"] for row in departments}
+            doctor_department_ids = [department_ids_by_code[code] for code, *_ in _DEMO_DEPARTMENTS]
             existing = (
                 (
                     await connection.execute(
@@ -211,7 +214,7 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                     f"Demo Doctor {index:02d}",
                     f"doctor{index:02d}@demo.opdsathi.test",
                     staff_password,
-                    departments[index % len(departments)]["id"],
+                    doctor_department_ids[(index - 1) % len(doctor_department_ids)],
                 )
                 for index in range(1, 13)
             )
@@ -227,6 +230,32 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
             )
             for role, name, email, password, department_id in users:
                 if email in existing_emails:
+                    # Demo accounts always match the passwords configured for this run.
+                    await connection.execute(
+                        text(
+                            "UPDATE users SET password_hash = :password_hash, failed_logins = 0, "
+                            "locked_until = NULL WHERE hospital_id = :hospital_id "
+                            "AND lower(email) = :email"
+                        ),
+                        {
+                            "password_hash": hash_password(password),
+                            "hospital_id": hospital_id,
+                            "email": email,
+                        },
+                    )
+                    if role == "doctor":
+                        await connection.execute(
+                            text(
+                                "UPDATE users SET department_id = :department_id "
+                                "WHERE hospital_id = :hospital_id AND lower(email) = :email "
+                                "AND role = 'doctor'"
+                            ),
+                            {
+                                "department_id": department_id,
+                                "hospital_id": hospital_id,
+                                "email": email,
+                            },
+                        )
                     continue
                 await connection.execute(
                     text(
@@ -434,6 +463,239 @@ async def _seed_bulk(*, visits: int) -> None:
     print(f"Inserted {created} synthetic visits using fixed RNG seed 20250308.")
 
 
+_DEMO_WORKFLOW_RECORDS = (
+    (
+        "Asha Sample",
+        34,
+        "female",
+        "GENMED",
+        "queued",
+        "priority",
+        "Fever and cough for two days",
+        2,
+    ),
+    ("Ravi Sample", 52, "male", "GENMED", "called", "routine", "Knee pain after walking", 1),
+    ("Mina Sample", 8, "female", "PAED", "queued", "routine", "Sore throat since yesterday", 1),
+    (
+        "Dev Sample",
+        27,
+        "male",
+        "ORTHO",
+        "in_consult",
+        "priority",
+        "Ankle pain after a minor twist",
+        1,
+    ),
+    ("Noor Sample", 41, "female", "GENMED", "done", "routine", "Headache since yesterday", 1),
+)
+
+
+def _demo_workflow_ids() -> tuple[UUID, list[UUID], list[UUID]]:
+    hospital_id = stable_uuid7("opd-saathi:demo-nagpur-government")
+    patients = [
+        stable_uuid7(f"{hospital_id}:workflow-demo:patient:{index}")
+        for index in range(1, len(_DEMO_WORKFLOW_RECORDS) + 1)
+    ]
+    visits = [
+        stable_uuid7(f"{hospital_id}:workflow-demo:visit:{index}")
+        for index in range(1, len(_DEMO_WORKFLOW_RECORDS) + 1)
+    ]
+    return hospital_id, patients, visits
+
+
+async def _seed_demo_workflow() -> None:
+    """Create a tiny, repeatable patient-to-staff walkthrough dataset."""
+    settings = get_settings()
+    hospital_id, patient_ids, visit_ids = _demo_workflow_ids()
+    engine = create_async_engine(settings.migrations_database_url)
+    created = 0
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            departments = {
+                row["code"]: row["id"]
+                for row in (
+                    await connection.execute(
+                        text("SELECT id, code FROM departments WHERE hospital_id = :hospital_id"),
+                        {"hospital_id": hospital_id},
+                    )
+                ).mappings()
+            }
+            if not departments:
+                raise SystemExit("Run `python -m app.cli seed-demo` before seed-demo-data.")
+            today = date.today()
+            token_numbers: dict[str, int] = {}
+            for index, (record, patient_id, visit_id) in enumerate(
+                zip(_DEMO_WORKFLOW_RECORDS, patient_ids, visit_ids, strict=True), start=1
+            ):
+                name, age, sex, department_code, status, urgency, complaint, duration = record
+                department_id = departments.get(department_code)
+                if department_id is None:
+                    raise SystemExit(f"Demo hospital is missing department {department_code}.")
+                exists = await connection.scalar(
+                    text(
+                        "SELECT id FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+                if exists:
+                    continue
+                patient_exists = await connection.scalar(
+                    text(
+                        "SELECT id FROM patients "
+                        "WHERE hospital_id = :hospital_id AND id = :patient_id"
+                    ),
+                    {"hospital_id": hospital_id, "patient_id": patient_id},
+                )
+                if patient_exists is None:
+                    await connection.execute(
+                        text(
+                            "INSERT INTO patients (id, hospital_id, name_enc, year_of_birth, sex, "
+                            "preferred_language) VALUES (:id, :hospital_id, :name_enc, "
+                            ":year, :sex, 'en')"
+                        ),
+                        {
+                            "id": patient_id,
+                            "hospital_id": hospital_id,
+                            "name_enc": encrypt_field(
+                                name,
+                                key=settings.app_data_key_bytes,
+                                associated_data=f"patients:name_enc:{patient_id}",
+                            ),
+                            "year": today.year - age,
+                            "sex": sex,
+                        },
+                    )
+                if department_code not in token_numbers:
+                    token_numbers[department_code] = int(
+                        await connection.scalar(
+                            text(
+                                "SELECT coalesce(max(token_number), 0) FROM visits "
+                                "WHERE hospital_id = :hospital_id "
+                                "AND department_id = :department_id "
+                                "AND service_date = :service_date"
+                            ),
+                            {
+                                "hospital_id": hospital_id,
+                                "department_id": department_id,
+                                "service_date": today,
+                            },
+                        )
+                        or 0
+                    )
+                token_numbers[department_code] += 1
+                queued_at = datetime.now(UTC) - timedelta(minutes=12 + index * 7)
+                service_day = today
+                await connection.execute(
+                    text(
+                        "INSERT INTO visits (id, hospital_id, patient_id, department_id, status, "
+                        "urgency, token_number, token_label, service_date, language, age_years, "
+                        "registered_at, queued_at, called_at, consult_started_at, "
+                        "consult_ended_at) "
+                        "VALUES (:id, :hospital_id, :patient_id, :department_id, "
+                        ":status, :urgency, "
+                        ":token_number, :token_label, :service_date, 'en', :age, :registered_at, "
+                        ":queued_at, :called_at, :consult_started_at, :consult_ended_at)"
+                    ),
+                    {
+                        "id": visit_id,
+                        "hospital_id": hospital_id,
+                        "patient_id": patient_id,
+                        "department_id": department_id,
+                        "status": status,
+                        "urgency": urgency,
+                        "token_number": token_numbers[department_code],
+                        "token_label": f"SAMPLE-{index:03d}",
+                        "service_date": service_day,
+                        "age": age,
+                        "registered_at": queued_at,
+                        "queued_at": queued_at,
+                        "called_at": queued_at
+                        if status in {"called", "in_consult", "done"}
+                        else None,
+                        "consult_started_at": queued_at
+                        if status in {"in_consult", "done"}
+                        else None,
+                        "consult_ended_at": queued_at if status == "done" else None,
+                    },
+                )
+                sheet = {
+                    "schema_version": "1.0",
+                    "language": "en",
+                    "chief_complaint": {
+                        "text_original": complaint,
+                        "text_en": complaint,
+                        "confidence": 0.95,
+                    },
+                    "hpi": {
+                        "onset": {
+                            "text_original": f"{duration} day(s)",
+                            "text_en": f"{duration} day(s)",
+                        },
+                        "associated_symptoms": [],
+                    },
+                    "past_history": {"conditions": [], "surgeries": []},
+                    "medications": [],
+                    "allergies": [],
+                    "family_history": [],
+                    "social": {},
+                    "red_flags": [],
+                    "routing": {
+                        "department_code": department_code,
+                        "confidence": 0.9,
+                        "reason_en": "Synthetic walkthrough record",
+                        "needs_nurse_confirmation": False,
+                    },
+                    "field_meta": {},
+                    "patient_confirmation": {
+                        "confirmed_by_patient": True,
+                        "corrections": [],
+                        "needs_assistance": False,
+                    },
+                }
+                await CaseSheetRepository(connection, settings).save(
+                    hospital_id=hospital_id, visit_id=visit_id, data=sheet
+                )
+                await connection.execute(
+                    text(
+                        "UPDATE case_sheets SET confirmed_by_patient = true, "
+                        "confirmed_at = :confirmed_at "
+                        "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+                    ),
+                    {"confirmed_at": queued_at, "hospital_id": hospital_id, "visit_id": visit_id},
+                )
+                created += 1
+    finally:
+        await engine.dispose()
+    print(f"Demo workflow data ready: {created} new fictional patient visits (5 records total).")
+    print("To remove only these sample records, run: python -m app.cli clear-demo-data")
+
+
+async def _clear_demo_workflow() -> None:
+    settings = get_settings()
+    hospital_id, patient_ids, visit_ids = _demo_workflow_ids()
+    engine = create_async_engine(settings.migrations_database_url)
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            deleted_visits = await connection.execute(
+                text(
+                    "DELETE FROM visits WHERE hospital_id = :hospital_id AND id = ANY(:visit_ids)"
+                ),
+                {"hospital_id": hospital_id, "visit_ids": visit_ids},
+            )
+            await connection.execute(
+                text(
+                    "DELETE FROM patients WHERE hospital_id = :hospital_id "
+                    "AND id = ANY(:patient_ids)"
+                ),
+                {"hospital_id": hospital_id, "patient_ids": patient_ids},
+            )
+    finally:
+        await engine.dispose()
+    print(f"Removed the sample workflow visits. Rows removed: {deleted_visits.rowcount}.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -448,6 +710,12 @@ def main() -> None:
     kiosk.add_argument("--hospital-id", type=UUID, required=True)
     kiosk.add_argument("--label", required=True)
     commands.add_parser("seed-demo", help="Create the fictional Nagpur demonstration hospital")
+    commands.add_parser("seed-demo-data", help="Create five removable synthetic walkthrough visits")
+    commands.add_parser("clear-demo-data", help="Remove only the synthetic walkthrough visits")
+    demo_kiosk = commands.add_parser(
+        "demo-kiosk", help="Create a kiosk for the demo hospital and print its activation link"
+    )
+    demo_kiosk.add_argument("--web-url", default=os.getenv("WEB_ORIGIN", "http://localhost:5173"))
     bulk = commands.add_parser("seed-bulk", help="Insert deterministic synthetic visits")
     bulk.add_argument("--visits", type=int, default=100_000)
     args = parser.parse_args()
@@ -474,6 +742,19 @@ def main() -> None:
         return
     if args.command == "seed-demo":
         asyncio.run(_seed_demo())
+        return
+    if args.command == "demo-kiosk":
+        demo_hospital = stable_uuid7("opd-saathi:demo-nagpur-government")
+        code = asyncio.run(_create_kiosk(hospital_id=demo_hospital, label="Demo kiosk"))
+        base = str(args.web_url).split(",")[0].rstrip("/")
+        print("Open this link once on the kiosk device to activate it:")
+        print(f"  {base}/kiosk?activate={code}")
+        return
+    if args.command == "seed-demo-data":
+        asyncio.run(_seed_demo_workflow())
+        return
+    if args.command == "clear-demo-data":
+        asyncio.run(_clear_demo_workflow())
         return
     if args.command == "seed-bulk":
         asyncio.run(_seed_bulk(visits=args.visits))

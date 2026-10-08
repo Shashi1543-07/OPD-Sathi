@@ -1,0 +1,6 @@
+# Exact historical test fixtures confirmed as synthetic, non-credential values.
+# Keep these fingerprints narrow; do not allowlist the paths or generic-api-key rule.
+c98fdd4bb0c042bfcd182a0e23777792f4fb205e:apps/web/e2e/phase-12-offline.spec.ts:generic-api-key:4
+c98fdd4bb0c042bfcd182a0e23777792f4fb205e:services/api/tests/unit/test_intake.py:generic-api-key:17
+c98fdd4bb0c042bfcd182a0e23777792f4fb205e:services/api/tests/unit/test_intake.py:generic-api-key:58
+c98fdd4bb0c042bfcd182a0e23777792f4fb205e:services/api/tests/unit/test_intake.py:generic-api-key:83

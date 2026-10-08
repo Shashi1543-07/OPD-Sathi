@@ -1,5 +1,6 @@
 """Evaluate explainable routing rules against synthetic labelled cases."""
 
+import argparse
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -31,13 +32,16 @@ def score(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def main() -> None:
+def main(*, write_output: bool = True) -> None:
     rows = [json.loads(line) for line in DATA.read_text(encoding="utf-8").splitlines() if line]
     summary = {split: score([row for row in rows if row["split"] == split]) for split in ("dev", "test")}
-    OUTPUT.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if write_output:
+        OUTPUT.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     for split, result in summary.items():
         print(f"{split}: {json.dumps(result, ensure_ascii=False, sort_keys=True)}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-write", action="store_true", help="do not update evaluation.json")
+    main(write_output=not parser.parse_args().no_write)

@@ -1,5 +1,4 @@
-import { Navigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { Navigate, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
 import { staffAuth } from "../lib/auth";
 import {
@@ -9,9 +8,18 @@ import {
 } from "./staffAccess";
 
 export function StaffLanding() {
+  const location = useLocation();
   const user = staffAuth.user;
   if (!user) return <Navigate to="/staff" replace />;
-  return <Navigate to={`/staff/${defaultStaffPage(user.role)}`} replace />;
+  return (
+    <Navigate
+      to={{
+        pathname: `/staff/${defaultStaffPage(user.role)}`,
+        search: location.search,
+      }}
+      replace
+    />
+  );
 }
 
 export function StaffPageGate({
@@ -21,27 +29,19 @@ export function StaffPageGate({
   page: StaffPageId;
   children: ReactNode;
 }) {
+  const location = useLocation();
   const user = staffAuth.user;
   if (!user) return <Navigate to="/staff" replace />;
   if (!canAccessStaffPage(user.role, page)) {
-    return <Navigate to={`/staff/${defaultStaffPage(user.role)}`} replace />;
+    return (
+      <Navigate
+        to={{
+          pathname: `/staff/${defaultStaffPage(user.role)}`,
+          search: location.search,
+        }}
+        replace
+      />
+    );
   }
   return children;
-}
-
-export function StaffPlaceholderPage({
-  page,
-}: {
-  page: Exclude<StaffPageId, "queue">;
-}) {
-  const { t } = useTranslation("staff");
-  return (
-    <section
-      className="staff-page-placeholder"
-      aria-labelledby="staff-page-title"
-    >
-      <h2 id="staff-page-title">{t(page)}</h2>
-      <p>{t("sectionPlaceholder")}</p>
-    </section>
-  );
 }

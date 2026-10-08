@@ -146,6 +146,30 @@ async def relay_once(connection: AsyncConnection, client: Any, *, settings: Any)
     return processed
 
 
+async def close_previous_days(connection: AsyncConnection) -> int:
+    """End-of-day close-out: earlier days' open visits must not stay in today's queue.
+
+    Waiting or called patients become no-shows, consultations left open are completed,
+    and registrations that never finished are cancelled.
+    """
+    closed = 0
+    for statuses, target in (
+        (("queued", "called"), "no_show"),
+        (("in_consult",), "done"),
+        (("registering", "awaiting_confirmation"), "cancelled"),
+    ):
+        result = await connection.execute(
+            text(
+                "UPDATE visits SET status = :target "
+                "WHERE service_date < (now() AT TIME ZONE 'Asia/Kolkata')::date "
+                "AND status = ANY(:statuses)"
+            ),
+            {"target": target, "statuses": list(statuses)},
+        )
+        closed += int(getattr(result, "rowcount", 0) or 0)
+    return closed
+
+
 async def rebuild_all(connection: AsyncConnection, client: Any, *, settings: Any) -> int:
     """Rebuild every active hospital/department sorted set from durable visits."""
     queue = QueueRedis(client, app_env=settings.app_env)
@@ -162,6 +186,7 @@ async def rebuild_all(connection: AsyncConnection, client: Any, *, settings: Any
                     "SELECT id AS visit_id, hospital_id, department_id, status, "
                     "urgency, age_years, "
                     "pregnant, token_label, queued_at FROM visits WHERE status = 'queued' "
+                    "AND service_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date "
                     "ORDER BY hospital_id, "
                     "department_id, queued_at, id"
                 )
@@ -203,6 +228,12 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     ctx.update(settings=settings, engine=engine, redis=client)
     ctx["notification_provider"] = build_notification_provider(settings)
     registry_key = QueueRedis(client, app_env=settings.app_env).registry_key()
+    try:
+        async with engine.begin() as connection:
+            if await close_previous_days(connection):
+                await client.srem(registry_key, "ready")
+    except Exception as exc:
+        logger.warning("day_close_out_failed", error_type=type(exc).__name__)
     if not await client.sismember(registry_key, "ready"):
         lock_key = f"osa:{settings.app_env}:qrebuild-lock"
         acquired = await client.set(lock_key, "worker-startup", nx=True, ex=60)
@@ -251,6 +282,15 @@ async def refresh_analytics(ctx: dict[str, Any]) -> None:
     logger.info("analytics_materialized_view_refreshed")
 
 
+async def close_out_previous_days(ctx: dict[str, Any]) -> None:
+    """Periodic close-out so the queue resets after midnight without a restart."""
+    async with ctx["engine"].begin() as connection:
+        closed = await close_previous_days(connection)
+        if closed:
+            await rebuild_all(connection, ctx["redis"], settings=ctx["settings"])
+            logger.info("previous_day_visits_closed", count=closed)
+
+
 class WorkerSettings:
     """ARQ worker configuration; cron ticks on every even second."""
 
@@ -258,6 +298,7 @@ class WorkerSettings:
     cron_jobs = [
         cron(relay_queue_outbox, second=set(range(0, 60, 2))),
         cron(refresh_analytics, minute=set(range(0, 60, 5))),
+        cron(close_out_previous_days, minute={1, 16, 31, 46}),
     ]
     on_startup = on_startup
     on_shutdown = on_shutdown

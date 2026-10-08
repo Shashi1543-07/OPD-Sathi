@@ -7,10 +7,101 @@
       "input": "text",
       "optional": false,
       "prompt": {
-        "en": "What would you like the doctor to know about your concern?",
-        "hi": "आप अपनी परेशानी के बारे में डॉक्टर को क्या बताना चाहेंगे?",
-        "mr": "तुमच्या त्रासाबद्दल डॉक्टरांना काय सांगू इच्छिता?"
-      }
+        "en": "What is the main problem that brought you here today?",
+        "hi": "आज आप किस मुख्य परेशानी के लिए आए हैं?",
+        "mr": "आज तुम्ही कोणत्या मुख्य त्रासासाठी आला आहात?"
+      },
+      "options": [
+        {
+          "id": "fever",
+          "label": {
+            "en": "Fever",
+            "hi": "बुखार",
+            "mr": "ताप"
+          }
+        },
+        {
+          "id": "cough",
+          "label": {
+            "en": "Cough",
+            "hi": "खाँसी",
+            "mr": "खोकला"
+          }
+        },
+        {
+          "id": "breathing",
+          "label": {
+            "en": "Difficulty breathing",
+            "hi": "साँस लेने में तकलीफ़",
+            "mr": "श्वास घेण्यास त्रास"
+          }
+        },
+        {
+          "id": "stomach_pain",
+          "label": {
+            "en": "Stomach pain",
+            "hi": "पेट दर्द",
+            "mr": "पोटदुखी"
+          }
+        },
+        {
+          "id": "vomiting",
+          "label": {
+            "en": "Vomiting or loose motions",
+            "hi": "उल्टी या दस्त",
+            "mr": "उलट्या किंवा जुलाब"
+          }
+        },
+        {
+          "id": "headache",
+          "label": {
+            "en": "Headache",
+            "hi": "सिरदर्द",
+            "mr": "डोकेदुखी"
+          }
+        },
+        {
+          "id": "body_pain",
+          "label": {
+            "en": "Body or joint pain",
+            "hi": "शरीर या जोड़ों में दर्द",
+            "mr": "अंगदुखी किंवा सांधेदुखी"
+          }
+        },
+        {
+          "id": "skin",
+          "label": {
+            "en": "Skin rash or itching",
+            "hi": "त्वचा पर दाने या खुजली",
+            "mr": "त्वचेवर पुरळ किंवा खाज"
+          }
+        },
+        {
+          "id": "urine",
+          "label": {
+            "en": "Burning while passing urine",
+            "hi": "पेशाब में जलन",
+            "mr": "लघवी करताना जळजळ"
+          }
+        },
+        {
+          "id": "weakness",
+          "label": {
+            "en": "Weakness or tiredness",
+            "hi": "कमज़ोरी या थकान",
+            "mr": "अशक्तपणा किंवा थकवा"
+          }
+        },
+        {
+          "id": "injury",
+          "label": {
+            "en": "Injury or fall",
+            "hi": "चोट या गिरना",
+            "mr": "दुखापत किंवा पडणे"
+          }
+        }
+      ],
+      "multi": true
     },
     {
       "id": "duration",
@@ -18,10 +109,53 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "How long have you noticed this concern?",
-        "hi": "आपको यह परेशानी कब से है?",
-        "mr": "तुम्हाला हा त्रास किती काळापासून आहे?"
-      }
+        "en": "Since when do you have this problem?",
+        "hi": "यह परेशानी कब से है?",
+        "mr": "हा त्रास कधीपासून आहे?"
+      },
+      "options": [
+        {
+          "id": "today",
+          "label": {
+            "en": "Since today",
+            "hi": "आज से",
+            "mr": "आजपासून"
+          }
+        },
+        {
+          "id": "1_3_days",
+          "label": {
+            "en": "1 to 3 days",
+            "hi": "1 से 3 दिन",
+            "mr": "1 ते 3 दिवस"
+          }
+        },
+        {
+          "id": "4_7_days",
+          "label": {
+            "en": "4 to 7 days",
+            "hi": "4 से 7 दिन",
+            "mr": "4 ते 7 दिवस"
+          }
+        },
+        {
+          "id": "1_4_weeks",
+          "label": {
+            "en": "1 to 4 weeks",
+            "hi": "1 से 4 हफ़्ते",
+            "mr": "1 ते 4 आठवडे"
+          }
+        },
+        {
+          "id": "months",
+          "label": {
+            "en": "More than a month",
+            "hi": "एक महीने से ज़्यादा",
+            "mr": "एका महिन्यापेक्षा जास्त"
+          }
+        }
+      ],
+      "multi": false
     },
     {
       "id": "severity",
@@ -29,9 +163,9 @@
       "input": "scale",
       "optional": true,
       "prompt": {
-        "en": "How much does this affect you, from 0 to 10?",
-        "hi": "इस परेशानी का आप पर कितना असर है, 0 से 10 तक?",
-        "mr": "या त्रासाचा तुमच्यावर किती परिणाम होतो, 0 ते 10 पर्यंत?"
+        "en": "How bad is it right now? 0 means not at all, 10 means the worst.",
+        "hi": "अभी यह कितना ज़्यादा है? 0 मतलब बिलकुल नहीं, 10 मतलब सबसे ज़्यादा।",
+        "mr": "आत्ता हा त्रास किती आहे? 0 म्हणजे अजिबात नाही, 10 म्हणजे सर्वात जास्त."
       }
     }
   ]

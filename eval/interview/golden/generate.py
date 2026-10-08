@@ -65,6 +65,12 @@ def main() -> None:
                 elif question.optional and index % 3 == 0:
                     answer = None
                     skip = True
+                elif question.options:
+                    # Tap the way a patient would: a real option label in their language.
+                    choices = [option for option in question.options if not option.none]
+                    picked = choices[index % len(choices)] if choices else question.options[0]
+                    answer = picked.label[language]
+                    skip = False
                 else:
                     answer = f"Golden answer {index + 1}"
                     skip = False

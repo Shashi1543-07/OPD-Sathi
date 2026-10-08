@@ -7,10 +7,139 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Where do you notice the discomfort?",
-        "hi": "आपको यह तकलीफ़ कहाँ महसूस होती है?",
-        "mr": "तुम्हाला हा त्रास कुठे जाणवतो?"
-      }
+        "en": "Where is the pain?",
+        "hi": "दर्द कहाँ है?",
+        "mr": "वेदना कुठे आहे?"
+      },
+      "options": [
+        {
+          "id": "head",
+          "label": {
+            "en": "Head",
+            "hi": "सिर",
+            "mr": "डोके"
+          }
+        },
+        {
+          "id": "chest",
+          "label": {
+            "en": "Chest",
+            "hi": "छाती",
+            "mr": "छाती"
+          }
+        },
+        {
+          "id": "back",
+          "label": {
+            "en": "Back or waist",
+            "hi": "पीठ या कमर",
+            "mr": "पाठ किंवा कंबर"
+          }
+        },
+        {
+          "id": "joints",
+          "label": {
+            "en": "Joints like knee or shoulder",
+            "hi": "जोड़ (घुटना या कंधा)",
+            "mr": "सांधे (गुडघा किंवा खांदा)"
+          }
+        },
+        {
+          "id": "legs",
+          "label": {
+            "en": "Legs",
+            "hi": "पैर",
+            "mr": "पाय"
+          }
+        },
+        {
+          "id": "arms",
+          "label": {
+            "en": "Arms",
+            "hi": "हाथ",
+            "mr": "हात"
+          }
+        },
+        {
+          "id": "stomach",
+          "label": {
+            "en": "Stomach",
+            "hi": "पेट",
+            "mr": "पोट"
+          }
+        },
+        {
+          "id": "throat",
+          "label": {
+            "en": "Throat",
+            "hi": "गला",
+            "mr": "घसा"
+          }
+        }
+      ],
+      "multi": true
+    },
+    {
+      "id": "pain_character",
+      "module": "pain",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "What is the pain like?",
+        "hi": "दर्द कैसा है?",
+        "mr": "वेदना कशी आहे?"
+      },
+      "options": [
+        {
+          "id": "constant",
+          "label": {
+            "en": "All the time",
+            "hi": "लगातार",
+            "mr": "सतत"
+          }
+        },
+        {
+          "id": "comes_goes",
+          "label": {
+            "en": "Comes and goes",
+            "hi": "आता-जाता है",
+            "mr": "येते आणि जाते"
+          }
+        },
+        {
+          "id": "sharp",
+          "label": {
+            "en": "Sharp or stabbing",
+            "hi": "चुभने जैसा",
+            "mr": "टोचल्यासारखी"
+          }
+        },
+        {
+          "id": "burning",
+          "label": {
+            "en": "Burning",
+            "hi": "जलन जैसा",
+            "mr": "जळजळीसारखी"
+          }
+        },
+        {
+          "id": "spreading",
+          "label": {
+            "en": "Spreads to another place",
+            "hi": "दूसरी जगह फैलता है",
+            "mr": "दुसरीकडे पसरते"
+          }
+        },
+        {
+          "id": "moving",
+          "label": {
+            "en": "Worse on moving",
+            "hi": "हिलने पर बढ़ता है",
+            "mr": "हालचाल केल्यावर वाढते"
+          }
+        }
+      ],
+      "multi": true
     }
   ]
 }

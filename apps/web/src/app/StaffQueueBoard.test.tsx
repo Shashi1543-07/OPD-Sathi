@@ -250,12 +250,14 @@ describe("Phase 7.2 queue board", () => {
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
         expect.stringContaining("status=called"),
+        expect.anything(),
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Load more patients" }));
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
         expect.stringContaining("cursor=next-page"),
+        expect.anything(),
       ),
     );
   });

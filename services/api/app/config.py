@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     """Runtime configuration; secrets are supplied outside source control."""
 
     app_env: str = "development"
+    provider_mode: str = "standard"
+    demo_story: str = "hindi-fever"
     web_origin: str = "http://localhost:5173"
     log_level: str = "INFO"
     database_url: str = "postgresql+asyncpg://osa_app:local-only@localhost:5432/osa"
@@ -26,11 +28,15 @@ class Settings(BaseSettings):
     cursor_hmac_key: str = "development-only-cursor-key-change-before-deploy"
     app_data_key: str = ""
     app_hmac_key: str = ""
-    stt_provider: str = "mock"
+    # "auto" picks the best configured provider: Sarvam, then Gemini, then the browser.
+    stt_provider: str = "auto"
     stt_model: str = "saaras:v3-realtime"
     sarvam_api_key: str = ""
-    tts_provider: str = "mock"
+    tts_provider: str = "auto"
     tts_model: str = "bulbul:v3"
+    tts_voice: str = ""
+    gemini_tts_model: str = "gemini-3.8-flash-tts"
+    gemini_tts_voice: str = "Kore"
     store_audio: bool = False
     notification_provider: str = "console"
     twilio_account_sid: str = ""
@@ -38,9 +44,14 @@ class Settings(BaseSettings):
     twilio_from_number: str = ""
     whatsapp_access_token: str = ""
     whatsapp_phone_number_id: str = ""
-    llm_provider: str = "mock"
-    llm_model: str = "gemini-3.8-flash"
-    llm_fallback_model: str = "gemini-3.5-flash-lite"
+    llm_provider: str = "auto"
+    llm_model: str = "gemini-3.5-flash-lite"
+    llm_fallback_model: str = "gemini-3.1-flash-lite"
+    llm_thinking_level: str = "minimal"
+    # Let the model re-order follow-up questions (adds up to 1.5 s to each question).
+    ai_question_choice: bool = False
+    # Draft up to three complaint-specific follow-up questions with the language model.
+    ai_followup_questions: bool = True
     gemini_api_key: str = ""
     llm_enabled: bool = True
     llm_max_calls_per_session: int = 30
@@ -50,6 +61,8 @@ class Settings(BaseSettings):
     kiosk_token_hours: int = 12
     patient_session_hours: int = 2
     max_request_body_bytes: int = 1_048_576
+    # Lets the staff sign-in page offer a hospital picker instead of a raw ID field.
+    public_hospital_directory: bool = True
     metrics_enabled: bool = False
     urgent_bonus_min: int = 360
     priority_bonus_min: int = 45
@@ -62,12 +75,22 @@ class Settings(BaseSettings):
     def validate_security_settings(self) -> "Settings":
         if self.app_env not in {"development", "test", "production"}:
             raise ValueError("APP_ENV must be development, test, or production")
-        if self.stt_provider not in {"mock", "sarvam"}:
-            raise ValueError("STT_PROVIDER must be mock or sarvam")
-        if self.tts_provider not in {"mock", "sarvam", "google"}:
-            raise ValueError("TTS_PROVIDER must be mock, sarvam, or google")
-        if self.llm_provider not in {"mock", "gemini"}:
-            raise ValueError("LLM_PROVIDER must be mock or gemini")
+        if self.provider_mode not in {"standard", "demo-safe"}:
+            raise ValueError("PROVIDER_MODE must be standard or demo-safe")
+        if self.demo_story not in {"hindi-fever", "marathi-chest-pain", "english-child-cough"}:
+            raise ValueError("DEMO_STORY must name a configured synthetic demo story")
+        if self.stt_provider not in {"auto", "mock", "sarvam", "gemini", "browser"}:
+            raise ValueError("STT_PROVIDER must be auto, mock, sarvam, gemini, or browser")
+        if self.tts_provider not in {"auto", "mock", "sarvam", "google", "gemini", "browser"}:
+            raise ValueError("TTS_PROVIDER must be auto, mock, sarvam, google, gemini, or browser")
+        if self.llm_provider not in {"auto", "mock", "gemini"}:
+            raise ValueError("LLM_PROVIDER must be auto, mock, or gemini")
+        if self.llm_thinking_level not in {"", "minimal", "low", "medium", "high"}:
+            raise ValueError("LLM_THINKING_LEVEL must be minimal, low, medium, high, or empty")
+        if self.stt_provider == "gemini" and not self.gemini_api_key.strip():
+            raise ValueError("GEMINI_API_KEY is required when STT_PROVIDER=gemini")
+        if self.tts_provider == "gemini" and not self.gemini_api_key.strip():
+            raise ValueError("GEMINI_API_KEY is required when TTS_PROVIDER=gemini")
         if self.notification_provider not in {"console", "twilio", "whatsapp"}:
             raise ValueError("NOTIFICATION_PROVIDER must be console, twilio, or whatsapp")
         if self.notification_provider == "twilio" and not all(
@@ -83,9 +106,17 @@ class Settings(BaseSettings):
             raise ValueError("LLM_MAX_CALLS_PER_SESSION must be between 1 and 30")
         if not 1 <= self.llm_max_output_tokens <= 1024:
             raise ValueError("LLM_MAX_OUTPUT_TOKENS must be between 1 and 1024")
-        if self.llm_provider == "gemini" and not self.gemini_api_key.strip():
+        if (
+            self.provider_mode != "demo-safe"
+            and self.llm_provider == "gemini"
+            and not self.gemini_api_key.strip()
+        ):
             raise ValueError("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
-        if self.tts_provider == "sarvam" and not self.sarvam_api_key.strip():
+        if (
+            self.provider_mode != "demo-safe"
+            and self.tts_provider == "sarvam"
+            and not self.sarvam_api_key.strip()
+        ):
             raise ValueError("SARVAM_API_KEY is required when TTS_PROVIDER=sarvam")
         if self.access_token_minutes != 10:
             raise ValueError("staff access tokens must expire after 10 minutes")
@@ -122,6 +153,29 @@ class Settings(BaseSettings):
         if not 1 <= self.default_consult_min <= 15:
             raise ValueError("DEFAULT_CONSULT_MIN must be between 1 and 15")
         return self
+
+    @property
+    def resolved_llm_provider(self) -> str:
+        if self.llm_provider == "auto":
+            return "gemini" if self.gemini_api_key.strip() else "mock"
+        return self.llm_provider
+
+    @property
+    def resolved_stt_provider(self) -> str:
+        """Server-side speech recognition; "browser" means the kiosk browser does it."""
+        if self.stt_provider != "auto":
+            return self.stt_provider
+        if self.sarvam_api_key.strip():
+            return "sarvam"
+        return "gemini" if self.gemini_api_key.strip() else "browser"
+
+    @property
+    def resolved_tts_provider(self) -> str:
+        if self.tts_provider != "auto":
+            return self.tts_provider
+        if self.sarvam_api_key.strip():
+            return "sarvam"
+        return "gemini" if self.gemini_api_key.strip() else "browser"
 
     @property
     def docs_url(self) -> str | None:

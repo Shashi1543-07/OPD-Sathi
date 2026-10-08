@@ -7,10 +7,70 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Has this changed your sleep or energy?",
-        "hi": "क्या आपकी नींद या ऊर्जा में बदलाव आया है?",
-        "mr": "तुमच्या झोपेत किंवा उत्साहात काही बदल झाला आहे का?"
-      }
+        "en": "Have you noticed any of these?",
+        "hi": "क्या आपने इनमें से कुछ महसूस किया है?",
+        "mr": "तुम्हाला यापैकी काही जाणवले आहे का?"
+      },
+      "options": [
+        {
+          "id": "tired",
+          "label": {
+            "en": "Tired all the time",
+            "hi": "हर समय थकान",
+            "mr": "सतत थकवा"
+          }
+        },
+        {
+          "id": "weight_loss",
+          "label": {
+            "en": "Losing weight",
+            "hi": "वज़न कम होना",
+            "mr": "वजन कमी होणे"
+          }
+        },
+        {
+          "id": "sleep",
+          "label": {
+            "en": "Poor sleep",
+            "hi": "नींद ठीक न आना",
+            "mr": "झोप नीट न येणे"
+          }
+        },
+        {
+          "id": "dizzy",
+          "label": {
+            "en": "Dizziness",
+            "hi": "चक्कर आना",
+            "mr": "चक्कर येणे"
+          }
+        },
+        {
+          "id": "sweats",
+          "label": {
+            "en": "Sweating at night",
+            "hi": "रात में पसीना",
+            "mr": "रात्री घाम येणे"
+          }
+        },
+        {
+          "id": "low_mood",
+          "label": {
+            "en": "Feeling low or worried",
+            "hi": "उदास या चिंतित रहना",
+            "mr": "उदास किंवा चिंतित वाटणे"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

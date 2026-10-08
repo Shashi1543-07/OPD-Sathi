@@ -48,6 +48,10 @@ function loadBaseline(): number {
   }
 }
 
+function minutes(seconds: number | null | undefined): number | null {
+  return seconds == null ? null : seconds / 60;
+}
+
 function displayNumber(value: number | null | undefined, digits = 0): string {
   return value == null ? "—" : value.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
@@ -123,12 +127,12 @@ export function AnalyticsDashboard() {
       {isLoading ? <p role="status">{t("analyticsLoading")}</p> : <>
         <div className="analytics-kpis">
           <article><span>{t("analyticsPatients")}</span><strong>{displayNumber(summary.patients)}</strong></article>
-          <article><span>{t("analyticsWait")}</span><strong>{displayNumber(summary.average_wait_seconds, 1)}<small> {t("secondsUnit")}</small></strong></article>
-          <article><span>{t("analyticsConsult")}</span><strong>{displayNumber(summary.average_consult_seconds, 1)}<small> {t("secondsUnit")}</small></strong></article>
+          <article><span>{t("analyticsWait")}</span><strong>{displayNumber(minutes(summary.average_wait_seconds), 1)}<small> {t("minutesUnit")}</small></strong></article>
+          <article><span>{t("analyticsConsult")}</span><strong>{displayNumber(minutes(summary.average_consult_seconds), 1)}<small> {t("minutesUnit")}</small></strong></article>
           <article><span>{t("analyticsUrgent")}</span><strong>{displayNumber(summary.urgent_count)}</strong></article>
           <article><span>{t("analyticsConfirmed")}</span><strong>{displayNumber(summary.confirmed_without_edits_percent, 1)}<small>%</small></strong></article>
           <article><span>{t("analyticsDoctorEditRate")}</span><strong>{displayNumber(summary.doctor_edit_rate_percent, 1)}<small>%</small></strong></article>
-          <article><span>{t("analyticsInterview")}</span><strong>{displayNumber(summary.average_interview_seconds, 1)}<small> {t("secondsUnit")}</small></strong></article>
+          <article><span>{t("analyticsInterview")}</span><strong>{displayNumber(minutes(summary.average_interview_seconds), 1)}<small> {t("minutesUnit")}</small></strong></article>
           <article className="analytics-baseline-card">
             <span>{t("analyticsTimeSaved")}</span>
             <strong>{displayNumber(summary.patients * baseline, 1)}<small> {t("minutesUnit")}</small></strong>
@@ -164,7 +168,7 @@ export function AnalyticsDashboard() {
             <tbody>{summary.department_load.map((row) => <tr key={row.department_id}>
               <th scope="row">{row.name[i18n.resolvedLanguage?.split("-")[0] ?? "en"] ?? row.name.en}</th>
               <td>{row.patients.toLocaleString()}</td><td>{row.urgent_count.toLocaleString()}</td>
-              <td>{displayNumber(row.average_wait_seconds, 1)} {t("secondsUnit")}</td>
+              <td>{displayNumber(minutes(row.average_wait_seconds), 1)} {t("minutesUnit")}</td>
               <td>{displayNumber(totalDepartmentPatients ? row.patients / totalDepartmentPatients * 100 : 0, 1)}%</td>
             </tr>)}</tbody>
           </table></div> : <p>{t("analyticsNoData")}</p>}

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useLanguageStore } from "../languageStore";
+import { Contrast, Volume2, VolumeX } from "lucide-react";
 import {
-  Button,
   ConfirmDialog,
   HelpButton,
   IdleWarningDialog,
@@ -11,6 +11,8 @@ import {
 } from "../components/ui";
 import { AudioPrompt } from "../components/ui/AudioPrompt";
 import { intake } from "../lib/intake";
+import { useKioskPrefs } from "../lib/kioskPrefs";
+import { stopSpeaking } from "../lib/voice";
 import "./screens.css";
 
 const IDLE_MS = 60_000;
@@ -22,10 +24,14 @@ export function KioskShell() {
   const setLanguage = useLanguageStore((state) => state.setLanguage);
   const navigate = useNavigate();
   const location = useLocation();
+  const judgeMode = new URLSearchParams(location.search).get("demo") === "1";
+  const hospitalLogo = import.meta.env.VITE_HOSPITAL_LOGO_URL?.trim();
   const [warning, setWarning] = useState(false);
-  const [largeText, setLargeText] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [helpState, setHelpState] = useState<"ask" | "sending" | "sent" | "failed">("ask");
+  const voiceGuidance = useKioskPrefs((state) => state.voiceGuidance);
+  const setVoiceGuidance = useKioskPrefs((state) => state.setVoiceGuidance);
   const [idleKey, setIdleKey] = useState(0);
   const [networkOffline, setNetworkOffline] = useState(!navigator.onLine);
   const lastActivity = useRef(0);
@@ -37,12 +43,14 @@ export function KioskShell() {
   const resetSession = useCallback(() => {
     void intake.cancel();
     setWarning(false);
-    setLargeText(false);
     setHighContrast(false);
     setHelpOpen(false);
     setLanguage("en");
-    navigate("/kiosk", { replace: true });
-  }, [navigate, setLanguage]);
+    navigate(
+      { pathname: "/kiosk", search: location.search },
+      { replace: true },
+    );
+  }, [location.search, navigate, setLanguage]);
 
   useEffect(() => {
     let disposed = false;
@@ -52,10 +60,13 @@ export function KioskShell() {
         return;
       }
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/healthz`, {
-          cache: "no-store",
-          signal: AbortSignal.timeout(4_000),
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/healthz`,
+          {
+            cache: "no-store",
+            signal: AbortSignal.timeout(4_000),
+          },
+        );
         if (!disposed) setNetworkOffline(!response.ok);
       } catch {
         if (!disposed) setNetworkOffline(true);
@@ -110,66 +121,96 @@ export function KioskShell() {
 
   return (
     <div
-      className={`kiosk-app ${largeText ? "is-large-text" : ""} ${highContrast ? "is-high-contrast" : ""}`}
+      className={`kiosk-app ${highContrast ? "is-high-contrast" : ""}`}
       data-layout="kiosk"
     >
       <header className="kiosk-header">
         <div className="kiosk-brand">
-          <span className="kiosk-mark" aria-hidden="true">
-            O
-          </span>
+          {hospitalLogo ? (
+            <img
+              className="kiosk-mark kiosk-hospital-logo"
+              src={hospitalLogo}
+              alt=""
+            />
+          ) : (
+            <span className="kiosk-mark" aria-hidden="true">
+              O
+            </span>
+          )}
           <div>
             <strong>{t("appName")}</strong>
             <small>{t("clinicName", { ns: "kiosk" })}</small>
           </div>
         </div>
         <div className="kiosk-tools">
-          {location.pathname === "/kiosk" && <div
-            className="kiosk-language-selector"
-            role="group"
-            aria-label={t("chooseLanguage", { ns: "kiosk" })}
-          >
-            {[
-              { code: "hi" as const, label: "हिन्दी" },
-              { code: "mr" as const, label: "मराठी" },
-              { code: "en" as const, label: "EN" },
-            ].map(({ code, label }) => (
+          {location.pathname !== "/kiosk" && (
+            <div className="kiosk-tool-item">
               <button
                 type="button"
-                lang={code}
-                aria-pressed={language === code}
-                key={code}
-                onClick={() => setLanguage(code)}
+                className="ui-tool-button"
+                aria-pressed={voiceGuidance}
+                aria-label={t(voiceGuidance ? "soundOn" : "soundOff", { ns: "intake" })}
+                title={t(voiceGuidance ? "soundOn" : "soundOff", { ns: "intake" })}
+                onClick={() => {
+                  if (voiceGuidance) stopSpeaking();
+                  setVoiceGuidance(!voiceGuidance);
+                }}
               >
-                {label}
+                {voiceGuidance ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}
               </button>
-            ))}
-          </div>}
-          <Button
-            variant="secondary"
-            onClick={() => setLargeText((current) => !current)}
-            aria-pressed={largeText}
-          >
-            {largeText ? t("standardText") : t("largeText", { ns: "kiosk" })}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => setHighContrast((current) => !current)}
-            aria-pressed={highContrast}
-          >
-            {highContrast
-              ? t("highContrastOff", { ns: "kiosk" })
-              : t("highContrast", { ns: "kiosk" })}
-          </Button>
-          <HelpButton onClick={() => setHelpOpen(true)} />
-          {location.pathname === "/kiosk" && <AudioPrompt language={language} promptId="ui.welcome" />}
+            </div>
+          )}
+          <div className="kiosk-tool-item">
+            <button
+              type="button"
+              className="ui-tool-button"
+              onClick={() => setHighContrast((current) => !current)}
+              aria-pressed={highContrast}
+              aria-label={
+                highContrast
+                  ? t("highContrastOff", { ns: "kiosk" })
+                  : t("highContrast", { ns: "kiosk" })
+              }
+              title={`${t("highContrast", { ns: "kiosk" })} — ${t("highContrastDesc", { ns: "kiosk" })}`}
+            >
+              <Contrast aria-hidden="true" />
+            </button>
+            <div className="ui-tooltip" role="tooltip">
+              <strong>{t("highContrast", { ns: "kiosk" })}</strong>
+              <span>{t("highContrastDesc", { ns: "kiosk" })}</span>
+            </div>
+          </div>
+          <HelpButton
+            variant="tool"
+            onClick={() => {
+              setHelpState("ask");
+              setHelpOpen(true);
+            }}
+            tooltipTitle={t("callStaff")}
+            tooltipDesc={t("callStaffDesc", { ns: "kiosk" })}
+          />
+          {location.pathname === "/kiosk" && (
+            <AudioPrompt
+              language={language}
+              promptId="ui.welcome"
+              text={t("welcome")}
+              variant="tool"
+              tooltipTitle={t("readAloud")}
+              tooltipDesc={t("readAloudDesc", { ns: "kiosk" })}
+            />
+          )}
         </div>
       </header>
       {networkOffline && <OfflineBanner />}
+      {judgeMode && (
+        <div className="demo-ribbon" role="note">
+          {t("judgeRibbon")}
+        </div>
+      )}
       <Outlet context={{ networkOffline }} />
       <footer className="kiosk-footer">
         <span>{t("historyOnly")}</span>
-        <span>{t("demoNotice")}</span>
+        {judgeMode && <span>{t("demoNotice")}</span>}
       </footer>
       <IdleWarningDialog
         open={warning}
@@ -178,11 +219,41 @@ export function KioskShell() {
       />
       <ConfirmDialog
         open={helpOpen}
-        title={t("callStaff")}
-        onConfirm={() => setHelpOpen(false)}
+        title={
+          helpState === "sent"
+            ? t("helpSentTitle", { ns: "intake" })
+            : t("callStaff")
+        }
+        confirmLabel={
+          helpState === "ask" && intake.session()
+            ? t("helpYes", { ns: "intake" })
+            : t("close")
+        }
+        cancelLabel={t("helpNo", { ns: "intake" })}
+        onConfirm={() => {
+          if (helpState !== "ask" || !intake.session()) {
+            setHelpOpen(false);
+            return;
+          }
+          setHelpState("sending");
+          intake
+            .requestHelp()
+            .then(() => setHelpState("sent"))
+            .catch(() => setHelpState("failed"));
+        }}
         onCancel={() => setHelpOpen(false)}
       >
-        <p>{t("helpPrompt", { ns: "kiosk" })}</p>
+        <p>
+          {!intake.session()
+            ? t("helpPrompt", { ns: "kiosk" })
+            : helpState === "sent"
+              ? t("helpSent", { ns: "intake" })
+              : helpState === "failed"
+                ? t("helpFailed", { ns: "intake" })
+                : helpState === "sending"
+                  ? t("working", { ns: "intake" })
+                  : t("helpAsk", { ns: "intake" })}
+        </p>
       </ConfirmDialog>
     </div>
   );

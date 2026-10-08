@@ -2,18 +2,50 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  Download,
   FileText,
   Hand,
+  Megaphone,
   MessageSquareText,
   Mic,
+  Pencil,
+  Play,
+  Printer,
+  Sparkles,
   Stethoscope,
   UserRound,
 } from "lucide-react";
 import type { components } from "../lib/api-types";
 import { staffAuth } from "../lib/auth";
 import { ConfidenceChip } from "../components/ui";
+import { ConsultPatientRail } from "./ConsultPatientRail";
 
-type CaseSheet = components["schemas"]["CaseSheet"];
+type CaseSheet = components["schemas"]["CaseSheet"] & {
+  ai_summary?: {
+    brief_en: string;
+    answers_en?: Record<string, string>;
+    model?: string;
+    generated_at?: string;
+  } | null;
+  followup_questions?: Record<string, string>;
+};
+type TextPair = {
+  text_original: string;
+  text_en: string;
+  confidence?: number | null;
+};
+type PatientContext = {
+  age_years?: number | null;
+  sex?: string | null;
+  language?: string | null;
+  token?: string | null;
+  urgency?: string | null;
+  status?: string | null;
+  department_name?: string | null;
+};
 type TranscriptTurn = {
   turn_index: number;
   question_id: string;
@@ -27,13 +59,14 @@ type CaseSheetResult = {
   case_sheet: CaseSheet;
   confirmed_by_patient: boolean;
   confirmed_at: string | null;
+  patient?: PatientContext | null;
 };
 
 const emptyText = "—";
 
 export function DoctorConsultation() {
   const { t, i18n } = useTranslation("staff");
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const visitId = searchParams.get("visit_id");
   const routeStatus = searchParams.get("status");
@@ -145,12 +178,13 @@ export function DoctorConsultation() {
       const updated = (await response.json()) as CaseSheetResult;
       const etag = response.headers.get("ETag");
       const headerVersion = Number(etag?.replaceAll('"', ""));
-      setSheet({
+      setSheet((previous) => ({
         ...updated,
+        patient: updated.patient ?? previous?.patient,
         version: Number.isFinite(headerVersion)
           ? headerVersion
           : updated.version,
-      });
+      }));
       setDraft(undefined);
       setConflict(false);
     } catch (reason) {
@@ -162,18 +196,31 @@ export function DoctorConsultation() {
     }
   }
 
-  async function transition(action: "start" | "complete") {
+  async function transition(action: "call" | "start" | "complete") {
     if (!visitId) return;
     try {
       const response = await staffAuth.request(`/queue/${visitId}/${action}`, {
         method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
       });
       if (!response.ok) throw new Error(t("consultActionError"));
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set(
+            "status",
+            action === "call" ? "called" : action === "start" ? "in_consult" : "done",
+          );
+          return next;
+        },
+        { replace: true },
+      );
       setActionState({
         visitId,
-        status: action === "start" ? "in_consult" : "done",
+        status:
+          action === "call" ? "called" : action === "start" ? "in_consult" : "done",
       });
-      if (action === "complete") navigate("/staff/queue");
+      if (action === "complete") navigate("/staff/consultations");
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : t("consultActionError"),
@@ -209,12 +256,19 @@ export function DoctorConsultation() {
     path: string,
     index: number,
     editable = true,
+    original?: string | null,
+    metaPath?: string,
+    repeat = false,
   ) {
     const text =
       value === null || value === undefined || value === ""
         ? emptyText
         : String(value);
-    const metadata = sheet?.case_sheet.field_meta?.[path];
+    const fieldMeta = sheet?.case_sheet.field_meta;
+    const metadata =
+      fieldMeta?.[metaPath ?? path] ??
+      fieldMeta?.[`${metaPath ?? path}/text_original`] ??
+      fieldMeta?.[path];
     const SourceIcon = metadata
       ? {
           patient_voice: Mic,
@@ -227,128 +281,162 @@ export function DoctorConsultation() {
       : undefined;
     const editing = draft?.path === path;
     return (
-      <div className="consult-field" key={path}>
-        <dt>{label}</dt>
+      <div className={`cx-field${repeat ? " cx-field--repeat" : ""}`} key={path}>
+        <dt className={repeat ? "cx-visually-hidden" : undefined}>{label}</dt>
         <dd>
-          <div className="consult-field-value">
-            {editing ? (
-              <textarea
-                aria-label={label}
-                value={draft.value}
-                onChange={(event) =>
-                  setDraft({ path, value: event.target.value })
+          <div className="cx-field-main">
+            <div className="cx-field-value">
+              {editing ? (
+                <textarea
+                  aria-label={label}
+                  value={draft.value}
+                  onChange={(event) =>
+                    setDraft({ path, value: event.target.value })
+                  }
+                />
+              ) : (
+                text
+              )}
+            </div>
+            {!editing && editable && (
+              <button
+                ref={index === 0 ? firstEditRef : undefined}
+                type="button"
+                className="cx-edit"
+                onClick={() =>
+                  setDraft({ path, value: text === emptyText ? "" : text })
                 }
-              />
-            ) : (
-              text
+              >
+                <Pencil aria-hidden="true" size={13} />
+                {t("editField")}
+              </button>
             )}
           </div>
-          <div className="consult-field-provenance">
-            {metadata && SourceIcon ? (
-              <span
-                className="consult-source"
-                title={t(`source_${metadata.source}`)}
-              >
-                <SourceIcon aria-hidden="true" />
+          {!editing && original && original !== text && (
+            <div className="cx-original" lang={sheet?.case_sheet.language}>
+              <span>{t("patientWords")}:</span> {original}
+            </div>
+          )}
+          {metadata && SourceIcon && (
+            <div className="cx-provenance">
+              <span className="cx-source" title={t(`source_${metadata.source}`)}>
+                <SourceIcon aria-hidden="true" size={13} />
                 <span>{t(`source_${metadata.source}`)}</span>
               </span>
-            ) : (
-              <small>{t("sourceUnrecorded")}</small>
-            )}
-            {metadata && <ConfidenceChip value={metadata.confidence} />}
-            {metadata?.ai_assisted && (
-              <span className="consult-ai-assisted">{t("aiAssisted")}</span>
-            )}
-          </div>
-          {editing ? (
-            <div className="consult-field-actions">
+              {metadata.ai_assisted && <ConfidenceChip value={metadata.confidence} />}
+              {metadata.ai_assisted && (
+                <span className="cx-ai-chip">{t("aiAssisted")}</span>
+              )}
+            </div>
+          )}
+          {editing && (
+            <div className="cx-field-actions">
               <button
                 type="button"
+                className="cx-btn cx-btn--primary"
                 onClick={() => void saveEdit()}
                 disabled={saving || !draft.value.trim()}
               >
                 {t("saveEdit")}
               </button>
-              <button type="button" onClick={() => setDraft(undefined)}>
+              <button type="button" className="cx-btn" onClick={() => setDraft(undefined)}>
                 {t("cancelEdit")}
               </button>
             </div>
-          ) : editable ? (
-            <button
-              ref={index === 0 ? firstEditRef : undefined}
-              type="button"
-              className="consult-edit"
-              onClick={() =>
-                setDraft({ path, value: text === emptyText ? "" : text })
-              }
-            >
-              {t("editField")}
-            </button>
-          ) : null}
+          )}
         </dd>
       </div>
     );
   }
 
+  const rail = <ConsultPatientRail activeVisitId={visitId} />;
+
   if (!visitId) {
     return (
-      <section className="doctor-consult">
-        <h2>{t("consultations")}</h2>
-        <p role="status">{t("chooseVisit")}</p>
-        <Link to="/staff/queue">{t("backToQueue")}</Link>
-      </section>
+      <div className="cx">
+        {rail}
+        <section className="doctor-consult cx-main">
+          <div className="cx-placeholder">
+            <ClipboardList aria-hidden="true" size={40} />
+            <h2>{t("consultations")}</h2>
+            <p role="status">{t("chooseVisit")}</p>
+            <ul>
+              <li>{t("consultHintSheet")}</li>
+              <li>{t("consultHintEdit")}</li>
+              <li>{t("consultHintPdf")}</li>
+            </ul>
+            <Link className="cx-btn" to="/staff/queue">
+              {t("backToQueue")}
+            </Link>
+          </div>
+        </section>
+      </div>
     );
   }
   if (loading)
     return (
-      <section className="doctor-consult">
-        <p role="status">{t("loadingConsult")}</p>
-      </section>
+      <div className="cx">
+        {rail}
+        <section className="doctor-consult cx-main">
+          <p className="cx-placeholder" role="status">{t("loadingConsult")}</p>
+        </section>
+      </div>
     );
   if (error && !sheet)
     return (
-      <section className="doctor-consult">
-        <p role="alert">{error}</p>
-        <button type="button" onClick={() => void load()}>
-          {t("retry")}
-        </button>
-      </section>
+      <div className="cx">
+        {rail}
+        <section className="doctor-consult cx-main">
+          <div className="cx-placeholder">
+            <p role="alert">{error}</p>
+            <button type="button" className="cx-btn" onClick={() => void load()}>
+              {t("retry")}
+            </button>
+          </div>
+        </section>
+      </div>
     );
   if (!sheet)
     return (
-      <section className="doctor-consult">
-        <p role="status">{t("caseSheetUnavailable")}</p>
-      </section>
+      <div className="cx">
+        {rail}
+        <section className="doctor-consult cx-main">
+          <p className="cx-placeholder" role="status">{t("caseSheetUnavailable")}</p>
+        </section>
+      </div>
     );
 
   const data = sheet.case_sheet;
-  const associatedSymptoms = data.hpi.associated_symptoms ?? [];
-  const redFlags = data.red_flags ?? [];
-  const conditions = data.past_history?.conditions ?? [];
-  const medications = data.medications ?? [];
-  const allergies = data.allergies ?? [];
-  const summaryFields = [
-    field(
-      t("chiefComplaint"),
-      data.chief_complaint.text_original,
-      "/chief_complaint/text_original",
-      0,
-    ),
-    field(
-      t("duration"),
-      data.hpi.onset?.text_original,
-      "/hpi/onset/text_original",
-      1,
-      Boolean(data.hpi.onset),
-    ),
-    field(
-      t("severity"),
-      data.hpi.severity_0_10,
-      "/hpi/severity_0_10",
-      2,
-      typeof data.hpi.severity_0_10 === "number",
-    ),
-  ];
+  const patient = sheet.patient;
+  const hpi = data.hpi;
+  const pair = (
+    label: string,
+    value: TextPair | null | undefined,
+    path: string,
+    index: number,
+    repeat = false,
+  ) =>
+    value
+      ? field(
+          label,
+          value.text_en,
+          `${path}/text_en`,
+          index,
+          true,
+          value.text_original,
+          path,
+          repeat,
+        )
+      : null;
+  const pairs = (
+    label: string,
+    values: TextPair[] | undefined,
+    path: string,
+    offset: number,
+  ) =>
+    (values ?? []).map((item, index) =>
+      pair(label, item, `${path}/${index}`, offset + index, index > 0),
+    );
   const confirmedTime = sheet.confirmed_at
     ? new Intl.DateTimeFormat(i18n.language, {
         hour: "2-digit",
@@ -357,143 +445,301 @@ export function DoctorConsultation() {
       }).format(new Date(sheet.confirmed_at))
     : "";
   const corrections = data.patient_confirmation?.corrections ?? [];
-  const additionalFields = [
-    ...associatedSymptoms.map((item, index) =>
-      field(
-        t("associatedSymptoms"),
-        item.text_original,
-        `/hpi/associated_symptoms/${index}/text_original`,
-        index + 3,
-      ),
+  const redFlags = data.red_flags ?? [];
+  const presentFields = [
+    pair(t("onsetDuration"), hpi.onset as TextPair | null, "/hpi/onset", 1),
+    typeof hpi.severity_0_10 === "number"
+      ? field(
+          t("severity"),
+          `${hpi.severity_0_10} / 10`,
+          "/hpi/severity_0_10",
+          2,
+          false,
+        )
+      : null,
+    pair(t("site"), hpi.location as TextPair | null, "/hpi/location", 3),
+    pair(t("character"), hpi.character as TextPair | null, "/hpi/character", 4),
+    pair(t("timing"), hpi.timing as TextPair | null, "/hpi/timing", 5),
+    ...pairs(
+      t("associatedSymptoms"),
+      hpi.associated_symptoms as TextPair[],
+      "/hpi/associated_symptoms",
+      10,
     ),
-    ...conditions.map((item, index) =>
+    ...pairs(
+      t("negatives"),
+      hpi.pertinent_negatives as TextPair[],
+      "/hpi/pertinent_negatives",
+      40,
+    ),
+    ...pairs(t("aggravating"), hpi.aggravating as TextPair[], "/hpi/aggravating", 70),
+    ...pairs(t("relieving"), hpi.relieving as TextPair[], "/hpi/relieving", 90),
+  ].filter(Boolean);
+  const pastFields = [
+    ...(data.past_history?.conditions ?? []).map((item, index) =>
       field(
         t("pastHistory"),
         item,
         `/past_history/conditions/${index}`,
-        index + 40,
+        110 + index,
+        true,
+        undefined,
+        undefined,
+        index > 0,
       ),
     ),
     ...(data.past_history?.surgeries ?? []).map((item, index) =>
       field(
-        t("pastHistory"),
+        t("pastSurgery"),
         item,
         `/past_history/surgeries/${index}`,
-        index + 70,
+        140 + index,
+        true,
+        undefined,
+        undefined,
+        index > 0,
       ),
     ),
-    ...medications.map((item, index) =>
+    ...(data.medications ?? []).map((item, index) =>
       field(
         t("medications"),
-        item.name,
+        item.dose ? `${item.name} (${item.dose})` : item.name,
         `/medications/${index}/name`,
-        index + 100,
+        170 + index,
+        true,
+        undefined,
+        undefined,
+        index > 0,
       ),
     ),
-    ...allergies.map((item, index) =>
-      field(
-        t("allergies"),
-        item.text_original,
-        `/allergies/${index}/text_original`,
-        index + 130,
-      ),
-    ),
-  ];
+    ...pairs(t("allergies"), data.allergies as TextPair[], "/allergies", 200),
+    ...pairs(t("familyHistory"), data.family_history as TextPair[], "/family_history", 230),
+    pair(t("tobacco"), data.social?.tobacco as TextPair | null, "/social/tobacco", 260),
+    pair(t("alcohol"), data.social?.alcohol as TextPair | null, "/social/alcohol", 261),
+    data.women_health?.pregnant
+      ? field(t("pregnancy"), t("pregnantNow"), "/women_health/pregnant", 262, false)
+      : null,
+  ].filter(Boolean);
+  const urgency = patient?.urgency ?? "routine";
+  const questionLabel = (id: string) => {
+    const key = `question_${id}`;
+    return i18n.exists(key, { ns: "staff" })
+      ? t(key)
+      : id.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+  };
+  const ModeIcon = (mode: string) =>
+    mode === "voice" ? Mic : mode === "touch" ? Hand : MessageSquareText;
 
   return (
-    <section className="doctor-consult">
-      <header className="consult-header no-print">
-        <div>
-          <h2>{t("consultations")}</h2>
-          <p>{t("consultVersion", { version: sheet.version })}</p>
-        </div>
-        <div className="consult-actions">
-          {(visitStatus === "called" || visitStatus === null) && (
-            <button type="button" onClick={() => void transition("start")}>
-              {t("startConsult")}
-            </button>
-          )}
-          {(visitStatus === "in_consult" || visitStatus === null) && (
-            <button type="button" onClick={() => void transition("complete")}>
-              {t("finishConsult")}
-            </button>
-          )}
-          <button
-            type="button"
-            disabled={exportingPdf}
-            onClick={() => void exportPdf()}
-          >
-            {exportingPdf ? t("exportingPdf") : t("exportPdf")}
-          </button>
-          <button type="button" onClick={() => window.print()}>
-            {t("printCaseSheet")}
-          </button>
-          <Link to="/staff/queue">{t("backToQueue")}</Link>
-        </div>
-      </header>
-      <p className="consult-shortcuts no-print">{t("shortcuts")}</p>
-      {error && <p role="alert">{error}</p>}
-      <div className="consult-columns">
-        <article className="consult-sheet">
-          <h3>{t("caseSheetTitle")}</h3>
-          {sheet.confirmed_by_patient && confirmedTime ? (
-            <div className="consult-confirmed">
-              <p>{t("confirmedByPatientAt", { time: confirmedTime })}</p>
-              {corrections.length > 0 && (
-                <p>{t("correctionsRecorded", { corrections: corrections.join(", ") })}</p>
-              )}
+    <div className="cx">
+      {rail}
+      <section className="doctor-consult cx-main">
+        <header className={`cx-hero cx-hero--${urgency}`}>
+          <div className="cx-hero-id">
+            <span className="cx-token">{patient?.token ?? "—"}</span>
+            <div>
+              <h2>
+                {patient && typeof patient.age_years === "number"
+                  ? t("yearsShort", { age: patient.age_years })
+                  : "—"}
+                {" · "}
+                {t(`sex_${patient?.sex ?? "unknown"}`)}
+              </h2>
+              <div className="cx-hero-meta">
+                <span className={`cx-pill cx-pill--urgency-${urgency}`}>
+                  {urgency !== "routine" && <AlertTriangle aria-hidden="true" size={13} />}
+                  {t(`urgency_${urgency}`)}
+                </span>
+                {patient?.department_name && <span>{patient.department_name}</span>}
+                {patient?.language && (
+                  <span>{t("answeredIn", { language: t(`lang_${patient.language}`) })}</span>
+                )}
+                <span>{t("consultVersion", { version: sheet.version })}</span>
+              </div>
             </div>
+          </div>
+          <div className="cx-actions no-print">
+            {visitStatus === "queued" && (
+              <button
+                type="button"
+                className="cx-btn cx-btn--primary"
+                onClick={() => void transition("call")}
+              >
+                <Megaphone aria-hidden="true" size={15} /> {t("callPatient")}
+              </button>
+            )}
+            {(visitStatus === "called" || visitStatus === null) && (
+              <button
+                type="button"
+                className="cx-btn cx-btn--primary"
+                onClick={() => void transition("start")}
+              >
+                <Play aria-hidden="true" size={15} /> {t("startConsult")}
+              </button>
+            )}
+            {(visitStatus === "in_consult" || visitStatus === null) && (
+              <button
+                type="button"
+                className="cx-btn cx-btn--primary"
+                onClick={() => void transition("complete")}
+              >
+                <CheckCircle2 aria-hidden="true" size={15} /> {t("finishConsult")}
+              </button>
+            )}
+            <button
+              type="button"
+              className="cx-btn"
+              disabled={exportingPdf}
+              onClick={() => void exportPdf()}
+            >
+              <Download aria-hidden="true" size={15} />
+              {exportingPdf ? t("exportingPdf") : t("exportPdf")}
+            </button>
+            <button type="button" className="cx-btn" onClick={() => window.print()}>
+              <Printer aria-hidden="true" size={15} /> {t("printCaseSheet")}
+            </button>
+          </div>
+        </header>
+
+        <div className="cx-strip no-print">
+          {sheet.confirmed_by_patient && confirmedTime ? (
+            <span className="cx-strip-ok">
+              <CheckCircle2 aria-hidden="true" size={15} />
+              <span>{t("confirmedByPatientAt", { time: confirmedTime })}</span>
+              {corrections.length > 0 && (
+                <span className="cx-strip-note">
+                  {t("correctionsRecorded", { corrections: corrections.join(", ") })}
+                </span>
+              )}
+            </span>
           ) : (
-            <p className="consult-unconfirmed">{t("patientConfirmationPending")}</p>
+            <span className="cx-strip-warn">{t("patientConfirmationPending")}</span>
           )}
           {data.patient_confirmation?.needs_assistance && (
-            <p className="consult-assistance">{t("patientNeedsAssistance")}</p>
+            <span className="cx-strip-warn">
+              <Hand aria-hidden="true" size={15} /> {t("patientNeedsAssistance")}
+            </span>
           )}
-          {Object.values(sheet.case_sheet.field_meta ?? {}).some(
-            (metadata) => metadata.ai_assisted,
-          ) && <p className="consult-ai-note">{t("aiAssistedNote")}</p>}
-          <dl>
-            {summaryFields}
-            {additionalFields}
-          </dl>
-          {redFlags.length > 0 && (
-            <section className="consult-red-flags">
-              <h4>{t("redFlags")}</h4>
-              <ul>
-                {redFlags.map((flag) => (
-                  <li key={flag.id}>
-                    <strong>{flag.level}</strong> ·{" "}
-                    {flag.reason_en ?? flag.evidence}
-                  </li>
-                ))}
-              </ul>
+          {Object.values(data.field_meta ?? {}).some((meta) => meta.ai_assisted) && (
+            <span className="cx-strip-ai">
+              <Sparkles aria-hidden="true" size={14} /> {t("aiAssistedNote")}
+            </span>
+          )}
+          <span className="cx-shortcuts">{t("shortcuts")}</span>
+        </div>
+        {error && <p className="cx-error" role="alert">{error}</p>}
+
+        <div className="cx-columns">
+          <article className="cx-sheet">
+            <h3 className="cx-visually-hidden">{t("caseSheetTitle")}</h3>
+            {redFlags.length > 0 && (
+              <section className="cx-card cx-card--danger">
+                <h4>
+                  <AlertTriangle aria-hidden="true" size={17} /> {t("redFlags")}
+                </h4>
+                <ul>
+                  {redFlags.map((flag) => (
+                    <li key={flag.id}>
+                      <strong>{t(`urgency_${flag.level}`)}</strong> ·{" "}
+                      {flag.reason_en ?? flag.evidence}
+                      {flag.reason_en && flag.evidence && (
+                        <span className="cx-flag-evidence" lang={data.language}>
+                          {t("patientWords")}: “{flag.evidence}”
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {data.ai_summary?.brief_en && (
+              <section className="cx-card cx-card--ai">
+                <h4>
+                  <Sparkles aria-hidden="true" size={17} /> {t("aiBriefTitle")}
+                </h4>
+                <p>{data.ai_summary.brief_en}</p>
+                <small>{t("aiBriefNote")}</small>
+              </section>
+            )}
+            <section className="cx-card">
+              <h4>{t("presentingComplaint")}</h4>
+              <dl>
+                {field(
+                  t("chiefComplaint"),
+                  data.chief_complaint.text_en,
+                  "/chief_complaint/text_en",
+                  0,
+                  true,
+                  data.chief_complaint.text_original,
+                  "/chief_complaint",
+                )}
+              </dl>
             </section>
-          )}
-          <p className="consult-disclaimer">{data.disclaimer}</p>
-        </article>
-        <aside className="consult-transcript">
-          <h3>{t("transcriptTitle")}</h3>
-          {transcript.length === 0 ? (
-            <p>{t("transcriptEmpty")}</p>
-          ) : (
-            <ol>
-              {transcript.map((turn) => (
-                <li key={turn.turn_index}>
-                  <small>
-                    {turn.question_id} · {turn.input_mode}
-                  </small>
-                  <p>{turn.text_original || turn.text_english || emptyText}</p>
-                  {turn.text_original &&
-                    turn.text_english &&
-                    turn.text_original !== turn.text_english && (
-                      <p className="consult-translation">{turn.text_english}</p>
-                    )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </aside>
-      </div>
+            <section className="cx-card">
+              <h4>{t("hpiTitle")}</h4>
+              {presentFields.length ? (
+                <dl>{presentFields}</dl>
+              ) : (
+                <p className="cx-none">{t("noneRecorded")}</p>
+              )}
+            </section>
+            <section className="cx-card">
+              <h4>{t("pastTitle")}</h4>
+              {pastFields.length ? (
+                <dl>{pastFields}</dl>
+              ) : (
+                <p className="cx-none">{t("noneRecorded")}</p>
+              )}
+            </section>
+            <p className="cx-disclaimer">{data.disclaimer}</p>
+          </article>
+
+          <aside className="cx-transcript">
+            <h3>{t("transcriptTitle")}</h3>
+            {transcript.length === 0 ? (
+              <p className="cx-none">{t("transcriptEmpty")}</p>
+            ) : (
+              <ol>
+                {transcript.map((turn) => {
+                  const english =
+                    data.ai_summary?.answers_en?.[turn.question_id] ??
+                    turn.text_english;
+                  const aiQuestion = data.followup_questions?.[turn.question_id];
+                  const Icon = ModeIcon(turn.input_mode);
+                  return (
+                    <li key={turn.turn_index}>
+                      <div className="cx-turn-head">
+                        {aiQuestion ? (
+                          <span className="cx-turn-q">
+                            <span className="cx-ai-chip">
+                              <Sparkles aria-hidden="true" size={11} /> {t("aiFollowup")}
+                            </span>
+                            {aiQuestion}
+                          </span>
+                        ) : (
+                          <span className="cx-turn-q">{questionLabel(turn.question_id)}</span>
+                        )}
+                        <span className="cx-mode" title={t(`inputMode_${turn.input_mode}`, turn.input_mode)}>
+                          <Icon aria-hidden="true" size={12} />
+                          {t(`inputMode_${turn.input_mode}`, turn.input_mode)}
+                        </span>
+                      </div>
+                      <p className="cx-turn-answer" lang={data.language}>
+                        {turn.text_original || english || emptyText}
+                      </p>
+                      {turn.text_original &&
+                        english &&
+                        turn.text_original !== english && (
+                          <p className="cx-translation">{english}</p>
+                        )}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </aside>
+        </div>
+      </section>
       {conflict && (
         <div className="consult-dialog-backdrop">
           <section
@@ -528,6 +774,7 @@ export function DoctorConsultation() {
           </section>
         </div>
       )}
-    </section>
+    </div>
   );
 }
+

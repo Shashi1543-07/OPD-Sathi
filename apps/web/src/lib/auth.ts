@@ -18,12 +18,25 @@ type AuthResponse = {
 type Problem = { code?: string; detail?: string };
 
 const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const STAFF_GET_CACHE_MS = 8_000;
+const getResponseCache = new Map<
+  string,
+  { expiresAt: number; response: Response }
+>();
+const getRequestFlights = new Map<string, Promise<Response>>();
 let accessToken: string | null = null;
 let currentUser: StaffUser | null = null;
 let refreshFlight: Promise<StaffUser | null> | null = null;
 const listeners = new Set<(user: StaffUser | null) => void>();
 
 function publish(user: StaffUser | null) {
+  if (
+    currentUser?.id !== user?.id ||
+    currentUser?.hospital_id !== user?.hospital_id
+  ) {
+    getResponseCache.clear();
+    getRequestFlights.clear();
+  }
   currentUser = user;
   for (const listener of listeners) listener(user);
 }
@@ -109,8 +122,38 @@ export const staffAuth = {
         },
         credentials: "include",
       });
-    let response = await send();
-    if (response.status === 401 && (await this.refresh())) response = await send();
-    return response;
+    const method = (init.method ?? "GET").toUpperCase();
+    const isCacheableGet = method === "GET" && init.cache !== "no-store";
+    const cacheKey = `${currentUser?.hospital_id ?? ""}:${currentUser?.id ?? ""}:${path}`;
+    if (!isCacheableGet) {
+      if (method !== "GET") getResponseCache.clear();
+      let response = await send();
+      if (response.status === 401 && (await this.refresh()))
+        response = await send();
+      return response;
+    }
+    const cached = getResponseCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.response.clone();
+    getResponseCache.delete(cacheKey);
+    const active = getRequestFlights.get(cacheKey);
+    if (active) return (await active).clone();
+    const flight = (async () => {
+      let response = await send();
+      if (response.status === 401 && (await this.refresh()))
+        response = await send();
+      if (response.ok) {
+        getResponseCache.set(cacheKey, {
+          expiresAt: Date.now() + STAFF_GET_CACHE_MS,
+          response: response.clone(),
+        });
+      }
+      return response;
+    })();
+    getRequestFlights.set(cacheKey, flight);
+    try {
+      return (await flight).clone();
+    } finally {
+      getRequestFlights.delete(cacheKey);
+    }
   },
 };

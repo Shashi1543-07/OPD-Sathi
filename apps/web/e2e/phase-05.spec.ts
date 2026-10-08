@@ -107,7 +107,7 @@ test("staff can call a waiting patient from the queue board", async ({
   await expect(
     page
       .getByRole("region", { name: "Queue patients" })
-      .getByText("called", { exact: true }),
+      .getByText("Called", { exact: true }),
   ).toBeVisible();
   const screenshotDirectory = resolve(
     process.cwd(),

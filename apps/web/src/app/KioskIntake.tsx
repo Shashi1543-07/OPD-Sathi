@@ -1,128 +1,638 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { DangerTile, FacesScale, VoiceOrb } from "../components/ui";
+import { QRCodeSVG } from "qrcode.react";
+import {
+  AlertTriangle,
+  Camera,
+  Check,
+  ChevronLeft,
+  Keyboard,
+  Languages,
+  Loader2,
+  Mic,
+  Square,
+  Volume2,
+} from "lucide-react";
 import {
   intake,
-  type CaseSheet,
+  IntakeRequestError,
   type ConsentCopy,
   type DangerTile as DangerOption,
   type IntakeResponse,
   type Question,
 } from "../lib/intake";
 import { useLanguageStore } from "../languageStore";
-import { QRCodeSVG } from "qrcode.react";
-import { AudioPrompt, ReadBackAudioButton } from "../components/AudioPrompt";
+import type { Language } from "../i18n";
+import { useKioskPrefs } from "../lib/kioskPrefs";
 import {
-  CaptureError,
-  startMicrophoneCapture,
-  type StopCapture,
-} from "../lib/audioCapture";
+  browserRecognitionAvailable,
+  listenInBrowser,
+  listenWithServer,
+  recordingAvailable,
+  speak,
+  stopSpeaking,
+  type Listener,
+  type SpeechCapabilities,
+} from "../lib/voice";
+import "./intake.css";
 
-type Stage =
-  "consent" | "identity" | "danger" | "interview" | "summary" | "done" | "help";
-type VoiceState =
-  "idle" | "connecting" | "recording" | "processing" | "review" | "fallback";
+type Stage = "consent" | "identity" | "danger" | "interview" | "summary" | "done" | "help";
+type Answered = Question & { answer: string | number | null };
+type QueueTicket = {
+  token: string;
+  statusUrl: string;
+  position: number | null;
+  departmentName: string | null;
+  waitMinutes: number | null;
+};
 
-function languageFrom(copy?: ConsentCopy) {
-  return copy?.language ?? "en";
+const STEPS: { stage: Stage[]; key: string }[] = [
+  { stage: ["consent"], key: "stepConsent" },
+  { stage: ["identity"], key: "stepDetails" },
+  { stage: ["danger"], key: "stepSafety" },
+  { stage: ["interview"], key: "stepQuestions" },
+  { stage: ["summary"], key: "stepReview" },
+  { stage: ["done"], key: "stepToken" },
+];
+const RESTART_SECONDS = 60;
+/** A patient idle this long on the review screen gets a nurse sent to them. */
+const SUMMARY_IDLE_MS = 90_000;
+
+/** Downscale a camera photo to a ~1280px JPEG so uploads stay small on slow networks. */
+async function shrinkPhoto(file: File): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.82),
+    );
+    return blob ?? file;
+  } catch {
+    return file;
+  }
+}
+
+/** Split a stored answer back into tapped options and free text. */
+function splitAnswer(question: Question, answer: string | number | null) {
+  if (typeof answer !== "string" || !answer) return { chips: [] as string[], text: "" };
+  const labels = new Map((question.options ?? []).map((option) => [option.label, option.id]));
+  const chips: string[] = [];
+  const rest: string[] = [];
+  for (const part of answer.split(",").map((item) => item.trim()).filter(Boolean)) {
+    const id = labels.get(part);
+    if (id) chips.push(id);
+    else rest.push(part);
+  }
+  return { chips, text: rest.join(", ") };
+}
+
+const LANGUAGES: { code: Language; label: string }[] = [
+  { code: "hi", label: "हिन्दी" },
+  { code: "mr", label: "मराठी" },
+  { code: "en", label: "English" },
+];
+
+/** Change language at any step; the current question is shown again in the new one. */
+function LanguageSwitch({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: Language;
+  disabled: boolean;
+  onChange: (language: Language) => void;
+}) {
+  const { t } = useTranslation("kiosk");
+  return (
+    <div className="intake-lang" role="group" aria-label={t("chooseLanguage")}>
+      <Languages aria-hidden="true" size={20} />
+      {LANGUAGES.map(({ code, label }) => (
+        <button
+          type="button"
+          key={code}
+          lang={code}
+          aria-pressed={value === code}
+          className={value === code ? "is-selected" : ""}
+          disabled={disabled}
+          onClick={() => onChange(code)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Stepper({ stage }: { stage: Stage }) {
+  const { t } = useTranslation("intake");
+  const current = STEPS.findIndex((step) => step.stage.includes(stage));
+  return (
+    <ol className="intake-stepper" aria-label="Progress">
+      {STEPS.map((step, index) => (
+        <li
+          key={step.key}
+          className={index < current ? "is-done" : index === current ? "is-current" : ""}
+          aria-current={index === current ? "step" : undefined}
+        >
+          <span className="intake-stepper-dot">
+            {index < current ? <Check aria-hidden="true" size={14} /> : index + 1}
+          </span>
+          <span className="intake-stepper-label">{t(step.key)}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function SpeakButton({
+  text,
+  language,
+  fetchAudio,
+  autoPlayKey,
+}: {
+  text: string;
+  language: string;
+  fetchAudio?: () => Promise<Blob>;
+  /** When this value changes and voice guidance is on, read the text automatically. */
+  autoPlayKey?: string;
+}) {
+  const { t } = useTranslation("intake");
+  const voiceGuidance = useKioskPrefs((state) => state.voiceGuidance);
+  const [playing, setPlaying] = useState(false);
+  const fetchRef = useRef(fetchAudio);
+  useEffect(() => {
+    fetchRef.current = fetchAudio;
+  }, [fetchAudio]);
+
+  const play = useCallback(() => {
+    setPlaying(true);
+    void speak(text, language, fetchRef.current).finally(() => setPlaying(false));
+  }, [text, language]);
+
+  useEffect(() => {
+    if (!autoPlayKey || !voiceGuidance) return;
+    const timer = window.setTimeout(play, 250);
+    return () => {
+      window.clearTimeout(timer);
+      stopSpeaking();
+    };
+  }, [autoPlayKey, voiceGuidance, play]);
+
+  return (
+    <button
+      type="button"
+      className={`intake-speak ${playing ? "is-playing" : ""}`}
+      onClick={() => {
+        if (playing) {
+          stopSpeaking();
+          setPlaying(false);
+        } else play();
+      }}
+    >
+      {playing ? <Square aria-hidden="true" size={18} /> : <Volume2 aria-hidden="true" size={20} />}
+      <span>{playing ? t("stopListening") : t("listen")}</span>
+    </button>
+  );
+}
+
+type VoiceStatus = "idle" | "listening" | "processing" | "heard" | "nothing" | "error";
+
+function AnswerPanel({
+  question,
+  language,
+  capabilities,
+  initial,
+  busy,
+  editing,
+  canGoBack,
+  onBack,
+  onSubmit,
+}: {
+  question: Question;
+  language: string;
+  capabilities?: SpeechCapabilities;
+  initial: string | number | null;
+  busy: boolean;
+  editing: boolean;
+  canGoBack: boolean;
+  onBack: () => void;
+  onSubmit: (answer: string | number | null, mode: "touch" | "voice", skip: boolean) => void;
+}) {
+  const { t } = useTranslation("intake");
+  const seeded = useMemo(() => splitAnswer(question, initial), [question, initial]);
+  const [chips, setChips] = useState<string[]>(seeded.chips);
+  const [text, setText] = useState(seeded.text);
+  const [scale, setScale] = useState<number | undefined>(
+    typeof initial === "number" ? initial : undefined,
+  );
+  const [showText, setShowText] = useState(Boolean(seeded.text));
+  const [voice, setVoice] = useState<VoiceStatus>("idle");
+  const [voiceMessage, setVoiceMessage] = useState("");
+  const [usedVoice, setUsedVoice] = useState(false);
+  const [level, setLevel] = useState(0);
+  const [scanning, setScanning] = useState(false);
+  const listener = useRef<Listener | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const canScan = question.id === "medications" && capabilities?.ai === true;
+
+  async function scanPrescription(file: File) {
+    setScanning(true);
+    setVoiceMessage(t("scanning"));
+    try {
+      const medicines = await intake.readPrescription(await shrinkPhoto(file));
+      if (!medicines.length) {
+        setVoiceMessage(t("scanNone"));
+        return;
+      }
+      const found = medicines
+        .map((item) => [item.name, item.dose, item.how_often].filter(Boolean).join(" "))
+        .join(", ");
+      setShowText(true);
+      setText((current) => (current ? `${current}, ${found}` : found));
+      setVoiceMessage(t("scanFound"));
+    } catch {
+      setVoiceMessage(t("scanFailed"));
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  useEffect(() => () => listener.current?.cancel(), []);
+
+  const serverVoice = capabilities?.stt === "sarvam" || capabilities?.stt === "gemini";
+  const voiceAvailable =
+    question.input === "text" &&
+    capabilities !== undefined &&
+    ((serverVoice && recordingAvailable()) || browserRecognitionAvailable());
+
+  const options = question.options ?? [];
+  const toggleChip = (id: string) => {
+    const option = options.find((item) => item.id === id);
+    setChips((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      if (!question.multi || option?.none) return [id];
+      // Picking a real symptom clears an earlier "none of these".
+      const withoutNone = current.filter(
+        (item) => !options.find((candidate) => candidate.id === item)?.none,
+      );
+      return [...withoutNone, id];
+    });
+  };
+
+  const composed = [
+    ...chips.map((id) => options.find((option) => option.id === id)?.label ?? ""),
+    text.trim(),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const hasAnswer = question.input === "scale" ? scale !== undefined : composed.length > 0;
+
+  function startListening() {
+    stopSpeaking();
+    setVoiceMessage("");
+    setVoice("listening");
+    const handlers = {
+      onLevel: setLevel,
+      onPartial: (partial: string) => {
+        setShowText(true);
+        setText(partial);
+      },
+      onProcessing: () => setVoice("processing"),
+      onFinal: (heard: string) => {
+        listener.current = null;
+        setLevel(0);
+        if (!heard) {
+          setVoice("nothing");
+          setVoiceMessage(t("voiceNothing"));
+          return;
+        }
+        setShowText(true);
+        setText((current) => {
+          // Browser recognition streams partials into the box already.
+          if (current && heard.startsWith(current.slice(0, 8))) return heard;
+          return current && !current.includes(heard) ? `${current}, ${heard}` : heard;
+        });
+        setUsedVoice(true);
+        setVoice("heard");
+        setVoiceMessage(t("voiceHeard"));
+      },
+      onError: (code: "permission_denied" | "unsupported" | "failed") => {
+        listener.current = null;
+        setLevel(0);
+        setVoice("error");
+        setShowText(true);
+        setVoiceMessage(t(code === "permission_denied" ? "voiceDenied" : "voiceFailed"));
+      },
+    };
+    listener.current =
+      serverVoice && recordingAvailable()
+        ? listenWithServer((clip) => intake.transcribe(clip, question.id), handlers)
+        : listenInBrowser(language, handlers);
+  }
+
+  const listening = voice === "listening";
+  return (
+    <div className="intake-answer">
+      {question.input === "scale" ? (
+        <div className="intake-scale" role="radiogroup" aria-label={question.prompt}>
+          {Array.from({ length: 11 }, (_, value) => (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={scale === value}
+              key={value}
+              className={`intake-scale-step tone-${Math.min(4, Math.floor(value / 2.5))} ${scale === value ? "is-selected" : ""}`}
+              onClick={() => setScale(value)}
+            >
+              {value}
+            </button>
+          ))}
+          <div className="intake-scale-legend">
+            <span>0 · {t("scaleNone")}</span>
+            <span>10 · {t("scaleWorst")}</span>
+          </div>
+        </div>
+      ) : (
+        <>
+          {options.length > 0 && (
+            <>
+              <p className="intake-hint">{question.multi ? t("pickAll") : t("pickOne")}</p>
+              <div className="intake-chips">
+                {options.map((option) => {
+                  const selected = chips.includes(option.id);
+                  return (
+                    <button
+                      type="button"
+                      key={option.id}
+                      aria-pressed={selected}
+                      className={`intake-chip ${selected ? "is-selected" : ""} ${option.none ? "is-none" : ""}`}
+                      onClick={() => toggleChip(option.id)}
+                    >
+                      {selected && <Check aria-hidden="true" size={20} />}
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          <div className="intake-voice">
+            {options.length > 0 && <p className="intake-hint">{t("orSpeak")}</p>}
+            <div className="intake-voice-row">
+              {voiceAvailable && (
+                <button
+                  type="button"
+                  className={`intake-mic ${listening ? "is-listening" : ""}`}
+                  disabled={busy || voice === "processing"}
+                  onClick={() => (listening ? listener.current?.stop() : startListening())}
+                  style={{ ["--level" as string]: Math.min(1, level * 12).toFixed(2) }}
+                >
+                  {voice === "processing" ? (
+                    <Loader2 className="spin" aria-hidden="true" size={30} />
+                  ) : listening ? (
+                    <Square aria-hidden="true" size={28} />
+                  ) : (
+                    <Mic aria-hidden="true" size={32} />
+                  )}
+                  <span>
+                    {voice === "processing"
+                      ? t("understanding")
+                      : listening
+                        ? t("tapToStop")
+                        : t("tapToSpeak")}
+                  </span>
+                </button>
+              )}
+              {!showText && (
+                <button
+                  type="button"
+                  className="intake-type-toggle"
+                  onClick={() => setShowText(true)}
+                >
+                  <Keyboard aria-hidden="true" size={20} />
+                  {t("typeInstead")}
+                </button>
+              )}
+              {canScan && (
+                <>
+                  <button
+                    type="button"
+                    className="intake-type-toggle"
+                    disabled={scanning || busy}
+                    onClick={() => photoInput.current?.click()}
+                  >
+                    {scanning ? (
+                      <Loader2 className="spin" aria-hidden="true" size={20} />
+                    ) : (
+                      <Camera aria-hidden="true" size={20} />
+                    )}
+                    {t("scanPrescription")}
+                  </button>
+                  <input
+                    ref={photoInput}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (file) void scanPrescription(file);
+                    }}
+                  />
+                </>
+              )}
+            </div>
+            <p className="intake-voice-status" aria-live="polite">
+              {listening ? t("listeningNow") : voiceMessage}
+            </p>
+            {!voiceAvailable && capabilities !== undefined && options.length === 0 && (
+              <p className="intake-hint">{t("voiceUnavailable")}</p>
+            )}
+            {showText && (
+              <textarea
+                className="intake-textarea"
+                lang={language}
+                rows={3}
+                maxLength={400}
+                value={text}
+                placeholder={t("typePlaceholder")}
+                aria-label={t("typePlaceholder")}
+                onChange={(event) => setText(event.target.value)}
+              />
+            )}
+          </div>
+        </>
+      )}
+      <div className="intake-actions">
+        {canGoBack && (
+          <button type="button" className="intake-btn intake-btn--ghost" onClick={onBack}>
+            <ChevronLeft aria-hidden="true" size={22} />
+            {t("back")}
+          </button>
+        )}
+        <span className="intake-actions-spacer" />
+        {question.optional && !editing && (
+          <button
+            type="button"
+            className="intake-btn intake-btn--secondary"
+            disabled={busy}
+            onClick={() => onSubmit(null, "touch", true)}
+          >
+            {t("skip")}
+          </button>
+        )}
+        <button
+          type="button"
+          className="intake-btn intake-btn--primary"
+          disabled={busy || !hasAnswer || listening || voice === "processing"}
+          onClick={() =>
+            onSubmit(
+              question.input === "scale" ? (scale ?? null) : composed.slice(0, 500),
+              usedVoice ? "voice" : "touch",
+              false,
+            )
+          }
+        >
+          {busy ? <Loader2 className="spin" aria-hidden="true" size={22} /> : null}
+          {editing ? t("saveChange") : t("next")}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function KioskIntake() {
-  const { t } = useTranslation(["common", "kiosk"]);
+  const { t } = useTranslation(["intake", "kiosk"]);
   const navigate = useNavigate();
   const setLanguage = useLanguageStore((state) => state.setLanguage);
   const session = useMemo(() => intake.session(), []);
-  const consent = session?.consent;
-  const [stage, setStage] = useState<Stage>(
-    (session?.stage as Stage) ?? "consent",
-  );
+  const [consent, setConsent] = useState<ConsentCopy | undefined>(session?.consent);
+  const language: Language = consent?.language ?? "en";
+  const [stage, setStage] = useState<Stage>((session?.stage as Stage) ?? "consent");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [capabilities, setCapabilities] = useState<SpeechCapabilities>();
+
   const [age, setAge] = useState("");
   const [name, setName] = useState("");
-  const [sex, setSex] = useState("unknown");
+  const [sex, setSex] = useState<"female" | "male" | "other" | "">("");
   const [phone, setPhone] = useState("");
   const [smsOptIn, setSmsOptIn] = useState(false);
+  const [phoneConflict, setPhoneConflict] = useState(false);
+
   const [tiles, setTiles] = useState<DangerOption[]>([]);
   const [selectedTiles, setSelectedTiles] = useState<string[]>([]);
+
   const [question, setQuestion] = useState<Question>();
-  const [answered, setAnswered] = useState<
-    (Question & { answer: string | number })[]
-  >([]);
-  const [editing, setEditing] = useState<Question>();
-  const [answer, setAnswer] = useState<string | number>("");
-  const [answerMode, setAnswerMode] = useState<"touch" | "voice">("touch");
-  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [voiceLevel, setVoiceLevel] = useState(0);
-  const [voiceText, setVoiceText] = useState("");
-  const [voiceError, setVoiceError] = useState("");
-  const voiceSocket = useRef<WebSocket | null>(null);
-  const stopCapture = useRef<StopCapture | null>(null);
-  const hasVoiceTranscript = useRef(false);
-  const voiceFallbackTimer = useRef<number | undefined>(undefined);
-  const summaryIdleTimer = useRef<number | undefined>(undefined);
-  const [caseSheet, setCaseSheet] = useState<CaseSheet>();
+  const [progress, setProgress] = useState<{ current: number; total: number }>();
+  const [answered, setAnswered] = useState<Answered[]>([]);
+  const [editing, setEditing] = useState<Answered>();
   const [readback, setReadback] = useState("");
-  const [needsAssistance, setNeedsAssistance] = useState(false);
-  const [queueToken, setQueueToken] = useState<{
-    token: string;
-    statusUrl: string;
-  }>();
+  const [redFlagged, setRedFlagged] = useState(false);
+  const [nurseComing, setNurseComing] = useState(false);
+  const [ticket, setTicket] = useState<QueueTicket>();
+  const [secondsLeft, setSecondsLeft] = useState(RESTART_SECONDS);
+
+  const move = useCallback((next: Stage) => {
+    stopSpeaking();
+    setStage(next);
+    intake.setStage(next);
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const reportError = useCallback(
+    (cause: unknown) => {
+      if (cause instanceof IntakeRequestError && cause.status === 410) {
+        setError(t("sessionLost"));
+        return;
+      }
+      setError(cause instanceof Error && cause.message ? cause.message : t("errorRetry"));
+    },
+    [t],
+  );
+
+  const acceptInterviewResponse = useCallback(
+    (result: IntakeResponse) => {
+      setAnswered((result.answered ?? []) as Answered[]);
+      setEditing(undefined);
+      if (result.complete) {
+        setReadback(result.readback ?? "");
+        setRedFlagged((result.case_sheet?.red_flags ?? []).length > 0);
+        move("summary");
+      } else {
+        setQuestion(result.question);
+        setProgress(result.progress);
+        move("interview");
+      }
+    },
+    [move],
+  );
 
   useEffect(() => {
     if (!session || !consent) {
       navigate("/kiosk", { replace: true });
       return;
     }
-    setLanguage(languageFrom(consent));
+    setLanguage(consent.language);
+    void intake
+      .capabilities()
+      .then(setCapabilities)
+      .catch(() => setCapabilities({ stt: "browser", tts: "browser", ai: false }));
     const resume = async () => {
-      if (stage === "interview" || stage === "summary") {
-        try {
-          const result = await intake.nextQuestion();
-          acceptInterviewResponse(result);
-        } catch (cause) {
-          reportError(cause);
-        }
-      }
-      if (stage === "danger") {
-        try {
-          setTiles((await intake.dangerTiles()).tiles);
-        } catch (cause) {
-          reportError(cause);
-        }
+      try {
+        if (stage === "interview" || stage === "summary")
+          acceptInterviewResponse(await intake.nextQuestion());
+        if (stage === "danger") setTiles((await intake.dangerTiles()).tiles);
+      } catch (cause) {
+        reportError(cause);
       }
     };
     void resume();
-    // The stage is deliberately read only on mount to resume this kiosk flow.
+    // The stage is read once on mount to resume an interrupted kiosk flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function reportError(cause: unknown) {
-    setError(
-      cause instanceof Error ? cause.message : t("errorTitle", { ns: "kiosk" }),
-    );
-  }
+  useEffect(() => {
+    if (stage !== "summary" || nurseComing) return;
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        setNurseComing(true);
+        void intake.needsAssistance().catch(() => undefined);
+      }, SUMMARY_IDLE_MS);
+    };
+    arm();
+    window.addEventListener("pointerdown", arm);
+    window.addEventListener("keydown", arm);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pointerdown", arm);
+      window.removeEventListener("keydown", arm);
+    };
+  }, [stage, nurseComing]);
 
-  function move(next: Stage) {
-    setStage(next);
-    intake.setStage(next);
-    setError("");
-  }
-
-  function acceptInterviewResponse(result: IntakeResponse) {
-    setAnswered(result.answered ?? []);
-    if (result.complete) {
-      setCaseSheet(result.case_sheet);
-      setReadback(result.readback ?? "");
-      move("summary");
-    } else {
-      setQuestion(result.question);
-      setAnswer("");
-      setEditing(undefined);
-      move("interview");
-    }
-  }
+  useEffect(() => {
+    if (stage !== "done") return;
+    const timer = window.setInterval(() => {
+      setSecondsLeft((value) => {
+        if (value <= 1) {
+          window.clearInterval(timer);
+          navigate("/kiosk", { replace: true });
+          return 0;
+        }
+        return value - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [stage, navigate]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -130,266 +640,97 @@ export function KioskIntake() {
     try {
       await action();
     } catch (cause) {
-      reportError(cause);
+      if (cause instanceof IntakeRequestError && cause.code === "PHONE_ALREADY_REGISTERED") {
+        setPhoneConflict(true);
+        setError(t("phoneAlreadyRegistered", { ns: "kiosk" }));
+      } else reportError(cause);
     } finally {
       setBusy(false);
     }
   }
 
-  const currentQuestion = editing ?? question;
-
-  useEffect(
-    () => () => {
-      if (voiceFallbackTimer.current !== undefined)
-        window.clearTimeout(voiceFallbackTimer.current);
-      void stopCapture.current?.();
-      voiceSocket.current?.close();
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (stage !== "summary" || needsAssistance) return;
-    const schedule = () => {
-      if (summaryIdleTimer.current !== undefined)
-        window.clearTimeout(summaryIdleTimer.current);
-      summaryIdleTimer.current = window.setTimeout(() => {
-        void intake
-          .needsAssistance()
-          .then(() => setNeedsAssistance(true))
-          .catch(() => setNeedsAssistance(true));
-      }, 90_000);
-    };
-    const resetOnActivity = () => schedule();
-    schedule();
-    window.addEventListener("pointerdown", resetOnActivity);
-    window.addEventListener("keydown", resetOnActivity);
-    return () => {
-      if (summaryIdleTimer.current !== undefined)
-        window.clearTimeout(summaryIdleTimer.current);
-      window.removeEventListener("pointerdown", resetOnActivity);
-      window.removeEventListener("keydown", resetOnActivity);
-    };
-  }, [stage, needsAssistance]);
-
-  function clearVoiceFallbackTimer() {
-    if (voiceFallbackTimer.current !== undefined) {
-      window.clearTimeout(voiceFallbackTimer.current);
-      voiceFallbackTimer.current = undefined;
+  async function submitIdentity(includePhone: boolean) {
+    await intake.identity(
+      Number(age),
+      sex || "unknown",
+      includePhone ? phone || undefined : undefined,
+      session?.assisted ? name.trim() : undefined,
+      includePhone && smsOptIn,
+    );
+    if (!includePhone) {
+      setPhone("");
+      setSmsOptIn(false);
     }
+    setPhoneConflict(false);
+    setTiles((await intake.dangerTiles()).tiles);
+    move("danger");
   }
 
-  function fallBackToTouch() {
-    clearVoiceFallbackTimer();
-    const stop = stopCapture.current;
-    stopCapture.current = null;
-    void stop?.();
-    voiceSocket.current?.close();
-    voiceSocket.current = null;
-    setVoiceLevel(0);
-    setVoiceError(t("voiceFallback", { ns: "kiosk" }));
-    setVoiceState("fallback");
-  }
-
-  function scheduleVoiceFallback() {
-    clearVoiceFallbackTimer();
-    voiceFallbackTimer.current = window.setTimeout(fallBackToTouch, 3_000);
-  }
-
-  async function startVoice() {
-    if (!consent || !currentQuestion || voiceState === "connecting") return;
-    setVoiceError("");
-    setVoiceText("");
-    hasVoiceTranscript.current = false;
-    clearVoiceFallbackTimer();
-    setVoiceState("connecting");
-    let media: MediaStream | undefined;
-    let socket: WebSocket | undefined;
-    let releaseReady: (() => void) | undefined;
-    let rejectReady: ((cause: Error) => void) | undefined;
-    let readyResolved = false;
-    try {
-      if (!navigator.mediaDevices?.getUserMedia)
-        throw new CaptureError("unsupported");
-      // Request permission directly from the patient's button tap.
-      media = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      const ready = new Promise<void>((resolve, reject) => {
-        releaseReady = () => {
-          readyResolved = true;
-          resolve();
-        };
-        rejectReady = reject;
-      });
-      socket = intake.connectAudio((event) => {
-        let packet: {
-          type?: string;
-          text?: string;
-          confidence?: number;
-        };
-        try {
-          packet = JSON.parse(event.data) as typeof packet;
-        } catch {
-          packet = { type: "error" };
-        }
-        if (packet.type === "ready") {
-          releaseReady?.();
-          return;
-        }
-        if (packet.type === "error" || packet.type === "fallback") {
-          if (!readyResolved) {
-            rejectReady?.(new Error("connection_failed"));
-          } else {
-            fallBackToTouch();
-          }
-          return;
-        }
-        if (packet.type === "partial" || packet.type === "final") {
-          hasVoiceTranscript.current = true;
-          if (packet.type === "partial") scheduleVoiceFallback();
-          else clearVoiceFallbackTimer();
-          const transcript = packet.text ?? "";
-          setVoiceText(transcript);
-          setAnswer(transcript);
-          setAnswerMode("voice");
-          if (packet.type === "final") {
-            void stopCapture.current?.();
-            stopCapture.current = null;
-            socket?.close();
-            voiceSocket.current = null;
-            setVoiceLevel(0);
-            setVoiceState(
-              packet.confidence === undefined || packet.confidence < 0.65
-                ? "review"
-                : "idle",
-            );
-          }
-        }
-      });
-      voiceSocket.current = socket;
-      socket.addEventListener("close", () => {
-        if (!readyResolved) rejectReady?.(new Error("connection_failed"));
-      });
-      socket.addEventListener("error", () => {
-        if (!readyResolved) rejectReady?.(new Error("connection_failed"));
-      });
-      let readyTimer: number | undefined;
-      try {
-        await Promise.race([
-          ready,
-          new Promise<never>((_, reject) => {
-            readyTimer = window.setTimeout(
-              () => reject(new Error("connection_failed")),
-              10_000,
-            );
-          }),
-        ]);
-      } finally {
-        if (readyTimer !== undefined) window.clearTimeout(readyTimer);
-      }
-      socket.send(
-        JSON.stringify({
-          type: "start",
-          lang: consent.language,
-          question_id: currentQuestion.id,
-        }),
-      );
-      stopCapture.current = await startMicrophoneCapture(socket, {
-        stream: media,
-        onLevel: setVoiceLevel,
-        onSpeech: scheduleVoiceFallback,
-        onStop: (reason) => {
-          if (reason === "silence" && !hasVoiceTranscript.current)
-            fallBackToTouch();
-          else
-            setVoiceState((current) =>
-              current === "recording" || current === "connecting"
-                ? "processing"
-                : current,
-            );
-        },
-      });
-      media = undefined;
-      setVoiceState("recording");
-    } catch (cause) {
-      clearVoiceFallbackTimer();
-      media?.getTracks().forEach((track) => track.stop());
-      socket?.close();
-      voiceSocket.current = null;
-      const code =
-        cause instanceof CaptureError
-          ? cause.code
-          : cause instanceof DOMException && cause.name === "NotAllowedError"
-            ? "permission_denied"
-            : cause instanceof DOMException && cause.name === "NotFoundError"
-              ? "unsupported"
-              : "connection_failed";
-      setVoiceError(
-        code === "permission_denied"
-          ? t("voicePermissionDenied", { ns: "kiosk" })
-          : code === "unsupported"
-            ? t("voiceUnsupported", { ns: "kiosk" })
-            : t("voiceFallback", { ns: "kiosk" }),
-      );
-      setVoiceState("fallback");
-    }
-  }
-
-  const onPrevious = () => {
-    const previous = answered.at(-1);
-    if (!previous) return;
-    setEditing(previous);
-    setAnswer(previous.answer);
-  };
-
-  const submitAnswer = async (skip = false) => {
-    if (!currentQuestion) return;
+  async function switchLanguage(next: Language) {
+    if (next === language || busy) return;
+    stopSpeaking();
     await run(async () => {
-      const response = editing
-        ? await intake.correct(editing.id, answer, answerMode)
-        : await intake.answer(
-            currentQuestion.id,
-            skip ? null : answer,
-            skip,
-            answerMode,
-          );
-      acceptInterviewResponse(response);
-      setAnswerMode("touch");
-      setVoiceState("idle");
+      const result = await intake.changeLanguage(next);
+      setConsent(result.consent);
+      setLanguage(next);
+      if (stage === "danger") setTiles((await intake.dangerTiles()).tiles);
+      if (stage === "interview" || stage === "summary") {
+        const response = await intake.nextQuestion();
+        const answeredNow = (response.answered ?? []) as Answered[];
+        setAnswered(answeredNow);
+        if (response.complete) setReadback(response.readback ?? "");
+        else {
+          setQuestion(response.question);
+          setProgress(response.progress);
+        }
+        if (editing) setEditing(answeredNow.find((item) => item.id === editing.id) ?? editing);
+      }
     });
-  };
+  }
 
   if (!session || !consent) return null;
 
+  const phoneValid = phone === "" || /^[6-9]\d{9}$/.test(phone);
+  const ageValid = age !== "" && Number(age) >= 0 && Number(age) <= 120;
+  const currentQuestion = editing ?? question;
+
   return (
-    <main className="kiosk-main kiosk-intake" aria-busy={busy}>
-      <section className="welcome-card kiosk-intake-card">
+    <main className="kiosk-main intake" aria-busy={busy}>
+      {stage !== "done" && stage !== "help" && (
+        <LanguageSwitch value={language} disabled={busy} onChange={(next) => void switchLanguage(next)} />
+      )}
+      <Stepper stage={stage} />
+      <section className="intake-card" lang={language}>
         {error && (
-          <div className="ui-toast ui-toast--error" role="alert">
-            {error}
+          <div className="intake-error" role="alert">
+            <AlertTriangle aria-hidden="true" size={22} />
+            <span>{error}</span>
+            {error === t("sessionLost") && (
+              <button type="button" onClick={() => navigate("/kiosk", { replace: true })}>
+                {t("startAgain")}
+              </button>
+            )}
           </div>
         )}
+
         {stage === "consent" && (
           <>
-            <p className="eyebrow">{t("screenS2", { ns: "kiosk" })}</p>
-            <h1>{t("consentContinue", { ns: "kiosk" })}</h1>
-            <p lang={consent.language}>{consent.text}</p>
-            <AudioPrompt
-              id="consent"
-              language={consent.language}
-              label={t("readAloud", { ns: "kiosk" })}
-              volumeLabel={t("volume", { ns: "kiosk" })}
+            <h1 className="intake-title">{t("consentTitle")}</h1>
+            <p className="intake-lead">{consent.text}</p>
+            <SpeakButton
+              text={consent.text}
+              language={language}
+              autoPlayKey={`consent-${language}`}
+              fetchAudio={
+                capabilities?.tts && capabilities.tts !== "browser"
+                  ? () => intake.speechAudio("consent")
+                  : undefined
+              }
             />
-            <div className="welcome-actions">
+            <div className="intake-actions intake-actions--stack">
               <button
-                className="ui-button ui-button--primary ui-button--kiosk"
                 type="button"
+                className="intake-btn intake-btn--primary intake-btn--large"
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
@@ -398,24 +739,22 @@ export function KioskIntake() {
                   })
                 }
               >
-                {t("consentContinue", { ns: "kiosk" })}
+                <Check aria-hidden="true" size={24} />
+                {t("consentAgree")}
               </button>
               <button
-                className="ui-button ui-button--secondary"
                 type="button"
+                className="intake-btn intake-btn--ghost"
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
-                    const result = await intake.consent(consent, false);
+                    await intake.consent(consent, false);
                     intake.finish();
-                    setError(
-                      result.message ?? t("staffMessage", { ns: "kiosk" }),
-                    );
                     move("help");
                   })
                 }
               >
-                {t("consentDecline", { ns: "kiosk" })}
+                {t("consentDecline")}
               </button>
             </div>
           </>
@@ -423,404 +762,394 @@ export function KioskIntake() {
 
         {stage === "identity" && (
           <>
-            <p className="eyebrow">{t("screenS4", { ns: "kiosk" })}</p>
-            <h1>{t("identityTitle", { ns: "kiosk" })}</h1>
-            {session?.assisted && (
-              <>
-                <label htmlFor="intake-name">
-                  {t("patientNameLabel", { ns: "kiosk" })}
-                </label>
+            <h1 className="intake-title">{t("detailsTitle")}</h1>
+            {session.assisted && (
+              <label className="intake-field">
+                <span>{t("nameQuestion")}</span>
                 <input
-                  id="intake-name"
                   autoComplete="name"
                   maxLength={200}
-                  required
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
-              </>
+              </label>
             )}
-            <label htmlFor="intake-age">{t("ageLabel", { ns: "kiosk" })}</label>
-            <input
-              id="intake-age"
-              type="number"
-              inputMode="numeric"
-              min="0"
-              max="120"
-              value={age}
-              onChange={(event) => setAge(event.target.value)}
-            />
-            <label htmlFor="intake-sex">{t("sexLabel", { ns: "kiosk" })}</label>
-            <select
-              id="intake-sex"
-              value={sex}
-              onChange={(event) => setSex(event.target.value)}
-            >
-              <option value="female">{t("sexFemale", { ns: "kiosk" })}</option>
-              <option value="male">{t("sexMale", { ns: "kiosk" })}</option>
-              <option value="other">{t("sexOther", { ns: "kiosk" })}</option>
-              <option value="unknown">
-                {t("sexUnknown", { ns: "kiosk" })}
-              </option>
-            </select>
-            <label htmlFor="intake-phone">
-              {t("phoneLabel", { ns: "kiosk" })}
-            </label>
-            <input
-              id="intake-phone"
-              inputMode="numeric"
-              autoComplete="tel-national"
-              maxLength={10}
-              value={phone}
-              onChange={(event) =>
-                setPhone(event.target.value.replace(/\D/g, ""))
-              }
-            />
-            <label className="intake-notification-opt-in" htmlFor="intake-sms-opt-in">
+            <div className="intake-field">
+              <span id="age-label">{t("ageQuestion")}</span>
+              <div className="intake-age">
+                <input
+                  id="intake-age"
+                  aria-labelledby="age-label"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={120}
+                  value={age}
+                  onChange={(event) => setAge(event.target.value.slice(0, 3))}
+                />
+                <span>{t("ageUnit")}</span>
+              </div>
+            </div>
+            <div className="intake-field">
+              <span id="sex-label">{t("sexQuestion")}</span>
+              <div className="intake-segmented" role="radiogroup" aria-labelledby="sex-label">
+                {(["female", "male", "other"] as const).map((value) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={sex === value}
+                    key={value}
+                    className={sex === value ? "is-selected" : ""}
+                    onClick={() => setSex(value)}
+                  >
+                    {t(value === "female" ? "sexFemale" : value === "male" ? "sexMale" : "sexOther")}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="intake-field">
+              <span>{t("phoneQuestion")}</span>
+              <small>{t("phoneHint")}</small>
               <input
-                id="intake-sms-opt-in"
-                type="checkbox"
-                checked={smsOptIn}
-                disabled={!phone}
-                onChange={(event) => setSmsOptIn(event.target.checked)}
+                id="intake-phone"
+                inputMode="numeric"
+                autoComplete="tel-national"
+                maxLength={10}
+                value={phone}
+                onChange={(event) => {
+                  const digits = event.target.value.replace(/\D/g, "");
+                  setPhone(digits);
+                  setSmsOptIn(digits.length === 10);
+                  setPhoneConflict(false);
+                  setError("");
+                }}
               />
-              {t("smsOptIn", { ns: "kiosk" })}
+              {!phoneValid && phone.length === 10 && (
+                <small className="intake-field-error">{t("phoneInvalid")}</small>
+              )}
             </label>
-            <button
-              className="ui-button ui-button--primary ui-button--kiosk"
-              type="button"
-              disabled={
-                busy ||
-                age === "" ||
-                Number(age) < 0 ||
-                Number(age) > 120 ||
-                (session?.assisted === true && !name.trim()) ||
-                (phone !== "" && !/^[6-9]\d{9}$/.test(phone))
-              }
-              onClick={() =>
-                void run(async () => {
-                  await intake.identity(
-                    Number(age),
-                    sex,
-                    phone || undefined,
-                    session?.assisted ? name.trim() : undefined,
-                    smsOptIn,
-                  );
-                  setTiles((await intake.dangerTiles()).tiles);
-                  move("danger");
-                })
-              }
-            >
-              {t("continueIntake", { ns: "kiosk" })}
-            </button>
+            {phone.length === 10 && phoneValid && (
+              <label className="intake-check">
+                <input
+                  type="checkbox"
+                  checked={smsOptIn}
+                  onChange={(event) => setSmsOptIn(event.target.checked)}
+                />
+                <span>{t("smsOptIn")}</span>
+              </label>
+            )}
+            <div className="intake-actions">
+              <span className="intake-actions-spacer" />
+              {phoneConflict && (
+                <button
+                  type="button"
+                  className="intake-btn intake-btn--secondary"
+                  disabled={busy}
+                  onClick={() => void run(() => submitIdentity(false))}
+                >
+                  {t("continueWithoutPhone", { ns: "kiosk" })}
+                </button>
+              )}
+              <button
+                type="button"
+                className="intake-btn intake-btn--primary"
+                disabled={
+                  busy ||
+                  !ageValid ||
+                  !sex ||
+                  !phoneValid ||
+                  (session.assisted === true && !name.trim())
+                }
+                onClick={() => void run(() => submitIdentity(true))}
+              >
+                {t("next")}
+              </button>
+            </div>
           </>
         )}
 
         {stage === "danger" && (
           <>
-            <p className="eyebrow">{t("screenS3", { ns: "kiosk" })}</p>
-            <h1>{t("dangerTitle", { ns: "kiosk" })}</h1>
-            <div className="kiosk-danger-grid">
-              {tiles.map((tile) => (
-                <DangerTile
-                  key={tile.id}
-                  label={tile.label}
-                  selected={selectedTiles.includes(tile.id)}
-                  onClick={() =>
-                    setSelectedTiles((selected) =>
-                      selected.includes(tile.id)
-                        ? selected.filter((item) => item !== tile.id)
-                        : [...selected, tile.id],
-                    )
-                  }
-                />
-              ))}
+            <h1 className="intake-title">{t("dangerTitle")}</h1>
+            <p className="intake-lead">{t("dangerSubtitle")}</p>
+            <div className="intake-danger-grid">
+              {tiles.map((tile) => {
+                const selected = selectedTiles.includes(tile.id);
+                return (
+                  <button
+                    type="button"
+                    key={tile.id}
+                    aria-pressed={selected}
+                    className={`intake-danger ${selected ? "is-selected" : ""}`}
+                    onClick={() =>
+                      setSelectedTiles((current) =>
+                        current.includes(tile.id)
+                          ? current.filter((item) => item !== tile.id)
+                          : [...current, tile.id],
+                      )
+                    }
+                  >
+                    <AlertTriangle aria-hidden="true" size={26} />
+                    <span>{tile.label}</span>
+                    {selected && <Check className="intake-danger-check" aria-hidden="true" />}
+                  </button>
+                );
+              })}
             </div>
             {selectedTiles.length > 0 && (
-              <p role="status">{t("staffMessage", { ns: "kiosk" })}</p>
+              <p className="intake-staff-note" role="status">
+                {t("dangerAlert")}
+              </p>
             )}
-            <div className="welcome-actions">
-              <button
-                className="ui-button ui-button--secondary"
-                type="button"
-                onClick={() => setSelectedTiles([])}
-              >
-                {t("dangerNone", { ns: "kiosk" })}
-              </button>
-              <button
-                className="ui-button ui-button--primary ui-button--kiosk"
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await intake.dangerSigns(selectedTiles);
-                    acceptInterviewResponse(await intake.nextQuestion());
-                  })
-                }
-              >
-                {t("nextIntake", { ns: "kiosk" })}
-              </button>
+            <div className="intake-actions">
+              <span className="intake-actions-spacer" />
+              {selectedTiles.length === 0 ? (
+                <button
+                  type="button"
+                  className="intake-btn intake-btn--primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await intake.dangerSigns([]);
+                      acceptInterviewResponse(await intake.nextQuestion());
+                    })
+                  }
+                >
+                  {t("dangerNone")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="intake-btn intake-btn--primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      await intake.dangerSigns(selectedTiles);
+                      acceptInterviewResponse(await intake.nextQuestion());
+                    })
+                  }
+                >
+                  {t("dangerContinue")}
+                </button>
+              )}
             </div>
           </>
         )}
 
         {stage === "interview" && currentQuestion && (
           <>
-            <p className="eyebrow">{t("screenS5", { ns: "kiosk" })}</p>
-            <h1>{t("questionTitle", { ns: "kiosk" })}</h1>
-            <p lang={consent.language}>{currentQuestion.prompt}</p>
-            <AudioPrompt
-              id={`question.${currentQuestion.id}`}
-              language={consent.language}
-              label={t("readAloud", { ns: "kiosk" })}
-              volumeLabel={t("volume", { ns: "kiosk" })}
-            />
-            {currentQuestion.input === "scale" ? (
-              <FacesScale
-                value={typeof answer === "number" ? answer : undefined}
-                onChange={setAnswer}
-              />
-            ) : (
-              <textarea
-                aria-label={t("answerPlaceholder", { ns: "kiosk" })}
-                maxLength={500}
-                rows={4}
-                value={String(answer)}
-                placeholder={t("answerPlaceholder", { ns: "kiosk" })}
-                onChange={(event) => {
-                  if (voiceState === "recording") {
-                    void stopCapture.current?.();
-                    stopCapture.current = null;
-                    voiceSocket.current?.close();
-                    voiceSocket.current = null;
-                    setVoiceState("idle");
-                  }
-                  setAnswer(event.target.value);
-                  setAnswerMode("touch");
-                }}
-              />
-            )}
-            <div className="kiosk-interview-tools">
-              <VoiceOrb
-                disabled={
-                  busy ||
-                  currentQuestion.input === "scale" ||
-                  voiceState === "connecting" ||
-                  voiceState === "processing"
-                }
-                active={voiceState === "recording"}
-                label={t(
-                  voiceState === "recording" ? "voiceStop" : "voiceStart",
-                  { ns: "kiosk" },
-                )}
-                onClick={() =>
-                  voiceState === "recording"
-                    ? void stopCapture.current?.()
-                    : void startVoice()
-                }
-              />
-              <div>
-                <p aria-live="polite">
-                  {currentQuestion.input === "scale"
-                    ? t("voiceScale", { ns: "kiosk" })
-                    : t(`voiceState_${voiceState}`, { ns: "kiosk" })}
-                </p>
-                {voiceState === "recording" && (
-                  <progress
-                    aria-label={t("voiceLevel", { ns: "kiosk" })}
-                    max={0.1}
-                    value={Math.min(voiceLevel, 0.1)}
+            {progress && !editing && (
+              <div className="intake-progress">
+                <span>{t("questionOf", progress)}</span>
+                <div className="intake-progress-bar" aria-hidden="true">
+                  <div
+                    style={{
+                      width: `${Math.min(100, (progress.current / Math.max(progress.total, 1)) * 100)}%`,
+                    }}
                   />
-                )}
+                </div>
               </div>
-            </div>
-            <p>{t("voicePermissionExplain", { ns: "kiosk" })}</p>
-            <p className="ui-sr-only" aria-live="polite">
-              {voiceText}
-            </p>
-            {voiceError && <p role="status">{voiceError}</p>}
-            {voiceState === "review" && (
-              <p role="status">{t("voiceLowConfidence", { ns: "kiosk" })}</p>
             )}
-            <div className="welcome-actions">
-              {!editing && answered.length > 0 && (
-                <button
-                  className="ui-button ui-button--secondary"
-                  type="button"
-                  onClick={onPrevious}
-                >
-                  {t("backQuestion", { ns: "kiosk" })}
-                </button>
-              )}
-              {currentQuestion.optional && !editing && (
-                <button
-                  className="ui-button ui-button--secondary"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void submitAnswer(true)}
-                >
-                  {t("skipQuestion", { ns: "kiosk" })}
-                </button>
-              )}
-              <button
-                className="ui-button ui-button--primary ui-button--kiosk"
-                type="button"
-                disabled={
-                  busy ||
-                  (!editing && !currentQuestion.optional && answer === "") ||
-                  answer === ""
+            <div className="intake-question-head">
+              <h1 className="intake-title">{currentQuestion.prompt}</h1>
+              <SpeakButton
+                text={currentQuestion.prompt}
+                language={language}
+                autoPlayKey={`q-${currentQuestion.id}-${editing ? "edit" : "ask"}-${language}`}
+                fetchAudio={
+                  capabilities?.tts && capabilities.tts !== "browser"
+                    ? () => intake.speechAudio("question", currentQuestion.id)
+                    : undefined
                 }
-                onClick={() => void submitAnswer()}
+              />
+            </div>
+            <AnswerPanel
+              key={`${currentQuestion.id}-${editing ? "edit" : "ask"}`}
+              question={currentQuestion}
+              language={language}
+              capabilities={capabilities}
+              initial={editing ? editing.answer : null}
+              busy={busy}
+              editing={Boolean(editing)}
+              canGoBack={Boolean(editing) || answered.length > 0}
+              onBack={() => {
+                if (editing) {
+                  setEditing(undefined);
+                  if (!question) move("summary");
+                  return;
+                }
+                const previous = answered.at(-1);
+                if (previous) setEditing(previous);
+              }}
+              onSubmit={(answer, mode, skip) =>
+                void run(async () => {
+                  const response = editing
+                    ? await intake.correct(editing.id, answer ?? "", mode)
+                    : await intake.answer(currentQuestion.id, answer, skip, mode);
+                  acceptInterviewResponse(response);
+                })
+              }
+            />
+          </>
+        )}
+
+        {stage === "summary" && (
+          <>
+            <h1 className="intake-title">{t("reviewTitle")}</h1>
+            <p className="intake-lead">{t("reviewSubtitle")}</p>
+            {redFlagged && (
+              <p className="intake-staff-note" role="alert">
+                {t("dangerAlert")}
+              </p>
+            )}
+            {nurseComing && (
+              <p className="intake-staff-note" role="status">
+                {t("needsAssistance", { ns: "kiosk" })}
+              </p>
+            )}
+            {readback && (
+              <div className="intake-readback">
+                <p>{readback}</p>
+                <SpeakButton
+                  text={readback}
+                  language={language}
+                  autoPlayKey={`readback-${language}`}
+                  fetchAudio={
+                    capabilities?.tts && capabilities.tts !== "browser"
+                      ? () => intake.speechAudio("readback")
+                      : undefined
+                  }
+                />
+              </div>
+            )}
+            <ul className="intake-review">
+              {answered.map((item) => (
+                <li key={item.id}>
+                  <div>
+                    <span className="intake-review-q">{item.prompt}</span>
+                    <strong className="intake-review-a">
+                      {item.answer === null || item.answer === ""
+                        ? t("skipped")
+                        : typeof item.answer === "number"
+                          ? `${item.answer} / 10`
+                          : item.answer}
+                    </strong>
+                  </div>
+                  {item.answer !== null && item.answer !== "" && (
+                    <button
+                      type="button"
+                      className="intake-btn intake-btn--ghost intake-btn--small"
+                      aria-label={`${t("change")}: ${item.prompt}`}
+                      onClick={() => {
+                        setQuestion(undefined);
+                        setEditing(item);
+                        move("interview");
+                      }}
+                    >
+                      {t("change")}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="intake-actions">
+              <span className="intake-actions-spacer" />
+              <button
+                type="button"
+                className="intake-btn intake-btn--primary intake-btn--large"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    const result = (await intake.confirm()) as Awaited<
+                      ReturnType<typeof intake.confirm>
+                    > & { department_name?: string | null; wait_minutes?: number | null };
+                    setTicket({
+                      token: result.token,
+                      statusUrl: result.status_url,
+                      position: result.position,
+                      departmentName: result.department_name ?? null,
+                      waitMinutes: result.wait_minutes ?? null,
+                    });
+                    intake.finish();
+                    setSecondsLeft(RESTART_SECONDS);
+                    move("done");
+                  })
+                }
               >
-                {t("nextIntake", { ns: "kiosk" })}
+                <Check aria-hidden="true" size={24} />
+                {t("confirm")}
               </button>
             </div>
           </>
         )}
 
-        {stage === "summary" && caseSheet && (
-          <>
-            <p className="eyebrow">{t("screenS6", { ns: "kiosk" })}</p>
-            <h1>{t("summaryTitle", { ns: "kiosk" })}</h1>
-            <div className="kiosk-readback">
-              <h2>{t("readbackLabel", { ns: "kiosk" })}</h2>
-              <p lang={consent.language}>{readback}</p>
-              <ReadBackAudioButton
-                label={t("readAloud", { ns: "kiosk" })}
-                volumeLabel={t("volume", { ns: "kiosk" })}
-              />
+        {stage === "done" && ticket && (
+          <div className="intake-ticket">
+            <div className="intake-ticket-ok">
+              <Check aria-hidden="true" size={36} />
             </div>
-            <dl className="kiosk-summary">
-              <dt>{t("summaryConcern", { ns: "kiosk" })}</dt>
-              <dd>{caseSheet.chief_complaint.text_original}</dd>
-              {caseSheet.hpi.onset && (
-                <>
-                  <dt>{t("summaryDuration", { ns: "kiosk" })}</dt>
-                  <dd>{caseSheet.hpi.onset.text_original}</dd>
-                </>
-              )}
-              {caseSheet.hpi.severity_0_10 !== undefined && (
-                <>
-                  <dt>{t("painQuestion", { ns: "kiosk" })}</dt>
-                  <dd>{caseSheet.hpi.severity_0_10}/10</dd>
-                </>
-              )}
-              {caseSheet.hpi.associated_symptoms?.map((item, index) => (
-                <Fragment key={`symptom-${index}`}>
-                  <dt>{t("summaryOther", { ns: "kiosk" })}</dt>
-                  <dd>{item.text_original}</dd>
-                </Fragment>
-              ))}
-              {caseSheet.past_history.conditions.map((item) => (
-                <Fragment key={item}>
-                  <dt>{t("summaryHistory", { ns: "kiosk" })}</dt>
-                  <dd>{item}</dd>
-                </Fragment>
-              ))}
-              {caseSheet.medications.map((item, index) => (
-                <Fragment key={`medicine-${index}`}>
-                  <dt>{t("summaryMedications", { ns: "kiosk" })}</dt>
-                  <dd>{item.name}</dd>
-                </Fragment>
-              ))}
-              {caseSheet.allergies.map((item, index) => (
-                <Fragment key={`allergy-${index}`}>
-                  <dt>{t("summaryAllergies", { ns: "kiosk" })}</dt>
-                  <dd>{item.text_original}</dd>
-                </Fragment>
-              ))}
-              {caseSheet.family_history.map((item, index) => (
-                <Fragment key={`family-${index}`}>
-                  <dt>{t("summaryFamilyHistory", { ns: "kiosk" })}</dt>
-                  <dd>{item.text_original}</dd>
-                </Fragment>
-              ))}
-            </dl>
-            {caseSheet.red_flags.length > 0 && (
-              <p role="status">{t("staffMessage", { ns: "kiosk" })}</p>
-            )}
-            <div className="kiosk-summary-changes">
-              {answered.map((item) => (
-                <button
-                  className="ui-button ui-button--secondary"
-                  type="button"
-                  key={item.id}
-                  onClick={() => {
-                    setEditing(item);
-                    setAnswer(item.answer);
-                    move("interview");
-                  }}
-                >
-                  {t("change", { ns: "kiosk" })}: {item.prompt}
-                </button>
-              ))}
+            <h1 className="intake-title">{t("doneTitle")}</h1>
+            <div className="intake-ticket-main">
+              <div className="intake-ticket-token">
+                <span>{t("yourToken")}</span>
+                <strong className="status-token">{ticket.token}</strong>
+                {ticket.departmentName && (
+                  <p>
+                    {t("department")}: <b>{ticket.departmentName}</b>
+                  </p>
+                )}
+                {ticket.position !== null && (
+                  <p className="intake-ticket-position">
+                    {ticket.position <= 1
+                      ? t("aheadNone")
+                      : t("ahead", { count: ticket.position - 1 })}
+                    {ticket.waitMinutes ? ` · ${t("waitAbout", { minutes: ticket.waitMinutes })}` : ""}
+                  </p>
+                )}
+              </div>
+              <a className="intake-ticket-qr" href={ticket.statusUrl}>
+                <QRCodeSVG
+                  value={new URL(ticket.statusUrl, window.location.origin).toString()}
+                  size={168}
+                  title={t("scanQr")}
+                />
+                <span>{t("scanQr")}</span>
+              </a>
             </div>
-            {needsAssistance && (
-              <p role="status">{t("needsAssistance", { ns: "kiosk" })}</p>
-            )}
-            <button
-              className="ui-button ui-button--primary ui-button--kiosk"
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  const result = await intake.confirm();
-                  setQueueToken({
-                    token: result.token,
-                    statusUrl: result.status_url,
-                  });
-                  intake.finish();
-                  move("done");
-                })
-              }
-            >
-              {t("confirmIntake", { ns: "kiosk" })}
-            </button>
-          </>
-        )}
-
-        {stage === "done" && queueToken && (
-          <div className="token-receipt">
-            <h1>{t("doneTitle", { ns: "kiosk" })}</h1>
-            <p>{t("queueToken", { ns: "kiosk" })}</p>
-            <strong className="status-token">{queueToken.token}</strong>
-            <a href={queueToken.statusUrl}>
-              <QRCodeSVG
-                value={new URL(
-                  queueToken.statusUrl,
-                  window.location.origin,
-                ).toString()}
-                size={180}
-                title={t("statusQrLabel", { ns: "kiosk" })}
-              />
-            </a>
-            <p>{t("statusLink", { ns: "kiosk" })}</p>
-            <button
-              className="ui-button ui-button--secondary no-print"
-              type="button"
-              onClick={() => window.print()}
-            >
-              {t("printReceipt", { ns: "kiosk" })}
-            </button>
-            <button
-              className="ui-button ui-button--primary ui-button--kiosk no-print"
-              type="button"
-              onClick={() => navigate("/kiosk", { replace: true })}
-            >
-              {t("restartPreview", { ns: "kiosk" })}
-            </button>
+            <p className="intake-lead">{t("waitHint")}</p>
+            <div className="intake-actions no-print">
+              <button
+                type="button"
+                className="intake-btn intake-btn--secondary"
+                onClick={() => window.print()}
+              >
+                {t("print")}
+              </button>
+              <span className="intake-actions-spacer" />
+              <button
+                type="button"
+                className="intake-btn intake-btn--primary"
+                onClick={() => navigate("/kiosk", { replace: true })}
+              >
+                {t("newPatient")}
+              </button>
+            </div>
+            <p className="intake-restart no-print">{t("autoRestart", { seconds: secondsLeft })}</p>
           </div>
         )}
+
         {stage === "help" && (
           <>
-            <h1>{t("staffMessage", { ns: "kiosk" })}</h1>
-            <button
-              className="ui-button ui-button--primary ui-button--kiosk"
-              type="button"
-              onClick={() => navigate("/kiosk", { replace: true })}
-            >
-              {t("restartPreview", { ns: "kiosk" })}
-            </button>
+            <h1 className="intake-title">{t("staffMessage", { ns: "kiosk" })}</h1>
+            <div className="intake-actions">
+              <button
+                type="button"
+                className="intake-btn intake-btn--primary"
+                onClick={() => navigate("/kiosk", { replace: true })}
+              >
+                {t("startAgain")}
+              </button>
+            </div>
           </>
         )}
       </section>

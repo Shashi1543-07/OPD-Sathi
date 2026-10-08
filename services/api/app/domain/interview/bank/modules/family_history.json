@@ -7,10 +7,62 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Is there family health information you want the staff to know?",
-        "hi": "क्या परिवार की सेहत के बारे में कोई जानकारी है जो आप बताना चाहेंगे?",
-        "mr": "कुटुंबाच्या आरोग्याबद्दल काही माहिती कर्मचाऱ्यांना सांगू इच्छिता का?"
-      }
+        "en": "Does anyone in your family have any of these?",
+        "hi": "क्या आपके परिवार में किसी को इनमें से कुछ है?",
+        "mr": "तुमच्या कुटुंबात कोणाला यापैकी काही आहे का?"
+      },
+      "options": [
+        {
+          "id": "diabetes",
+          "label": {
+            "en": "Diabetes",
+            "hi": "शुगर",
+            "mr": "मधुमेह"
+          }
+        },
+        {
+          "id": "bp",
+          "label": {
+            "en": "High BP",
+            "hi": "हाई बीपी",
+            "mr": "उच्च रक्तदाब"
+          }
+        },
+        {
+          "id": "heart",
+          "label": {
+            "en": "Heart disease",
+            "hi": "दिल की बीमारी",
+            "mr": "हृदयविकार"
+          }
+        },
+        {
+          "id": "tb",
+          "label": {
+            "en": "TB",
+            "hi": "टीबी",
+            "mr": "टीबी"
+          }
+        },
+        {
+          "id": "cancer",
+          "label": {
+            "en": "Cancer",
+            "hi": "कैंसर",
+            "mr": "कर्करोग"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

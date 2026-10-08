@@ -5,10 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#12665c" />
     <meta name="description" content="OPD Saathi collects patient history for clinical staff." />
+    <link rel="icon" type="image/svg+xml" href="/saathi-icon.svg" />
+    <link rel="apple-touch-icon" href="/saathi-icon.svg" />
     <title>OPD Saathi</title>
+    <style>
+      #app-splash {
+        align-items: center;
+        background: #f6f9f8;
+        color: #12304a;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      #app-splash img { height: 48px; width: 48px; }
+      #app-splash span {
+        animation: saathi-pulse 1.2s ease-in-out infinite alternate;
+        background: #0f766e;
+        border-radius: 99px;
+        height: 5px;
+        width: 96px;
+      }
+      @keyframes saathi-pulse { to { opacity: .35; } }
+      @media (prefers-reduced-motion: reduce) {
+        #app-splash span { animation: none; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main id="app-splash" role="status" aria-label="Loading OPD Saathi">
+        <img src="/saathi-icon.svg" alt="" />
+        <strong>OPD Saathi</strong>
+        <span aria-hidden="true"></span>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

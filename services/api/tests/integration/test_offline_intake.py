@@ -1,5 +1,6 @@
 """PostgreSQL and Redis-backed offline replay recovery tests."""
 
+import base64
 import os
 from uuid import uuid4
 
@@ -11,7 +12,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import Settings
 from app.core.security import digest_secret
-from app.db.session import create_engine as create_application_engine, set_hospital_scope
+from app.db.session import create_engine as create_application_engine
+from app.db.session import set_hospital_scope
 from app.domain.interview.consent import get_consent_copy
 from app.main import create_app
 
@@ -27,7 +29,13 @@ def _database_settings() -> Settings:
     if "local-only" in app_url or "local-only" in migrator_url:
         pytest.skip("database credentials are required for offline intake integration tests")
     return base.model_copy(
-        update={"database_url": app_url, "migrations_database_url": migrator_url}
+        update={
+            "database_url": app_url,
+            "migrations_database_url": migrator_url,
+            # CI has no .env; use fixed test-only key material when none is configured.
+            "app_data_key": base.app_data_key or base64.b64encode(b"d" * 32).decode(),
+            "app_hmac_key": base.app_hmac_key or base64.b64encode(b"h" * 32).decode(),
+        }
     )
 
 

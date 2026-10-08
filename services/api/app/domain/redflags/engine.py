@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.domain.redflags.normalize import normalize_text, tokens
 
 RULE_PATH = Path(__file__).with_name("rules.yaml")
-EXAMPLE_PATH = Path(__file__).parents[5] / "eval" / "redflags" / "unit_examples.yaml"
 REVIEW_STATUS = "draft_needs_clinician_review"
 LANGUAGES = ("en", "hi", "mr", "hinglish")
 NEGATIONS = {

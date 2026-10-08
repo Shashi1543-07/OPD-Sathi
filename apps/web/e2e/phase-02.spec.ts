@@ -29,12 +29,15 @@ async function prepare(page: import("@playwright/test").Page) {
       body: JSON.stringify({ code: "UNAUTHENTICATED", detail: "Sign in." }),
     }),
   );
+  await page.route("**/auth/hospitals", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) }),
+  );
   await page.goto("/staff?lang=en");
-  await expect(page.getByLabel("Hospital ID")).toBeVisible();
+  await expect(page.getByLabel("Hospital", { exact: true })).toBeVisible();
 }
 
 async function fillCredentials(page: import("@playwright/test").Page) {
-  await page.getByLabel("Hospital ID").fill(hospitalId);
+  await page.getByLabel("Hospital", { exact: true }).fill(hospitalId);
   await page.getByLabel("Email").fill("admin@example.test");
   await page.getByLabel("Password").fill("synthetic-test-password");
 }
@@ -55,12 +58,12 @@ test("staff can sign in and sign out", async ({ page }) => {
   await expect(page.getByRole("navigation").getByText("Reports")).toBeVisible();
   await page.route("**/auth/logout", (route) => route.fulfill({ status: 204 }));
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByLabel("Hospital ID")).toBeVisible();
+  await expect(page.getByLabel("Hospital", { exact: true })).toBeVisible();
 });
 
 test("staff sign-in form supports keyboard-only use", async ({ page }) => {
   await prepare(page);
-  await page.getByLabel("Hospital ID").focus();
+  await page.getByLabel("Hospital", { exact: true }).focus();
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("Email")).toBeFocused();
   await page.keyboard.press("Tab");

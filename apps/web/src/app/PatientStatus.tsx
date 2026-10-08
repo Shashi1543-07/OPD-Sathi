@@ -104,7 +104,7 @@ export function PatientStatus() {
               <>
                 <div className="status-divider" />
                 <div className="status-number"><span>{t("peopleAhead", { ns: "status" })}</span><strong>{Math.max(0, status.position - 1)}</strong></div>
-                <div className="status-number"><span>{t("estimatedWait", { ns: "status" })}</span><strong>{status.eta_min}–{status.eta_max} min</strong></div>
+                <div className="status-number"><span>{t("estimatedWait", { ns: "status" })}</span><strong>{status.eta_min === status.eta_max ? `~${status.eta_max}` : `${status.eta_min}–${status.eta_max}`} min</strong></div>
               </>
             ) : <p role="status">{t(`state.${status.state}`, { ns: "status" })}</p>}
             <ProgressDots current={progressIndex + 1} total={steps.length} />

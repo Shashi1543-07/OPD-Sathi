@@ -1,7 +1,9 @@
 """Deterministic patient read-back templates; never ask a model to summarize clinical data."""
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
+
+from app.domain.interview.bank import Language
 
 _LABELS = {
     "en": {
@@ -54,6 +56,68 @@ def _items(value: object) -> list[str]:
                 result.append(item.strip())
         return result
     return []
+
+
+_SYMPTOM_SKIP = {
+    "chief_concern",
+    "duration",
+    "severity",
+    "past_history",
+    "medications",
+    "allergies",
+    "family_history",
+    "general_context",
+}
+
+
+def build_readback_from_answers(
+    language: str, answers: Mapping[str, Any], questions: Mapping[str, Any] | None = None
+) -> str:
+    """Read back the patient's own words in their language (no English doctor fields).
+
+    Tapped options are shown in the current language, so a patient who switched language
+    hears earlier taps in the new one; typed or spoken words stay exactly as given.
+    """
+    from app.domain.interview.bank import QUESTIONS
+
+    labels = _LABELS.get(language, _LABELS["en"])
+
+    def said(question_id: str) -> str:
+        value = answers.get(question_id)
+        if not isinstance(value, str) or not value.strip():
+            return ""
+        question = QUESTIONS.get(question_id) or (questions or {}).get(question_id)
+        if question is not None and question.is_negative(value):
+            return ""
+        if question is not None and language in ("en", "hi", "mr"):
+            return str(question.localized(value, cast(Language, language))).strip()
+        return value.strip()
+
+    sentences: list[str] = []
+    if complaint := said("chief_concern"):
+        sentences.append(f"{labels['opening']}: {complaint}.")
+    if duration := said("duration"):
+        sentences.append(f"{labels['duration']}: {duration}.")
+    severity = answers.get("severity")
+    if isinstance(severity, int) and not isinstance(severity, bool):
+        sentences.append(f"{labels['severity']} {severity} {labels['out_of']}.")
+    symptoms = [
+        text
+        for question_id in answers
+        if question_id not in _SYMPTOM_SKIP and (text := said(question_id))
+    ]
+    if symptoms:
+        sentences.append(f"{labels['symptoms']}: {'; '.join(symptoms)}.")
+    for key, question_id in (
+        ("conditions", "past_history"),
+        ("medications", "medications"),
+        ("allergies", "allergies"),
+    ):
+        if text := said(question_id):
+            sentences.append(f"{labels[key]}: {text}.")
+    sentences.append(labels["closing"])
+    words = " ".join(sentences).split()
+    return " ".join(words[:160])
 
 
 def build_readback(case_sheet: Mapping[str, Any]) -> str:

@@ -7,10 +7,46 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Is there anything you have been told you are allergic to?",
-        "hi": "क्या आपको किसी चीज़ से एलर्जी बताई गई है?",
-        "mr": "तुम्हाला कोणत्या गोष्टीची अॅलर्जी असल्याचे सांगितले आहे का?"
-      }
+        "en": "Are you allergic to any medicine or food?",
+        "hi": "क्या आपको किसी दवा या खाने से एलर्जी है?",
+        "mr": "तुम्हाला कोणत्या औषधाची किंवा अन्नाची ॲलर्जी आहे का?"
+      },
+      "options": [
+        {
+          "id": "no",
+          "label": {
+            "en": "No allergy",
+            "hi": "कोई एलर्जी नहीं",
+            "mr": "ॲलर्जी नाही"
+          },
+          "none": true
+        },
+        {
+          "id": "dont_know",
+          "label": {
+            "en": "I don't know",
+            "hi": "पता नहीं",
+            "mr": "माहीत नाही"
+          }
+        },
+        {
+          "id": "medicine",
+          "label": {
+            "en": "Yes - to a medicine",
+            "hi": "हाँ - किसी दवा से",
+            "mr": "हो - एखाद्या औषधाची"
+          }
+        },
+        {
+          "id": "food",
+          "label": {
+            "en": "Yes - to a food",
+            "hi": "हाँ - किसी खाने से",
+            "mr": "हो - एखाद्या अन्नाची"
+          }
+        }
+      ],
+      "multi": true
     }
   ]
 }

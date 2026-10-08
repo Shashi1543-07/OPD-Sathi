@@ -11,39 +11,42 @@ const patientSession = {
   },
   stage: "interview",
 };
+const question = {
+  id: "chief_concern",
+  input: "text",
+  optional: false,
+  multi: true,
+  prompt: "What is the main problem that brought you here today?",
+  options: [{ id: "fever", label: "Fever", none: false }],
+};
 
-test("cached kiosk shell and prompt audio work while offline", async ({
+test("the cached kiosk shell, browser voice and offline form work without a network", async ({
   page,
   context,
 }) => {
   await page.addInitScript((session) => {
     sessionStorage.setItem("osa.patient.session", JSON.stringify(session));
-  }, patientSession);
-  const audioResponses: boolean[] = [];
-  let failedRequests = 0;
-  page.on("requestfailed", (request) => {
-    if (request.url().includes("readback-audio")) failedRequests += 1;
-  });
-  page.on("response", (response) => {
-    if (response.url().includes("mock-tone.wav")) {
-      audioResponses.push(response.fromServiceWorker());
-    }
-  });
-  await page.route("**/intake/sessions/*/interview/next-question", (route) =>
-    route.fulfill({
-      json: {
-        question: {
-          id: "chief_concern",
-          input: "text",
-          optional: false,
-          prompt: "What would you like to tell the doctor?",
+    const spoken: string[] = [];
+    Object.defineProperty(window, "__spoken", { value: spoken });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        cancel() {},
+        getVoices: () => [],
+        speak(utterance: SpeechSynthesisUtterance) {
+          spoken.push(utterance.text);
         },
-        answered: [],
       },
-    }),
+    });
+  }, patientSession);
+  await page.route("**/intake/capabilities", (route) =>
+    route.fulfill({ json: { stt: "browser", tts: "browser", ai: false } }),
+  );
+  await page.route("**/intake/sessions/*/interview/next-question", (route) =>
+    route.fulfill({ json: { question, answered: [] } }),
   );
   await page.goto("/kiosk/intake");
-  await expect(page.getByText("What would you like to tell the doctor?")).toBeVisible();
+  await expect(page.getByRole("heading", { name: question.prompt })).toBeVisible();
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
   });
@@ -52,12 +55,14 @@ test("cached kiosk shell and prompt audio work while offline", async ({
   await expect
     .poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)))
     .toBe(true);
+
   await context.setOffline(true);
-  await page.getByRole("button", { name: "Read aloud" }).click();
-  await expect.poll(() => audioResponses.length).toBe(1);
-  expect(audioResponses[0]).toBe(true);
-  expect(failedRequests).toBe(0);
-  expect(page.url()).toContain("/kiosk/intake");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: question.prompt })).toBeVisible();
+  await page.getByRole("button", { name: /Listen/ }).first().click();
+  await expect
+    .poll(() => page.evaluate(() => (window as Window & { __spoken?: string[] }).__spoken))
+    .toContain(question.prompt);
 
   await page.goto("/kiosk/offline-intake");
   await expect(page.getByRole("heading", { name: "Offline check-in" })).toBeVisible();

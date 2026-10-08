@@ -1,11 +1,10 @@
 import type { StaffRole } from "../lib/auth";
 
 export type StaffPageId =
-  "dashboard" | "queue" | "consultations" | "patients" | "reports" | "settings";
+  "queue" | "consultations" | "patients" | "reports" | "settings";
 
 export const navigationByRole: Record<StaffRole, StaffPageId[]> = {
   admin: [
-    "dashboard",
     "queue",
     "consultations",
     "patients",
@@ -24,5 +23,5 @@ export function canAccessStaffPage(
 }
 
 export function defaultStaffPage(role: StaffRole): StaffPageId {
-  return role === "admin" ? "dashboard" : "queue";
+  return role === "admin" ? "reports" : "queue";
 }

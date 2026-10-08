@@ -38,7 +38,7 @@ def _run(language: str, complaint: str, answers: list[str | None]) -> tuple[list
 
 
 def test_question_bank_and_consent_are_valid_draft_content() -> None:
-    assert validate_question_bank() == {"questions": 16, "modules": 13}
+    assert validate_question_bank() == {"questions": 23, "modules": 13}
     for language in ("en", "hi", "mr"):
         consent = get_consent_copy(language)  # type: ignore[arg-type]
         assert consent["text"]
@@ -51,6 +51,9 @@ def test_question_bank_and_consent_are_valid_draft_content() -> None:
         assert payload["review_status"] == REVIEW_STATUS
         for question in payload["questions"]:
             assert all("????" not in question["prompt"][lang] for lang in ("hi", "mr"))
+            for option in question.get("options", []):
+                assert set(option["label"]) == {"en", "hi", "mr"}
+                assert all("," not in option["label"][lang] for lang in ("en", "hi", "mr"))
 
 
 @pytest.mark.parametrize("broken", ["missing_translation", "bad_review_status", "bad_trigger"])

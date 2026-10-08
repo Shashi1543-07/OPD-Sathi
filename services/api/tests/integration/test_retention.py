@@ -1,5 +1,6 @@
 """Database-backed checks for the dry-run-first retention command."""
 
+import base64
 import os
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -24,7 +25,15 @@ def _database_settings() -> Settings:
     )
     if "local-only" in app_url or "local-only" in migrator_url:
         pytest.skip("database credentials are required for retention integration tests")
-    return base.model_copy(update={"database_url": app_url, "migrations_database_url": migrator_url})
+    return base.model_copy(
+        update={
+            "database_url": app_url,
+            "migrations_database_url": migrator_url,
+            # CI has no .env; use fixed test-only key material when none is configured.
+            "app_data_key": base.app_data_key or base64.b64encode(b"d" * 32).decode(),
+            "app_hmac_key": base.app_hmac_key or base64.b64encode(b"h" * 32).decode(),
+        }
+    )
 
 
 @pytest.mark.asyncio
@@ -42,7 +51,9 @@ async def test_retention_dry_run_preserves_rows_then_apply_pseudonymizes_old_vis
         async with engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
             await connection.execute(
-                text("INSERT INTO hospitals (id, name, code) VALUES (:id, 'Retention test', :code)"),
+                text(
+                    "INSERT INTO hospitals (id, name, code) VALUES (:id, 'Retention test', :code)"
+                ),
                 {"id": hospital_id, "code": f"retention-{hospital_id}"},
             )
             await connection.execute(
@@ -88,7 +99,7 @@ async def test_retention_dry_run_preserves_rows_then_apply_pseudonymizes_old_vis
                 text(
                     "INSERT INTO case_sheets (id, hospital_id, visit_id, schema_version, data, "
                     "created_at) VALUES (:id, :hospital_id, :visit_id, '1.0', '{\"clinical\": "
-                    "\"synthetic concern\"}'::jsonb, :old)"
+                    '"synthetic concern"}\'::jsonb, :old)'
                 ),
                 {"id": uuid4(), "hospital_id": hospital_id, "visit_id": visit_id, "old": old},
             )
@@ -123,26 +134,39 @@ async def test_retention_dry_run_preserves_rows_then_apply_pseudonymizes_old_vis
                 text("SELECT count(*) FROM case_sheets WHERE visit_id = :id"), {"id": visit_id}
             )
             patient = (
-                await connection.execute(
-                    text(
-                        "SELECT name_enc, phone_enc, abha_enc, year_of_birth, sex "
-                        "FROM patients WHERE id = :id"
-                    ),
-                    {"id": patient_id},
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT name_enc, phone_enc, abha_enc, year_of_birth, sex "
+                            "FROM patients WHERE id = :id"
+                        ),
+                        {"id": patient_id},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             visit = (
-                await connection.execute(
-                    text("SELECT age_years, pregnant, urgency_reasons FROM visits WHERE id = :id"),
-                    {"id": visit_id},
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT age_years, pregnant, urgency_reasons FROM visits WHERE id = :id"
+                        ),
+                        {"id": visit_id},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             assert remaining_turns == remaining_sheets == 0
-            assert decrypt_field(
-                patient["name_enc"],
-                key=settings.app_data_key_bytes,
-                associated_data=f"patients:name_enc:{patient_id}",
-            ) == "Anonymous"
+            assert (
+                decrypt_field(
+                    patient["name_enc"],
+                    key=settings.app_data_key_bytes,
+                    associated_data=f"patients:name_enc:{patient_id}",
+                )
+                == "Anonymous"
+            )
             assert patient["phone_enc"] is None and patient["abha_enc"] is None
             assert patient["year_of_birth"] is None and patient["sex"] == "unknown"
             assert visit["age_years"] is None and visit["pregnant"] is None
@@ -165,5 +189,7 @@ async def test_retention_dry_run_preserves_rows_then_apply_pseudonymizes_old_vis
             await connection.execute(
                 text("DELETE FROM outbox WHERE hospital_id = :id"), {"id": hospital_id}
             )
-            await connection.execute(text("DELETE FROM hospitals WHERE id = :id"), {"id": hospital_id})
+            await connection.execute(
+                text("DELETE FROM hospitals WHERE id = :id"), {"id": hospital_id}
+            )
         await engine.dispose()

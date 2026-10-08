@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from app.ai.prompts.builders import QuestionCandidate, build_question_prompt
 from app.ai.providers.llm.base import LLMProvider
 
-MAX_DECISION_SECONDS = 0.6
+# Per-question choice is opt-in (AI_QUESTION_CHOICE) because it adds this wait to every tap.
+MAX_DECISION_SECONDS = 1.5
 
 
 async def select_question_id(

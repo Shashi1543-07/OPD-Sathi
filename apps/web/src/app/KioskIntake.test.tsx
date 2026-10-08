@@ -1,118 +1,263 @@
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../i18n";
 import { useLanguageStore } from "../languageStore";
+import { useKioskPrefs } from "../lib/kioskPrefs";
 import { KioskIntake } from "./KioskIntake";
 
-const { intakeMock, audioMock, dispatchAudio, dispatchSpeech } = vi.hoisted(
-  () => {
-    let listener: ((event: MessageEvent<string>) => void) | undefined;
-    let speechCallback: (() => void) | undefined;
-    const socket = {
-      readyState: 1,
-      send: vi.fn(),
-      close: vi.fn(),
-      addEventListener: vi.fn(),
-    } as unknown as WebSocket;
-    return {
-      intakeMock: {
-        session: vi.fn(),
-        setStage: vi.fn(),
-        nextQuestion: vi.fn(),
-        answer: vi.fn(),
-        correct: vi.fn(),
-        connectAudio: vi.fn(
-          (onMessage: (event: MessageEvent<string>) => void) => {
-            listener = onMessage;
-            onMessage({
-              data: JSON.stringify({ type: "ready" }),
-            } as MessageEvent<string>);
-            return socket;
-          },
-        ),
-      },
-      audioMock: {
-        startMicrophoneCapture: vi.fn(
-          async (_socket: WebSocket, callbacks: { onSpeech?: () => void }) => {
-            speechCallback = callbacks.onSpeech;
-            return vi.fn(async () => undefined);
-          },
-        ),
-      },
-      dispatchAudio: (packet: object) =>
-        listener?.({ data: JSON.stringify(packet) } as MessageEvent<string>),
-      dispatchSpeech: () => speechCallback?.(),
-    };
-  },
-);
+type Handlers = {
+  onPartial?: (text: string) => void;
+  onFinal: (text: string) => void;
+  onError: (code: string) => void;
+  onProcessing?: () => void;
+};
 
-vi.mock("../lib/intake", () => ({ intake: intakeMock }));
-vi.mock("../lib/audioCapture", () => ({
-  CaptureError: class CaptureError extends Error {
-    constructor(readonly code: string) {
-      super(code);
+const { intakeMock, voiceMock, IntakeRequestErrorMock, captured } = vi.hoisted(() => {
+  class IntakeRequestErrorMock extends Error {
+    constructor(
+      readonly code: string,
+      message: string,
+      readonly status: number,
+    ) {
+      super(message);
     }
-  },
-  startMicrophoneCapture: audioMock.startMicrophoneCapture,
+  }
+  const captured: { handlers?: Handlers; stop: () => void } = {
+    stop: () => undefined,
+  };
+  return {
+    IntakeRequestErrorMock,
+    captured,
+    intakeMock: {
+      session: vi.fn(),
+      setStage: vi.fn(),
+      nextQuestion: vi.fn(),
+      answer: vi.fn(),
+      correct: vi.fn(),
+      identity: vi.fn(),
+      dangerTiles: vi.fn(),
+      capabilities: vi.fn(),
+      transcribe: vi.fn(),
+      speechAudio: vi.fn(),
+      changeLanguage: vi.fn(),
+    },
+    voiceMock: {
+      listenWithServer: vi.fn((_transcribe: unknown, handlers: Handlers) => {
+        captured.handlers = handlers;
+        return { stop: () => captured.stop(), cancel: vi.fn() };
+      }),
+      listenInBrowser: vi.fn((_language: string, handlers: Handlers) => {
+        captured.handlers = handlers;
+        return { stop: () => captured.stop(), cancel: vi.fn() };
+      }),
+    },
+  };
+});
+
+vi.mock("../lib/intake", () => ({
+  intake: intakeMock,
+  IntakeRequestError: IntakeRequestErrorMock,
 }));
+vi.mock("../lib/voice", () => ({
+  browserRecognitionAvailable: () => false,
+  recordingAvailable: () => true,
+  listenWithServer: voiceMock.listenWithServer,
+  listenInBrowser: voiceMock.listenInBrowser,
+  speak: vi.fn(async () => undefined),
+  stopSpeaking: vi.fn(),
+}));
+
+const consent = {
+  language: "en",
+  version: "v1",
+  sha256: "a".repeat(64),
+  text: "Synthetic consent copy",
+};
+
+function renderIntake(stage: string) {
+  intakeMock.session.mockReturnValue({
+    visit_id: "visit-synthetic",
+    patient_access_token: "synthetic-token",
+    consent,
+    stage,
+  });
+  return render(
+    <I18nextProvider i18n={i18n}>
+      <MemoryRouter>
+        <KioskIntake />
+      </MemoryRouter>
+    </I18nextProvider>,
+  );
+}
+
+const chiefConcern = {
+  id: "chief_concern",
+  input: "text",
+  optional: false,
+  multi: true,
+  prompt: "What is the main problem that brought you here today?",
+  options: [
+    { id: "fever", label: "Fever", none: false },
+    { id: "cough", label: "Cough", none: false },
+  ],
+};
+
+beforeEach(() => {
+  useKioskPrefs.getState().setVoiceGuidance(false);
+  intakeMock.capabilities.mockResolvedValue({ stt: "gemini", tts: "browser", ai: false });
+});
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
-  vi.useRealTimers();
+  vi.clearAllMocks();
   useLanguageStore.getState().setLanguage("en");
 });
 
-describe("Phase 8 voice interview", () => {
-  it("shows live speech text for editing and submits it as voice input", async () => {
+describe("kiosk intake", () => {
+  it("lets a patient continue without an already-registered phone number", async () => {
     const user = userEvent.setup();
+    intakeMock.identity
+      .mockRejectedValueOnce(
+        new IntakeRequestErrorMock("PHONE_ALREADY_REGISTERED", "Ask staff for help.", 409),
+      )
+      .mockResolvedValueOnce({ next: "danger_signs" });
+    intakeMock.dangerTiles.mockResolvedValue({ tiles: [] });
+    renderIntake("identity");
+
+    await user.type(screen.getByLabelText("How old are you?"), "75");
+    await user.click(screen.getByRole("radio", { name: "Female" }));
+    await user.type(screen.getByLabelText(/Mobile number/), "7985911313");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText(/already linked to a visit/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue without phone" }));
+    expect(
+      await screen.findByRole("heading", { name: "Do you have any of these right now?" }),
+    ).toBeInTheDocument();
+    expect(intakeMock.identity).toHaveBeenLastCalledWith(
+      75,
+      "female",
+      undefined,
+      undefined,
+      false,
+    );
+  });
+
+  it("builds the answer from tapped options", async () => {
+    const user = userEvent.setup();
+    intakeMock.nextQuestion.mockResolvedValue({
+      question: chiefConcern,
+      progress: { current: 1, total: 10 },
+      answered: [],
+    });
+    intakeMock.answer.mockResolvedValue({ question: chiefConcern, answered: [] });
+    renderIntake("interview");
+
+    expect(await screen.findByText("Question 1 of 10")).toBeInTheDocument();
+    const next = screen.getByRole("button", { name: "Next" });
+    expect(next).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Fever" }));
+    await user.click(screen.getByRole("button", { name: "Cough" }));
+    await user.click(next);
+    await waitFor(() =>
+      expect(intakeMock.answer).toHaveBeenCalledWith(
+        "chief_concern",
+        "Fever, Cough",
+        false,
+        "touch",
+      ),
+    );
+  });
+
+  it("treats a 'none of these' option as exclusive", async () => {
+    const user = userEvent.setup();
+    intakeMock.nextQuestion.mockResolvedValue({
+      question: {
+        id: "fever_associated",
+        input: "text",
+        optional: true,
+        multi: true,
+        prompt: "Along with the fever, do you have any of these?",
+        options: [
+          { id: "body_ache", label: "Body ache", none: false },
+          { id: "none", label: "None of these", none: true },
+        ],
+      },
+      answered: [],
+    });
+    intakeMock.answer.mockResolvedValue({ complete: false, answered: [] });
+    renderIntake("interview");
+
+    await user.click(await screen.findByRole("button", { name: "Body ache" }));
+    await user.click(screen.getByRole("button", { name: "None of these" }));
+    expect(screen.getByRole("button", { name: "Body ache" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() =>
+      expect(intakeMock.answer).toHaveBeenCalledWith(
+        "fever_associated",
+        "None of these",
+        false,
+        "touch",
+      ),
+    );
+  });
+
+  it("puts the spoken answer in an editable box and submits it as voice input", async () => {
+    const user = userEvent.setup();
+    intakeMock.nextQuestion.mockResolvedValue({ question: chiefConcern, answered: [] });
+    intakeMock.answer.mockResolvedValue({ question: chiefConcern, answered: [] });
+    renderIntake("interview");
+
+    await user.click(await screen.findByRole("button", { name: /Tap and speak/ }));
+    expect(voiceMock.listenWithServer).toHaveBeenCalled();
+    expect(screen.getByText("Listening… speak now")).toBeInTheDocument();
+    act(() => {
+      captured.handlers?.onProcessing?.();
+      captured.handlers?.onFinal("I have a headache since morning");
+    });
+    const box = screen.getByRole("textbox");
+    expect(box).toHaveValue("I have a headache since morning");
+    expect(screen.getByText(/We heard you/)).toBeInTheDocument();
+    await user.clear(box);
+    await user.type(box, "I have a headache");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() =>
+      expect(intakeMock.answer).toHaveBeenCalledWith(
+        "chief_concern",
+        "I have a headache",
+        false,
+        "voice",
+      ),
+    );
+  });
+
+  it("switches language mid-question and keeps the tapped answer", async () => {
+    const user = userEvent.setup();
+    const marathi = {
+      ...chiefConcern,
+      prompt: "आज तुम्ही कोणत्या मुख्य त्रासासाठी आला आहात?",
+      options: [
+        { id: "fever", label: "ताप", none: false },
+        { id: "cough", label: "खोकला", none: false },
+      ],
+    };
     intakeMock.session.mockReturnValue({
       visit_id: "visit-synthetic",
       patient_access_token: "synthetic-token",
-      consent: {
-        language: "en",
-        version: "v1",
-        sha256: "a".repeat(64),
-        text: "Synthetic consent copy",
-      },
+      consent: { ...consent, language: "mr" },
       stage: "interview",
     });
-    intakeMock.nextQuestion.mockResolvedValue({
-      question: {
-        id: "Q_CC",
-        input: "text",
-        optional: false,
-        prompt: "What would you like to tell the doctor?",
-      },
-      answered: [],
-    });
-    intakeMock.answer.mockResolvedValue({
-      question: {
-        id: "Q_DURATION",
-        input: "text",
-        optional: true,
-        prompt: "How long has this been happening?",
-      },
-      answered: [],
-    });
-    Object.defineProperty(navigator, "mediaDevices", {
-      configurable: true,
-      value: {
-        getUserMedia: vi.fn().mockResolvedValue({
-          getTracks: () => [{ stop: vi.fn() }],
-        }),
-      },
-    });
+    intakeMock.nextQuestion
+      .mockResolvedValueOnce({ question: marathi, answered: [] })
+      .mockResolvedValueOnce({ question: chiefConcern, answered: [] });
+    intakeMock.changeLanguage.mockResolvedValue({ language: "en", consent });
+    intakeMock.answer.mockResolvedValue({ question: chiefConcern, answered: [] });
     render(
       <I18nextProvider i18n={i18n}>
         <MemoryRouter>
@@ -120,62 +265,32 @@ describe("Phase 8 voice interview", () => {
         </MemoryRouter>
       </I18nextProvider>,
     );
-
+    await user.click(await screen.findByRole("button", { name: "ताप" }));
+    await user.click(screen.getByRole("button", { name: "English" }));
+    expect(intakeMock.changeLanguage).toHaveBeenCalledWith("en");
     expect(
-      await screen.findByText(
-        "Tap the microphone to speak. Your audio is sent for transcription and is not saved.",
-      ),
+      await screen.findByRole("heading", { name: chiefConcern.prompt }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Speak your answer" }));
-    await waitFor(() =>
-      expect(screen.getByText("Listening. Speak now.")).toBeInTheDocument(),
+    expect(screen.getByRole("button", { name: "Fever" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
-    expect(audioMock.startMicrophoneCapture).toHaveBeenCalled();
-
-    act(() => dispatchAudio({ type: "partial", text: "I have a headache" }));
-    expect(screen.getByPlaceholderText("Type your answer")).toHaveValue(
-      "I have a headache",
-    );
-    act(() =>
-      dispatchAudio({
-        type: "final",
-        text: "I have a headache",
-        confidence: 0.4,
-      }),
-    );
-    expect(
-      screen.getByText(
-        "Please check and edit the transcript before continuing.",
-      ),
-    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() =>
-      expect(intakeMock.answer).toHaveBeenCalledWith(
-        "Q_CC",
-        "I have a headache",
-        false,
-        "voice",
-      ),
+      expect(intakeMock.answer).toHaveBeenCalledWith("chief_concern", "Fever", false, "touch"),
     );
+  });
 
-    vi.useFakeTimers();
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole("button", { name: "Speak your answer" }),
-      );
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(screen.getByText("Listening. Speak now.")).toBeInTheDocument();
-    act(() => {
-      dispatchSpeech();
-      vi.advanceTimersByTime(3_000);
-    });
+  it("falls back to typing when voice fails", async () => {
+    const user = userEvent.setup();
+    intakeMock.nextQuestion.mockResolvedValue({ question: chiefConcern, answered: [] });
+    renderIntake("interview");
+
+    await user.click(await screen.findByRole("button", { name: /Tap and speak/ }));
+    act(() => captured.handlers?.onError("failed"));
     expect(
-      screen.getByText(
-        "Voice service is unavailable. You can type or tap your answer.",
-      ),
+      screen.getByText("Voice is not working right now. Please tap or type your answer."),
     ).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 });

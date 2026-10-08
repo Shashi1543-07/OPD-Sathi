@@ -9,7 +9,8 @@ from app.ai.prompts.builders import build_redflag_prompt
 from app.ai.providers.llm.base import LLMProvider
 from app.domain.redflags.engine import RULES, RedFlag, RuleModel, maximum_urgency
 
-MAX_REDFLAG_SECONDS = 0.6
+# Runs once at confirmation, in parallel with department routing.
+MAX_REDFLAG_SECONDS = 5.0
 
 
 def redflag_json_schema(rules: Sequence[RuleModel] = RULES) -> dict[str, Any]:

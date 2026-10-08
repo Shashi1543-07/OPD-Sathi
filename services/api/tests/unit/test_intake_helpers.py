@@ -124,7 +124,7 @@ def test_intake_identity_state_readback_and_patient_copy_validation() -> None:
     assert intake._patient_message("en") == "Please inform the staff at the desk now."
     assert intake._patient_message("hi")
     assert intake._patient_message("mr")
-    assert intake._question_payload("chief_concern", "en")["id"] == "chief_concern"
+    assert intake._question_payload(intake.start("en"), "chief_concern")["id"] == "chief_concern"
 
 
 @pytest.mark.asyncio
@@ -605,7 +605,7 @@ async def test_answer_correction_route_updates_summary_and_rejects_unasked_quest
     )
     assert result["complete"] is True
     assert "updated headache" in result["readback"]
-    assert len(saved) == 1 and turns[0]["turn_index"] == 12
+    assert len(saved) == 1 and turns[0]["turn_index"] == intake._CORRECTION_TURN_BASE
     persisted = json.loads(redis.values[state_key])
     assert persisted["corrections"] == 1
     assert persisted["interview"]["answers"]["chief_concern"] == "updated headache"

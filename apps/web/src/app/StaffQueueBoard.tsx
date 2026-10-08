@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { AlertTriangle, FileText, Hand, MoreHorizontal, RefreshCw, Users } from "lucide-react";
 import { ConnectionIndicator, UrgencyBadge } from "../components/ui";
 import { staffAuth } from "../lib/auth";
 import {
@@ -35,6 +36,31 @@ type ConnectionState = "live" | "reconnecting" | "offline";
 const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const PAGE_SIZE = 50;
 const SOUND_PREFERENCE_KEY = "opd-staff-alert-sound";
+type QueueSnapshot = {
+  items: QueueItem[];
+  departments: QueueDepartment[];
+  nextCursor: string | null;
+  expiresAt: number;
+};
+const queueSnapshots = new Map<string, QueueSnapshot>();
+const preferredDepartmentByHospital = new Map<string, string>();
+
+function queueCacheKey(
+  userScope: string,
+  departmentId: string,
+  status: QueueStatus,
+) {
+  return `${userScope}|${departmentId}|${status}`;
+}
+
+function getQueueSnapshot(key: string): QueueSnapshot | undefined {
+  const snapshot = queueSnapshots.get(key);
+  if (snapshot && snapshot.expiresAt <= Date.now()) {
+    queueSnapshots.delete(key);
+    return undefined;
+  }
+  return snapshot;
+}
 
 function initialSoundPreference(): boolean {
   try {
@@ -44,13 +70,65 @@ function initialSoundPreference(): boolean {
   }
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  queued: "Waiting",
+  called: "Called",
+  in_consult: "In consultation",
+};
+
+const ROUTE_LABELS: Record<string, string> = {
+  NURSE_TRIAGE: "Nurse triage",
+  GEN: "General Medicine",
+  MED: "General Medicine",
+  PED: "Pediatrics",
+};
+
+function statusLabel(status: string) {
+  return STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+}
+
+function routeLabel(code: string | null | undefined) {
+  if (!code) return "Not decided";
+  return ROUTE_LABELS[code] ?? code.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function sexLabel(sex: string | null | undefined) {
+  if (!sex) return "Sex —";
+  return sex.charAt(0).toUpperCase() + sex.slice(1);
+}
+
+function sentenceCase(text: string | null | undefined) {
+  const value = (text ?? "").trim();
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
+}
+
+function formatWait(minutes: number | null) {
+  if (minutes === null) return "—";
+  if (minutes < 1) return "Just arrived";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} m` : `${hours} h`;
+}
+
 export function StaffQueueBoard() {
   const { t } = useTranslation("staff");
-  const [items, setItems] = useState<QueueItem[]>([]);
-  const [departments, setDepartments] = useState<QueueDepartment[]>([]);
-  const [departmentId, setDepartmentId] = useState("");
+  const hospitalId = staffAuth.user?.hospital_id ?? "";
+  const userScope = `${hospitalId}:${staffAuth.user?.id ?? ""}`;
+  const [departmentId, setDepartmentId] = useState(
+    () => preferredDepartmentByHospital.get(userScope) ?? "",
+  );
   const [statusFilter, setStatusFilter] = useState<QueueStatus>("all");
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const initialSnapshot = getQueueSnapshot(
+    queueCacheKey(userScope, departmentId, "all"),
+  );
+  const [items, setItems] = useState<QueueItem[]>(initialSnapshot?.items ?? []);
+  const [departments, setDepartments] = useState<QueueDepartment[]>(
+    initialSnapshot?.departments ?? [],
+  );
+  const [nextCursor, setNextCursor] = useState<string | null>(
+    initialSnapshot?.nextCursor ?? null,
+  );
   const [alerts, setAlerts] = useState<StaffAlert[]>([]);
   const [error, setError] = useState("");
   const [working, setWorking] = useState<string>();
@@ -61,7 +139,7 @@ export function StaffQueueBoard() {
   >({});
   const [routeReasons, setRouteReasons] = useState<Record<string, string>>({});
   const [loadingMore, setLoadingMore] = useState(false);
-  const [queueLoaded, setQueueLoaded] = useState(false);
+  const [queueLoaded, setQueueLoaded] = useState(Boolean(initialSnapshot));
   const [now, setNow] = useState(Date.now());
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(
     null,
@@ -97,8 +175,20 @@ export function StaffQueueBoard() {
       if (departmentId) query.set("department_id", departmentId);
       if (statusFilter !== "all") query.set("status", statusFilter);
       if (cursor) query.set("cursor", cursor);
-      const response = await staffAuth.request(`/queue?${query.toString()}`);
-      if (!response.ok) throw new Error("Queue is temporarily unavailable.");
+      const response = await staffAuth.request(`/queue?${query.toString()}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        if (response.status === 401)
+          throw new Error("Your staff session expired. Sign in again.");
+        if (response.status === 403)
+          throw new Error(
+            "This staff account cannot access the selected queue.",
+          );
+        throw new Error(
+          `Queue is temporarily unavailable (API ${response.status}).`,
+        );
+      }
       const body = (await response.json()) as {
         items: QueueItem[];
         next_cursor: string | null;
@@ -107,8 +197,10 @@ export function StaffQueueBoard() {
       if (requestScopeRef.current !== requestScope) return;
       if (body.departments) {
         setDepartments(body.departments);
-        if (!departmentId && body.departments[0])
+        if (!departmentId && body.departments[0]) {
+          preferredDepartmentByHospital.set(userScope, body.departments[0].id);
           setDepartmentId(body.departments[0].id);
+        }
       }
       let pageItems = body.items;
       if (!append)
@@ -123,14 +215,27 @@ export function StaffQueueBoard() {
       setNextCursor(body.next_cursor);
       setQueueLoaded(true);
       setError("");
+      if (!append && hospitalId && departmentId) {
+        queueSnapshots.set(
+          queueCacheKey(userScope, departmentId, statusFilter),
+          {
+            items: body.items,
+            departments: body.departments ?? [],
+            nextCursor: body.next_cursor,
+            expiresAt: Date.now() + 30_000,
+          },
+        );
+      }
     },
-    [departmentId, statusFilter],
+    [departmentId, statusFilter, hospitalId, userScope],
   );
 
   const refreshAlerts = useCallback(async () => {
     const query = new URLSearchParams({ acknowledged: "false" });
     if (departmentId) query.set("department_id", departmentId);
-    const response = await staffAuth.request(`/alerts?${query.toString()}`);
+    const response = await staffAuth.request(`/alerts?${query.toString()}`, {
+      cache: "no-store",
+    });
     if (!response.ok) return;
     const body = (await response.json()) as { items: StaffAlert[] };
     setAlerts(body.items);
@@ -154,15 +259,38 @@ export function StaffQueueBoard() {
   }, []);
 
   useEffect(() => {
+    if (hospitalId && departmentId) {
+      preferredDepartmentByHospital.set(userScope, departmentId);
+      const cached = getQueueSnapshot(
+        queueCacheKey(userScope, departmentId, statusFilter),
+      );
+      if (cached) {
+        setItems(cached.items);
+        setDepartments(cached.departments);
+        setNextCursor(cached.nextCursor);
+        setQueueLoaded(true);
+        loadedIdsRef.current = new Set(
+          cached.items.map((item) => item.visit_id),
+        );
+      } else {
+        setItems([]);
+        setNextCursor(null);
+        setQueueLoaded(false);
+      }
+    }
     let disposed = false;
     let socket: WebSocket | undefined;
     let alertSocket: WebSocket | undefined;
     let reconnectTimer: number | undefined;
     let alertReconnectTimer: number | undefined;
     const poll = window.setInterval(() => {
-      void refresh().catch(() => {
+      void refresh().catch((cause) => {
         setConnection("offline");
-        setError("Queue is temporarily unavailable. Reconnecting…");
+        setError(
+          cause instanceof Error
+            ? `${cause.message} Reconnecting…`
+            : "Queue is temporarily unavailable. Reconnecting…",
+        );
       });
       void refreshAlerts();
     }, 15_000);
@@ -288,9 +416,13 @@ export function StaffQueueBoard() {
       .then(() => {
         if (!disposed) void refreshAlerts();
       })
-      .catch(() => {
+      .catch((cause) => {
         setConnection("offline");
-        setError("Queue is temporarily unavailable.");
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Queue is temporarily unavailable.",
+        );
       });
     if (departmentId) {
       connect();
@@ -304,7 +436,15 @@ export function StaffQueueBoard() {
       socket?.close();
       alertSocket?.close();
     };
-  }, [departmentId, statusFilter, refresh, refreshAlerts, chime]);
+  }, [
+    departmentId,
+    statusFilter,
+    refresh,
+    refreshAlerts,
+    chime,
+    hospitalId,
+    userScope,
+  ]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
@@ -422,41 +562,60 @@ export function StaffQueueBoard() {
 
   const canOverride =
     staffAuth.user?.role === "nurse" || staffAuth.user?.role === "admin";
-  const canConsult = staffAuth.user?.role === "doctor";
+  const canOpenCase =
+    staffAuth.user?.role === "doctor" || staffAuth.user?.role === "admin";
   const orderedItems = useMemo(() => sortQueue(items), [items]);
   // The virtualizer exposes imperative measurements; React Compiler intentionally skips it.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: orderedItems.length,
     getScrollElement: () => scrollElement,
-    estimateSize: () => 196,
+    estimateSize: () => 88,
     overscan: 8,
   });
 
+  const counts = {
+    queued: items.filter((item) => item.status === "queued").length,
+    called: items.filter((item) => item.status === "called").length,
+    in_consult: items.filter((item) => item.status === "in_consult").length,
+    attention: items.filter((item) => item.urgency !== "routine").length,
+  };
+  const activeDepartment = departments.find((department) => department.id === departmentId);
+
   return (
-    <section className="staff-queue" aria-label="Live patient queue">
-      <div className="staff-queue-heading">
+    <section className="staff-queue qb" aria-label="Live patient queue">
+      <header className="qb-head">
         <div>
-          <h2>Queue</h2>
-          <p>Live waiting room</p>
+          <h2>
+            Queue
+            {activeDepartment && <span className="qb-dept-name"> · {activeDepartment.name}</span>}
+          </h2>
+          <p>Today's waiting room, in calling order</p>
         </div>
-        <div className="staff-queue-heading-actions">
+        <div className="qb-head-actions">
           <ConnectionIndicator state={connection} />
-          <button
-            type="button"
-            className="ui-button ui-button--secondary"
-            onClick={() => void refresh()}
-          >
-            Refresh
+          <button type="button" className="qb-btn qb-btn--ghost" onClick={() => void refresh()}>
+            <RefreshCw aria-hidden="true" size={16} /> Refresh
           </button>
         </div>
+      </header>
+
+      <div className="qb-stats" aria-label="Queue summary">
+        {[
+          ["Waiting", counts.queued, "qb-stat--wait"],
+          ["Called", counts.called, "qb-stat--called"],
+          ["In consultation", counts.in_consult, "qb-stat--consult"],
+          ["Priority or urgent", counts.attention, "qb-stat--attention"],
+        ].map(([label, value, tone]) => (
+          <div className={`qb-stat ${tone}`} key={label as string}>
+            <strong>{value}</strong>
+            <span>{label}</span>
+          </div>
+        ))}
       </div>
-      <div className="staff-queue-filters">
-        <div
-          className="staff-department-tabs"
-          role="group"
-          aria-label="Department"
-        >
+
+      <div className="qb-toolbar">
+        <div className="qb-tabs" role="group" aria-label="Department">
           {departments.map((department) => (
             <button
               type="button"
@@ -464,9 +623,6 @@ export function StaffQueueBoard() {
               aria-pressed={department.id === departmentId}
               onClick={() => {
                 if (department.id === departmentId) return;
-                setItems([]);
-                loadedIdsRef.current.clear();
-                setNextCursor(null);
                 sequenceRef.current = 0;
                 setDepartmentId(department.id);
               }}
@@ -475,275 +631,242 @@ export function StaffQueueBoard() {
             </button>
           ))}
         </div>
-        <label>
-          Status
-          <select
-            aria-label="Status"
-            value={statusFilter}
-            onChange={(event) => {
-              setItems([]);
-              loadedIdsRef.current.clear();
-              setNextCursor(null);
-              setStatusFilter(event.target.value as QueueStatus);
-            }}
-          >
-            <option value="all">All active</option>
-            <option value="queued">Waiting</option>
-            <option value="called">Called</option>
-            <option value="in_consult">In consultation</option>
-          </select>
-        </label>
-        <label className="staff-alert-sound">
-          <input
-            type="checkbox"
-            checked={soundEnabled}
-            onChange={(event) => setSoundEnabled(event.target.checked)}
-          />{" "}
-          Alert sound
-        </label>
+        <div className="qb-toolbar-right">
+          <label className="qb-select">
+            Status
+            <select
+              aria-label="Status"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as QueueStatus)}
+            >
+              <option value="all">All active</option>
+              <option value="queued">Waiting</option>
+              <option value="called">Called</option>
+              <option value="in_consult">In consultation</option>
+            </select>
+          </label>
+          <label className="qb-toggle">
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(event) => setSoundEnabled(event.target.checked)}
+            />
+            Alert sound
+          </label>
+        </div>
       </div>
+
       {alerts.length > 0 && (
-        <section
-          className="staff-alerts"
-          aria-label="Unacknowledged staff alerts"
-          aria-live="assertive"
-        >
-          {alerts.map((alert) => (
-            <article className="staff-alert" role="alert" key={alert.id}>
-              <div>
-                <strong>
-                  Urgent staff alert · {alert.token_label ?? "Visit"}
-                </strong>
-                <p>
-                  {alert.reason_en ??
-                    alert.rule_id ??
-                    "Review this patient now."}
-                </p>
-                {alert.evidence && <small>Reported: {alert.evidence}</small>}
-              </div>
-              <button type="button" onClick={() => void acknowledge(alert.id)}>
-                Acknowledge
-              </button>
-            </article>
-          ))}
+        <section className="qb-alerts" aria-label="Unacknowledged staff alerts" aria-live="assertive">
+          {alerts.map((alert) => {
+            const help = alert.rule_id === "PATIENT_HELP";
+            return (
+              <article
+                className={`qb-alert ${help ? "qb-alert--help" : alert.level === "priority" ? "qb-alert--priority" : "qb-alert--urgent"}`}
+                role="alert"
+                key={alert.id}
+              >
+                {help ? <Hand aria-hidden="true" size={20} /> : <AlertTriangle aria-hidden="true" size={20} />}
+                <div className="qb-alert-text">
+                  <strong>
+                    {help ? t("helpRequested") : alert.level === "priority" ? t("priorityAlert") : t("urgentAlert")}
+                    {" · "}
+                    {alert.token_label ?? "Patient at kiosk"}
+                  </strong>
+                  <span>
+                    {alert.reason_en ?? alert.rule_id ?? "Review this patient now."}
+                    {alert.evidence && !help ? ` — patient said “${alert.evidence}”` : ""}
+                  </span>
+                </div>
+                <button type="button" className="qb-btn qb-btn--ghost" onClick={() => void acknowledge(alert.id)}>
+                  Acknowledge
+                </button>
+              </article>
+            );
+          })}
         </section>
       )}
-      {error && <p role="alert">{error}</p>}
+
+      {error && <p className="qb-error" role="alert">{error}</p>}
       {!queueLoaded && !error && <p role="status">{t("loadingQueue")}</p>}
-      {queueLoaded && departments.length === 0 && !error && (
-        <p role="status">{t("noQueueDepartments")}</p>
-      )}
+      {queueLoaded && departments.length === 0 && !error && <p role="status">{t("noQueueDepartments")}</p>}
       {departments.length > 0 && items.length === 0 && (
-        <p role="status">{t("noQueueMatches")}</p>
+        <div className="qb-empty" role="status">
+          <Users aria-hidden="true" size={28} />
+          <p>{t("noQueueMatches")}</p>
+        </div>
       )}
+
       {items.length > 0 && (
-        <>
-          <div className="staff-queue-columns" aria-hidden="true">
+        <div className="qb-table">
+          <div className="qb-row qb-row--head" aria-hidden="true">
             <span>Token</span>
             <span>Patient</span>
             <span>Complaint</span>
-            <span>Urgency / wait</span>
+            <span>Urgency</span>
+            <span>Waiting</span>
             <span>Status</span>
+            <span className="qb-col-actions">Actions</span>
           </div>
-          <div
-            className="staff-queue-viewport"
-            ref={scrollRef}
-            role="region"
-            aria-label="Queue patients"
-          >
-            <div
-              className="staff-queue-virtual"
-              style={{ height: `${virtualizer.getTotalSize()}px` }}
-            >
+          <div className="staff-queue-viewport qb-viewport" ref={scrollRef} role="region" aria-label="Queue patients">
+            <div className="staff-queue-virtual" style={{ height: `${virtualizer.getTotalSize()}px` }}>
               {virtualizer.getVirtualItems().map((virtualRow) => {
                 const item = orderedItems[virtualRow.index];
-                const waited = waitMinutes(item.queued_at, now);
+                const busy = working === item.visit_id || Boolean(error);
+                const nextAction =
+                  item.status === "queued"
+                    ? { name: "call" as const, label: "Call" }
+                    : item.status === "called"
+                      ? { name: "start" as const, label: "Start" }
+                      : { name: "complete" as const, label: "Complete" };
+                const caseLink = `/staff/consultations?visit_id=${item.visit_id}&status=${item.status}`;
                 return (
                   <article
-                    className={`staff-queue-item${item.urgency === "urgent" ? " staff-queue-item--urgent" : ""}`}
+                    className={`qb-item qb-item--${item.urgency}`}
                     key={item.visit_id}
                     data-index={virtualRow.index}
                     ref={virtualizer.measureElement}
                     style={{ transform: `translateY(${virtualRow.start}px)` }}
                   >
-                    <div className="staff-queue-cell staff-queue-token">
-                      <strong>{item.token}</strong>
-                      <span>Position {item.position}</span>
-                    </div>
-                    <div className="staff-queue-cell">
-                      <span>
-                        {item.age_years === null
-                          ? "Age not recorded"
-                          : `${item.age_years} years`}
-                      </span>
-                      <span>
-                        {item.sex === "unknown" ? "Sex not recorded" : item.sex}
-                      </span>
-                    </div>
-                    <div className="staff-queue-cell staff-queue-complaint">
-                      {item.complaint || "Complaint not recorded"}
-                    </div>
-                    <div className="staff-queue-cell">
-                      <UrgencyBadge level={item.urgency} />
-                      {item.needs_assistance && (
-                        <span className="staff-assistance-flag">
-                          {t("patientNeedsAssistance")}
-                        </span>
-                      )}
-                      <span>
-                        {waited === null
-                          ? "Wait time unavailable"
-                          : `${waited} min waiting`}
-                      </span>
-                    </div>
-                    <div className="staff-queue-cell staff-queue-status">
-                      {item.status.replaceAll("_", " ")}
+                    <div className="qb-card">
+                    <div className="qb-row">
+                      <div className="qb-token">
+                        <strong>{item.token}</strong>
+                        <span>#{item.position} in line</span>
+                      </div>
+                      <div className="qb-patient">
+                        {item.age_years === null ? "Age —" : `${item.age_years} y`} · {sexLabel(item.sex)}
+                      </div>
+                      <div className="qb-complaint" title={item.complaint}>
+                        {sentenceCase(item.complaint) || <span className="qb-muted">Not recorded</span>}
+                        {item.needs_assistance && (
+                          <span className="qb-flag"><Hand aria-hidden="true" size={13} /> {t("patientNeedsAssistance")}</span>
+                        )}
+                      </div>
+                      <div>
+                        <UrgencyBadge level={item.urgency} />
+                      </div>
+                      <div className="qb-wait">{formatWait(waitMinutes(item.queued_at, now))}</div>
+                      <div>
+                        <span className={`qb-status qb-status--${item.status}`}>{statusLabel(item.status)}</span>
+                      </div>
+                      <div className="qb-col-actions qb-actions">
+                        {canOpenCase && (
+                          <Link className="qb-btn qb-btn--ghost" to={caseLink}>
+                            <FileText aria-hidden="true" size={16} /> {t("openCaseSheet")}
+                          </Link>
+                        )}
+                        <button
+                          type="button"
+                          className="qb-btn qb-btn--primary"
+                          disabled={busy}
+                          onClick={() => void action(item.visit_id, nextAction.name)}
+                        >
+                          {nextAction.label}
+                        </button>
+                        {(item.status !== "in_consult" || canOverride) && (
+                          <details className="qb-more">
+                            <summary aria-label={`More actions for ${item.token}`}>
+                              <MoreHorizontal aria-hidden="true" size={18} />
+                            </summary>
+                            <div className="qb-menu">
+                              {(item.status === "queued" || item.status === "called") && (
+                                <button
+                                  type="button"
+                                  className="qb-btn qb-btn--ghost"
+                                  disabled={busy}
+                                  onClick={() => void action(item.visit_id, "no-show")}
+                                >
+                                  Mark no show
+                                </button>
+                              )}
+                              {canOverride && item.status === "queued" && (
+                                <div className="qb-override">
+                                  <strong>Change priority</strong>
+                                  <label>
+                                    Priority
+                                    <select
+                                      value={overrideValues[item.visit_id]?.urgency ?? item.urgency}
+                                      onChange={(event) =>
+                                        setOverrideValues((current) => ({
+                                          ...current,
+                                          [item.visit_id]: {
+                                            urgency: event.target.value,
+                                            reason: current[item.visit_id]?.reason ?? "",
+                                          },
+                                        }))
+                                      }
+                                    >
+                                      <option value="routine">Routine</option>
+                                      <option value="priority">Priority</option>
+                                      <option value="urgent">Urgent</option>
+                                    </select>
+                                  </label>
+                                  <label>
+                                    Reason
+                                    <input
+                                      value={overrideValues[item.visit_id]?.reason ?? ""}
+                                      maxLength={500}
+                                      minLength={5}
+                                      placeholder="At least 5 characters"
+                                      onChange={(event) =>
+                                        setOverrideValues((current) => ({
+                                          ...current,
+                                          [item.visit_id]: {
+                                            urgency: current[item.visit_id]?.urgency ?? item.urgency,
+                                            reason: event.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="qb-btn qb-btn--primary"
+                                    disabled={busy || (overrideValues[item.visit_id]?.reason.trim().length ?? 0) < 5}
+                                    onClick={() => void override(item.visit_id)}
+                                  >
+                                    Apply override
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        )}
+                      </div>
                     </div>
                     {item.routing?.needs_nurse_confirmation && (
-                      <div className="staff-route-confirm">
-                        <strong>
-                          Confirm suggested department:{" "}
-                          {item.routing.department_code}
-                        </strong>
+                      <div className="qb-route">
+                        <AlertTriangle aria-hidden="true" size={15} />
+                        <span>
+                          Department not confirmed — suggested: <b>{routeLabel(item.routing.department_code)}</b>
+                        </span>
                         {canOverride ? (
-                          <>
-                            <label>
-                              Reason{" "}
-                              <input
-                                value={routeReasons[item.visit_id] ?? ""}
-                                maxLength={500}
-                                minLength={5}
-                                onChange={(event) =>
-                                  setRouteReasons((current) => ({
-                                    ...current,
-                                    [item.visit_id]: event.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
+                          <span className="qb-route-form">
+                            <input
+                              aria-label="Reason"
+                              placeholder="Reason (5+ characters)"
+                              value={routeReasons[item.visit_id] ?? ""}
+                              maxLength={500}
+                              minLength={5}
+                              onChange={(event) =>
+                                setRouteReasons((current) => ({ ...current, [item.visit_id]: event.target.value }))
+                              }
+                            />
                             <button
                               type="button"
-                              disabled={
-                                working === item.visit_id ||
-                                (routeReasons[item.visit_id]?.trim().length ??
-                                  0) < 5
-                              }
+                              className="qb-btn qb-btn--ghost"
+                              disabled={busy || (routeReasons[item.visit_id]?.trim().length ?? 0) < 5}
                               onClick={() => void confirmRoute(item.visit_id)}
                             >
                               Confirm department
                             </button>
-                          </>
-                        ) : (
-                          <span>
-                            Ask a nurse to confirm this suggested route.
                           </span>
+                        ) : (
+                          <span className="qb-muted">A nurse will confirm.</span>
                         )}
                       </div>
                     )}
-                    <div className="staff-queue-actions">
-                      {canConsult && (
-                        <Link
-                          to={`/staff/consultations?visit_id=${item.visit_id}&status=${item.status}`}
-                        >
-                          {t("openCaseSheet")}
-                        </Link>
-                      )}
-                      {item.status === "queued" && (
-                        <button
-                          type="button"
-                          disabled={working === item.visit_id}
-                          onClick={() => void action(item.visit_id, "call")}
-                        >
-                          Call
-                        </button>
-                      )}
-                      {item.status === "called" && (
-                        <button
-                          type="button"
-                          disabled={working === item.visit_id}
-                          onClick={() => void action(item.visit_id, "start")}
-                        >
-                          Start
-                        </button>
-                      )}
-                      {item.status === "in_consult" && (
-                        <button
-                          type="button"
-                          disabled={working === item.visit_id}
-                          onClick={() => void action(item.visit_id, "complete")}
-                        >
-                          Complete
-                        </button>
-                      )}
-                      {(item.status === "queued" ||
-                        item.status === "called") && (
-                        <button
-                          type="button"
-                          disabled={working === item.visit_id}
-                          onClick={() => void action(item.visit_id, "no-show")}
-                        >
-                          No show
-                        </button>
-                      )}
-                      {canOverride && item.status === "queued" && (
-                        <div className="staff-queue-override">
-                          <label>
-                            Priority{" "}
-                            <select
-                              value={
-                                overrideValues[item.visit_id]?.urgency ??
-                                item.urgency
-                              }
-                              onChange={(event) =>
-                                setOverrideValues((current) => ({
-                                  ...current,
-                                  [item.visit_id]: {
-                                    urgency: event.target.value,
-                                    reason:
-                                      current[item.visit_id]?.reason ?? "",
-                                  },
-                                }))
-                              }
-                            >
-                              <option value="routine">Routine</option>
-                              <option value="priority">Priority</option>
-                              <option value="urgent">Urgent</option>
-                            </select>
-                          </label>
-                          <label>
-                            Reason{" "}
-                            <input
-                              value={
-                                overrideValues[item.visit_id]?.reason ?? ""
-                              }
-                              maxLength={500}
-                              minLength={5}
-                              onChange={(event) =>
-                                setOverrideValues((current) => ({
-                                  ...current,
-                                  [item.visit_id]: {
-                                    urgency:
-                                      current[item.visit_id]?.urgency ??
-                                      item.urgency,
-                                    reason: event.target.value,
-                                  },
-                                }))
-                              }
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            disabled={
-                              working === item.visit_id ||
-                              (overrideValues[item.visit_id]?.reason.trim()
-                                .length ?? 0) < 5
-                            }
-                            onClick={() => void override(item.visit_id)}
-                          >
-                            Apply override
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </article>
                 );
@@ -753,14 +876,14 @@ export function StaffQueueBoard() {
           {nextCursor && (
             <button
               type="button"
-              className="ui-button ui-button--secondary staff-queue-load-more"
+              className="qb-btn qb-btn--ghost staff-queue-load-more"
               disabled={loadingMore}
               onClick={() => void loadMore()}
             >
               {loadingMore ? "Loading…" : "Load more patients"}
             </button>
           )}
-        </>
+        </div>
       )}
     </section>
   );

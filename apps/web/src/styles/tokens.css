@@ -39,6 +39,7 @@
 :root {
   color-scheme: light;
 
+  /* Primary Palette (WCAG AA compliant) */
   --navy-900: #0b2545;
   --slate-600: #475569;
   --bg: #f7fafa;
@@ -54,45 +55,95 @@
   --routine-tint: #dcfce7;
   --info: #1d4ed8;
 
-  /* Accessible label colors for tinted urgency surfaces. */
+  /* Accessible label colors for tinted urgency surfaces */
   --urgent-ink: #991b1b;
   --priority-ink: #78350f;
   --routine-ink: #14532d;
 
+  /* Extended Semantic Surface & Border Tokens */
+  --surface-subtle: #f0f5f6;
+  --surface-hover: #e6eff2;
+  --surface-active: #dbe7eb;
+  --border-subtle: #e2ecee;
+  --border-strong: #94a3b8;
+  --primary-hover: #0d655f;
+  --primary-active: #094e49;
+  --text-primary: var(--navy-900);
+  --text-muted: var(--slate-600);
+  --text-dim: #64748b;
+
+  /* Typography Scale */
   --font-family-sans:
-    "Inter Variable", "Noto Sans Devanagari Variable", system-ui, sans-serif;
+    "Inter Variable", "Noto Sans Devanagari Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-family-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --font-size-xs: 0.75rem;      /* 12px */
+  --font-size-sm: 0.8125rem;    /* 13px */
+  --font-size-base: 0.875rem;   /* 14px */
+  --font-size-md: 0.9375rem;    /* 15px */
+  --font-size-lg: 1rem;         /* 16px */
+  --font-size-xl: 1.125rem;     /* 18px */
+  --font-size-2xl: 1.25rem;     /* 20px */
+  --font-size-3xl: 1.5rem;      /* 24px */
+  --font-size-4xl: 1.875rem;    /* 30px */
+
   --font-size-kiosk: 1.25rem;
-  --font-size-kiosk-headline: 2.5rem;
-  --font-size-kiosk-subheadline: 1.875rem;
-  --font-size-kiosk-button: 1.5rem;
+  --font-size-kiosk-headline: 2.25rem;
+  --font-size-kiosk-subheadline: 1.75rem;
+  --font-size-kiosk-button: 1.35rem;
   --font-weight-kiosk-button-value: 600;
-  --font-size-staff: 0.9375rem;
-  --font-size-staff-table: 0.875rem;
+  --font-size-staff: 0.875rem;
+  --font-size-staff-table: 0.8125rem;
+  --line-height-tight: 1.25;
   --line-height-latin: 1.5;
-  --line-height-devanagari: 1.7;
+  --line-height-devanagari: 1.65;
 
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
+  /* Deliberate Spacing Scale (4, 8, 12, 16, 20, 24, 32, 40, 48, 64px) */
+  --space-0-5: 0.125rem;  /* 2px */
+  --space-1: 0.25rem;     /* 4px */
+  --space-1-5: 0.375rem;  /* 6px */
+  --space-2: 0.5rem;      /* 8px */
+  --space-2-5: 0.625rem;  /* 10px */
+  --space-3: 0.75rem;     /* 12px */
+  --space-3-5: 0.875rem;  /* 14px */
+  --space-4: 1rem;        /* 16px */
+  --space-5: 1.25rem;     /* 20px */
+  --space-6: 1.5rem;      /* 24px */
+  --space-8: 2rem;        /* 32px */
+  --space-10: 2.5rem;     /* 40px */
+  --space-12: 3rem;       /* 48px */
+  --space-16: 4rem;       /* 64px */
 
-  --radius-card-value: 0.75rem;
-  --radius-kiosk-button-value: 1rem;
+  /* Radius System */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-chip: 9999px;
-  --shadow-card-value:
-    0 1px 2px rgb(11 37 69 / 6%), 0 8px 24px rgb(11 37 69 / 8%);
+  --radius-card-value: 12px;
+  --radius-kiosk-button-value: 14px;
 
+  /* Shadow System (Subtle, professional elevation) */
+  --shadow-xs: 0 1px 2px rgb(11 37 69 / 4%);
+  --shadow-sm: 0 1px 3px rgb(11 37 69 / 6%), 0 1px 2px rgb(11 37 69 / 4%);
+  --shadow-md: 0 4px 6px -1px rgb(11 37 69 / 7%), 0 2px 4px -2px rgb(11 37 69 / 5%);
+  --shadow-lg: 0 10px 15px -3px rgb(11 37 69 / 8%), 0 4px 6px -4px rgb(11 37 69 / 4%);
+  --shadow-card-value: 0 1px 3px rgb(11 37 69 / 5%), 0 1px 2px rgb(11 37 69 / 3%);
+
+  /* Transitions & Animation */
   --motion-fast: 150ms;
-  --motion-standard: 250ms;
-  --motion-ease: ease-out;
-  --focus-width: 3px;
+  --motion-standard: 200ms;
+  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --focus-width: 2px;
   --focus-gap: 2px;
-  --kiosk-target-min: 4rem;
-  --staff-target-min: 2.75rem;
+  --kiosk-target-min: 4rem; /* 64px: playbook minimum for kiosk touch targets */
+  --staff-target-min: 2.25rem;
+
+  /* Scrollbars */
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-track: transparent;
 
   font-family: var(--font-family-sans);
   font-synthesis: none;
@@ -101,7 +152,11 @@
   background: var(--bg);
 }
 
-:lang(hi),
-:lang(mr) {
+:lang(hi) p,
+:lang(hi) li,
+:lang(hi) dd,
+:lang(mr) p,
+:lang(mr) li,
+:lang(mr) dd {
   line-height: var(--line-height-devanagari);
 }

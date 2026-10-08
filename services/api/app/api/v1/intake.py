@@ -12,11 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_v
 from redis.exceptions import RedisError
 from sqlalchemy import text
 
+from app.ai.clinical_summary import apply_summary, summarize_interview
 from app.ai.department_classifier import classify_department, combine_department_classification
-from app.ai.extraction import extract_case_sheet_patch, merge_enriched_case_sheet
+from app.ai.followup_questions import draft_followups
 from app.ai.prompts.builders import QuestionCandidate
 from app.ai.question_choice import select_question_id
-from app.ai.readback import build_readback
+from app.ai.readback import build_readback, build_readback_from_answers
 from app.ai.redflag_opinion import combine_redflag_opinions, second_opinion_flags
 from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
@@ -31,16 +32,22 @@ from app.db.repositories import (
     QueueRepository,
 )
 from app.db.session import set_hospital_scope
-from app.domain.interview.bank import QUESTIONS, Language
+from app.domain.interview.bank import QUESTIONS, Language, Question
 from app.domain.interview.consent import DANGER_TILES, get_consent_copy
 from app.domain.interview.engine import (
+    ALWAYS_MODULES,
+    MAX_QUESTIONS,
     InterviewState,
     InterviewValidationError,
+    add_followups,
     apply_answer,
     build_case_sheet,
     correct_answer,
     next_question,
+    question_for,
+    skip_followups,
     start,
+    with_language,
 )
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
@@ -53,6 +60,9 @@ router = APIRouter(prefix="/intake", tags=["intake"])
 _AI_LOGGER = structlog.get_logger(__name__)
 _SESSION_TTL_FACTOR = 60 * 60
 MAX_ANSWER_CHARACTERS = 500
+# Corrections are stored after every possible interview turn so turn numbers never collide.
+_CORRECTION_TURN_BASE = 100
+_FOLLOWUP_WAIT_SECONDS = 1.5
 _DANGER_TILE_RULE_IDS = {
     "chest_pain": "DS_CHEST",
     "breathing_difficulty": "DS_BREATH",
@@ -172,7 +182,9 @@ async def _hospital_llm_enabled(request: Request, hospital_id: UUID) -> bool:
                 ),
                 {"hospital_id": hospital_id},
             )
-            enabled = configured is True
+            # A hospital without a saved preference uses AI when the operator configured a
+            # key; an administrator can still switch it off explicitly.
+            enabled = configured is not False
     except Exception:
         # An unavailable or unmigrated setting store must leave the deterministic path active.
         enabled = False
@@ -189,6 +201,7 @@ async def _evaluate_visit(
     tile_ids: list[str],
     request: Request | None = None,
     include_department: bool = False,
+    use_llm: bool = False,
 ) -> tuple[list[RedFlag], Route, list[dict[str, Any]]]:
     """Persist new rule events and monotonically raise urgency inside the visit transaction."""
     row = (
@@ -219,9 +232,12 @@ async def _evaluate_visit(
         tile_ids=tuple(_DANGER_TILE_RULE_IDS.get(tile_id, tile_id) for tile_id in tile_ids),
     )
     provider = request.app.state.llm_provider if request is not None else None
+    # Rules run on every answer instantly; the model's second opinion runs once, at
+    # confirmation, where urgency and department are decided.
     tenant_llm_enabled = (
         await _hospital_llm_enabled(request, hospital_id)
         if request is not None
+        and use_llm
         and request.app.state.settings.llm_enabled
         and getattr(provider, "name", "mock") == "gemini"
         else False
@@ -484,17 +500,42 @@ def _patient_message(language: Language) -> str:
     }[language]
 
 
-def _question_payload(question_id: str, language: Language) -> dict[str, Any]:
-    question = QUESTIONS[question_id]
+def _question_payload(state: InterviewState, question_id: str) -> dict[str, Any]:
+    question = question_for(state, question_id)
+    language = state.language
     return {
         "id": question.id,
         "input": question.input,
         "optional": question.optional,
         "prompt": question.prompt[language],
+        "multi": question.multi,
+        "options": [
+            {"id": option.id, "label": option.label[language], "none": option.none}
+            for option in question.options
+        ],
     }
 
 
-def _readback(data: dict[str, Any]) -> str:
+def _answered(state: InterviewState) -> list[dict[str, Any]]:
+    """Answered questions, with tapped options shown in the current language."""
+    return [
+        {
+            **_question_payload(state, question_id),
+            "answer": question_for(state, question_id).localized(
+                state.answers[question_id], state.language
+            ),
+        }
+        for question_id in state.asked
+        if question_id in state.answers
+    ]
+
+
+def _readback(data: dict[str, Any], state: InterviewState | None = None) -> str:
+    """Patient read-back in the patient's own words when the interview answers are known."""
+    if state is not None and state.answers:
+        return build_readback_from_answers(
+            state.language, state.answers, questions=state.extra_questions
+        )
     return build_readback(data)
 
 
@@ -508,7 +549,6 @@ async def _finish_interview(
 ) -> dict[str, Any]:
     data = build_case_sheet(interview_state)
     alerts: list[dict[str, Any]] = []
-    voice_transcript = ""
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         flags, route_result, alerts = await _evaluate_visit(
@@ -527,14 +567,6 @@ async def _finish_interview(
         await IntakeRepository(connection, request.app.state.settings).set_visit_status(
             hospital_id=hospital_id, visit_id=visit_id, status="awaiting_confirmation"
         )
-        turns = await InterviewTurnRepository(
-            connection, request.app.state.settings
-        ).list_for_visit(hospital_id=hospital_id, visit_id=visit_id)
-        voice_transcript = "\n".join(
-            str(turn["text_original"])
-            for turn in turns
-            if turn["input_mode"] == "voice" and isinstance(turn["text_original"], str)
-        )
     await _publish_alerts(
         request.app.state.redis_state,
         app_env=request.app.state.settings.app_env,
@@ -549,43 +581,29 @@ async def _finish_interview(
         json.dumps(state_data, separators=(",", ":")),
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
-    _schedule_case_sheet_enrichment(
+    await _schedule_case_sheet_enrichment(
         request,
         hospital_id=hospital_id,
         visit_id=visit_id,
-        baseline=data,
-        transcript=voice_transcript,
-        language=interview_state.language,
+        interview_state=interview_state,
     )
     return {
         "complete": True,
         "case_sheet": data,
-        "readback": _readback(data),
-        "answered": [
-            {
-                **_question_payload(answered_id, interview_state.language),
-                "answer": interview_state.answers[answered_id],
-            }
-            for answered_id in interview_state.asked
-            if answered_id in interview_state.answers
-        ],
+        "readback": _readback(data, interview_state),
+        "answered": _answered(interview_state),
     }
 
 
-def _schedule_case_sheet_enrichment(
+async def _schedule_case_sheet_enrichment(
     request: Request,
     *,
     hospital_id: UUID,
     visit_id: UUID,
-    baseline: dict[str, Any],
-    transcript: str,
-    language: Language,
+    interview_state: InterviewState,
 ) -> None:
-    """Start bounded best-effort enrichment after returning a deterministic summary."""
-    if not transcript.strip() or getattr(request.state, "llm_enablement", None) != (
-        hospital_id,
-        True,
-    ):
+    """Start the doctor-facing AI summary after returning the deterministic summary."""
+    if not await _hospital_llm_enabled(request, hospital_id):
         return
     provider = request.app.state.llm_provider
     if getattr(provider, "name", "mock") != "gemini":
@@ -595,9 +613,7 @@ def _schedule_case_sheet_enrichment(
             request,
             hospital_id=hospital_id,
             visit_id=visit_id,
-            baseline=baseline,
-            transcript=transcript,
-            language=language,
+            interview_state=interview_state,
         )
     )
     tasks: set[asyncio.Task[None]] = request.app.state.llm_background_tasks
@@ -610,9 +626,7 @@ async def _run_bounded_case_sheet_enrichment(
     *,
     hospital_id: UUID,
     visit_id: UUID,
-    baseline: dict[str, Any],
-    transcript: str,
-    language: Language,
+    interview_state: InterviewState,
 ) -> None:
     try:
         await asyncio.wait_for(
@@ -620,14 +634,24 @@ async def _run_bounded_case_sheet_enrichment(
                 request,
                 hospital_id=hospital_id,
                 visit_id=visit_id,
-                baseline=baseline,
-                transcript=transcript,
-                language=language,
+                interview_state=interview_state,
             ),
-            timeout=5.0,
+            timeout=25.0,
         )
     except TimeoutError:
         _AI_LOGGER.warning("llm_case_sheet_enrichment_fallback", reason="background_timeout")
+
+
+def _summary_answers(interview_state: InterviewState) -> list[dict[str, str]]:
+    return [
+        {
+            "question_id": question_id,
+            "question_en": question_for(interview_state, question_id).prompt["en"],
+            "answer": str(interview_state.answers[question_id]),
+        }
+        for question_id in interview_state.asked
+        if question_id in interview_state.answers
+    ]
 
 
 async def _persist_case_sheet_enrichment(
@@ -635,21 +659,42 @@ async def _persist_case_sheet_enrichment(
     *,
     hospital_id: UUID,
     visit_id: UUID,
-    baseline: dict[str, Any],
-    transcript: str,
-    language: Language,
+    interview_state: InterviewState,
 ) -> None:
-    """Enrich in the background, merging safely against the latest unconfirmed sheet."""
+    """Translate and structure the interview, then merge onto the latest stored sheet."""
     try:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            patient = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT v.age_years, p.sex FROM visits v JOIN patients p "
+                            "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
+                            "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                        ),
+                        {"hospital_id": hospital_id, "visit_id": visit_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
         provider = request.app.state.llm_provider
-        enriched = await extract_case_sheet_patch(
+        output = await summarize_interview(
             provider,
-            baseline,
-            transcript,
-            language,
+            language=interview_state.language,
+            age=patient["age_years"] if patient else None,
+            sex=patient["sex"] if patient else None,
+            answers=_summary_answers(interview_state),
+            danger_signs=[
+                DANGER_TILES[tile]["en"]
+                for tile in interview_state.red_flag_ids
+                if tile in DANGER_TILES
+            ],
             session_id=str(visit_id),
         )
-        if enriched == baseline:
+        if output is None:
+            _AI_LOGGER.warning("llm_case_sheet_enrichment_fallback", reason="unavailable_or_unsafe")
             return
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
@@ -659,19 +704,13 @@ async def _persist_case_sheet_enrichment(
             )
             if saved is None:
                 return
-            confirmed_at = await connection.scalar(
-                text(
-                    "SELECT confirmed_at FROM case_sheets "
-                    "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
-                ),
-                {"hospital_id": hospital_id, "visit_id": visit_id},
-            )
-            if confirmed_at is not None:
-                return
             current = saved["data"]
-            merged = merge_enriched_case_sheet(current, baseline, enriched)
-            if merged == current:
-                return
+            if any(
+                isinstance(meta, dict) and meta.get("source") in {"nurse", "doctor"}
+                for meta in current.get("field_meta", {}).values()
+            ):
+                return  # Staff have edited this sheet; never overwrite their work.
+            merged = apply_summary(current, output, model=str(getattr(provider, "model", "")))
             version = await repository.replace_if_version(
                 hospital_id=hospital_id,
                 visit_id=visit_id,
@@ -680,17 +719,15 @@ async def _persist_case_sheet_enrichment(
                 editor_id=None,
             )
             if version is not None:
-                field_count = sum(
-                    1
-                    for path, metadata in merged["field_meta"].items()
-                    if metadata.get("source") == "patient_voice"
-                    and baseline["field_meta"].get(path) != metadata
-                )
-                _AI_LOGGER.info("llm_case_sheet_enrichment_applied", field_count=field_count)
+                _AI_LOGGER.info("llm_case_sheet_enrichment_applied")
     except asyncio.CancelledError:
         raise
-    except Exception:
-        _AI_LOGGER.warning("llm_case_sheet_enrichment_fallback", reason="unavailable_or_invalid")
+    except Exception as exc:
+        _AI_LOGGER.warning(
+            "llm_case_sheet_enrichment_fallback",
+            reason="unavailable_or_invalid",
+            error_type=type(exc).__name__,
+        )
 
 
 @router.post("/sessions", status_code=status.HTTP_201_CREATED)
@@ -835,6 +872,46 @@ async def create_assisted_session(
         "consent": {**consent, "language": payload.language},
         "assisted": True,
     }
+
+
+class LanguagePayload(StrictPayload):
+    language: Language
+
+
+@router.post("/sessions/{visit_id}/language")
+async def change_language(
+    visit_id: UUID,
+    payload: LanguagePayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, Any]:
+    """Switch the patient's language mid-interview; earlier answers are kept as given."""
+    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=False)
+    key = _session_key(hospital_id, visit_id)
+    state = _read_state(await request.app.state.redis_state.get(key))
+    if state.get("phase") == "confirmed":
+        raise _error(409, "SESSION_COMPLETE", "Already checked in", "The token has been issued.")
+    state["language"] = payload.language
+    if isinstance(state.get("interview"), dict):
+        interview_state = with_language(
+            InterviewState.model_validate(state["interview"]), payload.language
+        )
+        state["interview"] = interview_state.model_dump(mode="json")
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await connection.execute(
+            text(
+                "UPDATE visits SET language = :language "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {"language": payload.language, "hospital_id": hospital_id, "visit_id": visit_id},
+        )
+    await request.app.state.redis_state.set(
+        key,
+        json.dumps(state, separators=(",", ":")),
+        ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+    )
+    return {"language": payload.language, "consent": get_consent_copy(payload.language)}
 
 
 @router.post("/sessions/{visit_id}/consent")
@@ -1013,10 +1090,155 @@ async def save_danger_signs(
     }
 
 
+def _followup_key(hospital_id: UUID, visit_id: UUID) -> str:
+    return f"{_session_key(hospital_id, visit_id)}:followups"
+
+
+async def _followups_enabled(request: Request, hospital_id: UUID) -> bool:
+    settings = request.app.state.settings
+    provider = getattr(request.app.state, "llm_provider", None)
+    return bool(
+        getattr(settings, "ai_followup_questions", False)
+        and getattr(provider, "name", "mock") == "gemini"
+        and await _hospital_llm_enabled(request, hospital_id)
+    )
+
+
+def _schedule_followups(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, interview_state: InterviewState
+) -> None:
+    """Draft AI follow-ups in the background while the patient answers the next questions."""
+    task = asyncio.create_task(
+        _draft_and_store_followups(
+            request, hospital_id=hospital_id, visit_id=visit_id, interview_state=interview_state
+        )
+    )
+    tasks: set[asyncio.Task[None]] = request.app.state.llm_background_tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+
+
+async def _draft_and_store_followups(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, interview_state: InterviewState
+) -> None:
+    questions: list[Question] = []
+    try:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            patient = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT v.age_years, p.sex FROM visits v JOIN patients p "
+                            "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
+                            "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                        ),
+                        {"hospital_id": hospital_id, "visit_id": visit_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        questions = await asyncio.wait_for(
+            draft_followups(
+                request.app.state.llm_provider,
+                complaint=str(interview_state.answers.get("chief_concern", "")),
+                language=interview_state.language,
+                age=patient["age_years"] if patient else None,
+                sex=patient["sex"] if patient else None,
+                planned_questions=[
+                    question_for(interview_state, item) for item in interview_state.queued
+                ],
+                danger_signs=[
+                    DANGER_TILES[tile]["en"]
+                    for tile in interview_state.red_flag_ids
+                    if tile in DANGER_TILES
+                ],
+                session_id=str(visit_id),
+            ),
+            timeout=12.0,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        _AI_LOGGER.warning("ai_followups_failed", error_type=type(exc).__name__)
+    _AI_LOGGER.info("ai_followups_ready", count=len(questions))
+    try:
+        await request.app.state.redis_state.set(
+            _followup_key(hospital_id, visit_id),
+            json.dumps([question.model_dump(mode="json") for question in questions]),
+            ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+        )
+    except RedisError:
+        return
+
+
+async def _merge_followups(
+    request: Request,
+    *,
+    hospital_id: UUID,
+    visit_id: UUID,
+    state: dict[str, Any],
+    interview_state: InterviewState,
+) -> InterviewState:
+    """Slot ready AI follow-ups in before the history questions; never block the patient.
+
+    The draft normally finishes while the patient answers duration, severity and the symptom
+    questions. If it is still missing when the history questions start, wait once for at
+    most 1.5 seconds, then carry on with the clinician-reviewed bank; a draft that arrives
+    later is still slotted in among the remaining history questions.
+    """
+    if interview_state.ai_followups != "none" or not state.get("followups_requested"):
+        return interview_state
+    upcoming = next_question(interview_state)
+    if upcoming is None:
+        return interview_state  # Interview finished; nothing left to slot in before.
+    redis = request.app.state.redis_state
+    key = _followup_key(hospital_id, visit_id)
+    raw = await redis.get(key)
+    if raw is None and upcoming.module in ALWAYS_MODULES and not state.get("followups_waited"):
+        state["followups_waited"] = True
+        waited = 0.0
+        while raw is None and waited < _FOLLOWUP_WAIT_SECONDS:
+            await asyncio.sleep(0.25)
+            waited += 0.25
+            raw = await redis.get(key)
+        if raw is None:
+            await redis.set(
+                _session_key(hospital_id, visit_id),
+                json.dumps(state, separators=(",", ":")),
+                ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+            )
+    if raw is None:
+        return interview_state
+    questions: list[Question] = []
+    if raw is not None:
+        try:
+            questions = [Question.model_validate(item) for item in json.loads(raw)]
+        except (TypeError, ValueError):
+            questions = []
+    merged = (
+        add_followups(interview_state, questions) if questions else skip_followups(interview_state)
+    )
+    state["interview"] = merged.model_dump(mode="json")
+    await redis.set(
+        _session_key(hospital_id, visit_id),
+        json.dumps(state, separators=(",", ":")),
+        ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+    )
+    return merged
+
+
 async def _question_response(
     request: Request, *, hospital_id: UUID, visit_id: UUID, state: dict[str, Any]
 ) -> dict[str, Any]:
-    interview_state = InterviewState.model_validate(state["interview"])
+    interview_state = await _merge_followups(
+        request,
+        hospital_id=hospital_id,
+        visit_id=visit_id,
+        state=state,
+        interview_state=InterviewState.model_validate(state["interview"]),
+    )
     question = next_question(interview_state)
     if question is None:
         return await _finish_interview(
@@ -1037,6 +1259,7 @@ async def _question_response(
         state.pop("ai_selected_question", None)
         if (
             request.app.state.settings.llm_enabled
+            and request.app.state.settings.ai_question_choice
             and getattr(request.app.state.llm_provider, "name", "mock") == "gemini"
             and await _hospital_llm_enabled(request, hospital_id)
         ):
@@ -1081,15 +1304,16 @@ async def _question_response(
                 question = QUESTIONS[selected_id]
     return {
         "complete": False,
-        "question": _question_payload(question.id, interview_state.language),
-        "answered": [
-            {
-                **_question_payload(answered_id, interview_state.language),
-                "answer": interview_state.answers.get(answered_id),
-            }
-            for answered_id in interview_state.asked
-            if answered_id in interview_state.answers
-        ],
+        "question": _question_payload(interview_state, question.id),
+        "progress": {
+            "current": len(interview_state.asked) + 1,
+            # Before the main concern is known, assume a typical interview length.
+            "total": min(
+                MAX_QUESTIONS,
+                max(len(interview_state.queued), 10 if not interview_state.asked else 0),
+            ),
+        },
+        "answered": _answered(interview_state),
     }
 
 
@@ -1125,17 +1349,12 @@ async def get_next_question(
                 hospital_id=hospital_id, visit_id=visit_id
             )
         data = result["data"] if result else None
+        summary_state = InterviewState.model_validate(state["interview"])
         return {
             "complete": True,
             "case_sheet": data,
-            "readback": _readback(data) if data else None,
-            "answered": [
-                {
-                    **_question_payload(answered_id, state["interview"]["language"]),
-                    "answer": answer,
-                }
-                for answered_id, answer in state["interview"]["answers"].items()
-            ],
+            "readback": _readback(data, summary_state) if data else None,
+            "answered": _answered(summary_state),
         }
     if state.get("phase") != "interview":
         raise _error(
@@ -1199,11 +1418,23 @@ async def submit_answer(
             )
         state["interview"] = next_state.model_dump(mode="json")
         state.pop("ai_selected_question", None)
+        draft_followups_now = (
+            payload.question_id == "chief_concern"
+            and not payload.skip
+            and not state.get("followups_requested")
+            and await _followups_enabled(request, hospital_id)
+        )
+        if draft_followups_now:
+            state["followups_requested"] = True
         await request.app.state.redis_state.set(
             key,
             json.dumps(state, separators=(",", ":")),
             ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         )
+        if draft_followups_now:
+            _schedule_followups(
+                request, hospital_id=hospital_id, visit_id=visit_id, interview_state=next_state
+            )
         await _publish_alerts(
             request.app.state.redis_state,
             app_env=request.app.state.settings.app_env,
@@ -1252,7 +1483,7 @@ async def correct_interview_answer(
         await InterviewTurnRepository(connection, request.app.state.settings).add(
             hospital_id=hospital_id,
             visit_id=visit_id,
-            turn_index=12 + int(state.get("corrections", 0)),
+            turn_index=_CORRECTION_TURN_BASE + int(state.get("corrections", 0)),
             question_id=payload.question_id,
             input_mode=payload.input_mode,
             text_original=str(payload.answer),
@@ -1294,26 +1525,17 @@ async def correct_interview_answer(
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
     if state.get("phase") == "summary":
-        _schedule_case_sheet_enrichment(
+        await _schedule_case_sheet_enrichment(
             request,
             hospital_id=hospital_id,
             visit_id=visit_id,
-            baseline=data,
-            transcript=str(payload.answer),
-            language=updated.language,
+            interview_state=updated,
         )
         return {
             "complete": True,
             "case_sheet": data,
-            "readback": _readback(data),
-            "answered": [
-                {
-                    **_question_payload(answered_id, updated.language),
-                    "answer": updated.answers[answered_id],
-                }
-                for answered_id in updated.asked
-                if answered_id in updated.answers
-            ],
+            "readback": _readback(data, updated),
+            "answered": _answered(updated),
         }
     return await _question_response(
         request, hospital_id=hospital_id, visit_id=visit_id, state=state
@@ -1342,7 +1564,10 @@ async def generate_readback_audio(
             raise _error(
                 409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first."
             )
-        copy = build_readback(saved["data"])
+        copy = _readback(
+            saved["data"],
+            InterviewState.model_validate(state["interview"]) if state.get("interview") else None,
+        )
         await audit(
             connection,
             request,
@@ -1370,6 +1595,81 @@ async def generate_readback_audio(
         media_type=clip.media_type,
         headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
     )
+
+
+@router.post("/sessions/{visit_id}/help")
+async def request_staff_help(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, bool]:
+    """The patient pressed "Call staff": raise an acknowledgeable alert on the staff board."""
+    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=False)
+    event_id = uuid7()
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        visit = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT department_id, token_label FROM visits "
+                        "WHERE hospital_id = :hospital_id AND id = :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if visit is None:
+            raise _error(404, "NOT_FOUND", "Session not found", "Please ask staff for help.")
+        inserted = await connection.scalar(
+            text(
+                "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, "
+                "evidence) VALUES (:id, :hospital_id, :visit_id, 'tile', 'PATIENT_HELP', "
+                "'priority', 'Patient pressed Call staff on the kiosk.') "
+                "ON CONFLICT (hospital_id, visit_id, rule_id) WHERE rule_id IS NOT NULL "
+                "DO UPDATE SET acknowledged_at = NULL, acknowledged_by = NULL, created_at = now() "
+                "RETURNING id"
+            ),
+            {"id": event_id, "hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        await connection.execute(
+            text(
+                "UPDATE visits SET needs_assistance = true "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="patient",
+            actor_id=visit_id,
+            action="intake.patient_called_staff",
+            resource_type="visit",
+            resource_id=visit_id,
+        )
+    await _publish_alerts(
+        request.app.state.redis_state,
+        app_env=request.app.state.settings.app_env,
+        hospital_id=hospital_id,
+        alerts=[
+            {
+                "type": "alert.urgent",
+                "id": str(inserted or event_id),
+                "visit_id": str(visit_id),
+                "rule_id": "PATIENT_HELP",
+                "level": "priority",
+                "reason_en": "Patient asked for help at the kiosk",
+                "evidence": "Patient pressed Call staff on the kiosk.",
+                "token_label": visit["token_label"],
+                "department_id": str(visit["department_id"]),
+            }
+        ],
+    )
+    return {"requested": True}
 
 
 @router.post("/sessions/{visit_id}/needs-assistance")
@@ -1448,6 +1748,13 @@ async def confirm_summary(
             tile_ids=interview_state.red_flag_ids,
             request=request,
             include_department=True,
+            use_llm=True,
+        )
+        # The AI summary may have been saved while the checks above ran; build on the
+        # latest version so confirmation never overwrites it.
+        saved = (
+            await repository.get(hospital_id=hospital_id, visit_id=visit_id, for_update=True)
+            or saved
         )
         case_data = _patient_case_sheet(saved["data"], flags, route_result)
         confirmation = case_data.setdefault("patient_confirmation", {})
@@ -1593,6 +1900,32 @@ async def confirm_summary(
         position = next(
             (index + 1 for index, item in enumerate(rows) if item["visit_id"] == visit_id), None
         )
+    language = str(state.get("language", "en"))
+    department_name = None
+    try:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            department = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT code, name_en, name_hi, name_mr FROM departments "
+                            "WHERE hospital_id = :hospital_id AND id = :department_id"
+                        ),
+                        {
+                            "hospital_id": hospital_id,
+                            "department_id": queue_record["department_id"],
+                        },
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        if department is not None:
+            department_name = department.get(f"name_{language}") or department["name_en"]
+    except Exception:
+        department_name = None
+    consult_minutes = request.app.state.settings.default_consult_min
     queue_response = {
         "confirmed": True,
         "status": "queued",
@@ -1600,6 +1933,8 @@ async def confirm_summary(
         "status_token": status_token,
         "status_url": f"/s/{status_token}",
         "position": position,
+        "department_name": department_name,
+        "wait_minutes": round(max(position - 1, 0) * consult_minutes) if position else None,
     }
     state["phase"] = "confirmed"
     state["queue"] = queue_response
@@ -1704,9 +2039,7 @@ async def replay_offline_submission(
                     answer: str | int | None = value
                 else:
                     answer = None if skip else str(value)
-                interview_state = apply_answer(
-                    interview_state, question.id, answer, skip=skip
-                )
+                interview_state = apply_answer(interview_state, question.id, answer, skip=skip)
                 turns.append(
                     {
                         "question_id": question.id,

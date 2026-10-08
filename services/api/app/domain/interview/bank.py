@@ -15,12 +15,54 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class AnswerOption(StrictModel):
+    """A tap-to-answer choice; ``none`` marks an explicit negative such as "No allergy"."""
+
+    id: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_]+$")
+    label: dict[Language, str]
+    none: bool = False
+
+
 class Question(StrictModel):
     id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
     module: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
     input: Literal["text", "scale"]
     optional: bool = True
     prompt: dict[Language, str]
+    options: list[AnswerOption] = Field(default_factory=list, max_length=16)
+    multi: bool = True
+
+    def option_for_label(self, label: str) -> AnswerOption | None:
+        """Find the option whose label (in any language) matches ``label`` exactly."""
+        needle = label.strip().casefold()
+        for option in self.options:
+            if any(text.strip().casefold() == needle for text in option.label.values()):
+                return option
+        return None
+
+    def answer_parts(self, answer: str) -> list[tuple[str, AnswerOption | None]]:
+        """Split a comma-joined answer into parts, matching tapped option labels."""
+        parts = [part.strip() for part in answer.replace("،", ",").split(",")]
+        return [(part, self.option_for_label(part)) for part in parts if part]
+
+    def english(self, answer: str) -> str:
+        """English text for tapped options; free-text parts are kept as spoken."""
+        return ", ".join(
+            option.label["en"] if option else part for part, option in self.answer_parts(answer)
+        )
+
+    def localized(self, answer: str | int, language: Language) -> str | int:
+        """Show tapped options in ``language``; typed or spoken words stay as given."""
+        if not isinstance(answer, str):
+            return answer
+        return ", ".join(
+            option.label[language] if option else part for part, option in self.answer_parts(answer)
+        )
+
+    def is_negative(self, answer: str) -> bool:
+        """True when every part of the answer is an explicit "none" option."""
+        parts = self.answer_parts(answer)
+        return bool(parts) and all(option is not None and option.none for _, option in parts)
 
 
 class TriggerConfiguration(TypedDict):
@@ -51,6 +93,12 @@ def load_question_bank(
                 not question.prompt[language].strip() for language in ("en", "hi", "mr")
             ):
                 raise ValueError(f"{question.id} must have non-empty en, hi, and mr prompts")
+            for option in question.options:
+                if set(option.label) != {"en", "hi", "mr"} or any(
+                    not option.label[language].strip() or "," in option.label[language]
+                    for language in ("en", "hi", "mr")
+                ):
+                    raise ValueError(f"{question.id} option {option.id} needs en, hi, mr labels")
             if question.id in questions:
                 raise ValueError(f"duplicate question id: {question.id}")
             questions[question.id] = question

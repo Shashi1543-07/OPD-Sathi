@@ -1,15 +1,30 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button, ConnectionIndicator, Toast } from "../components/ui";
 import { staffAuth, StaffUser } from "../lib/auth";
 import { navigationByRole } from "./staffAccess";
 
+const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const lastHospitalKey = "osa.staff.hospital";
+type Hospital = { id: string; name: string };
+
+function rememberedHospital() {
+  try {
+    return localStorage.getItem(lastHospitalKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function StaffShell() {
+  const location = useLocation();
+  const judgeMode = new URLSearchParams(location.search).get("demo") === "1";
   const { t } = useTranslation(["common", "staff"]);
   const [user, setUser] = useState<StaffUser | null>(staffAuth.user);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [hospitalId, setHospitalId] = useState("");
+  const [hospitalId, setHospitalId] = useState(rememberedHospital);
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -30,12 +45,35 @@ export function StaffShell() {
     return unsubscribe;
   }, [t]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiOrigin}/auth/hospitals`)
+      .then((response) => (response.ok ? response.json() : { items: [] }))
+      .then((body: { items?: Hospital[] }) => {
+        if (cancelled) return;
+        const items = body.items ?? [];
+        setHospitals(items);
+        setHospitalId((current) =>
+          items.some((item) => item.id === current) ? current : (items[0]?.id ?? current),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setSubmitting(true);
     try {
       await staffAuth.login(hospitalId.trim(), email.trim(), password);
+      try {
+        localStorage.setItem(lastHospitalKey, hospitalId.trim());
+      } catch {
+        // Convenience only.
+      }
       setPassword("");
       setError("");
     } catch (cause) {
@@ -65,6 +103,9 @@ export function StaffShell() {
     }
   }
 
+  const isStaffRoot =
+    location.pathname === "/staff" || location.pathname === "/staff/";
+
   return (
     <div
       className="staff-app"
@@ -75,45 +116,78 @@ export function StaffShell() {
         <aside className="staff-sidebar">
           <a className="staff-brand" href="/staff">
             {t("appName", { ns: "common" })}
+            <span>OPD Management</span>
           </a>
           <nav aria-label={t("staffNavigation", { ns: "staff" })}>
             {navigationByRole[user.role].map((page) => (
-              <NavLink to={`/staff/${page}`} key={page}>
+              <NavLink
+                to={{
+                  pathname: `/staff/${page}`,
+                  search: judgeMode ? location.search : "",
+                }}
+                key={page}
+              >
                 {t(page, { ns: "staff" })}
               </NavLink>
             ))}
           </nav>
-          <span className="staff-demo-label">{user.role}</span>
-          <Button onClick={() => void signOut()}>
-            {t("signOut", { ns: "staff" })}
-          </Button>
+          <div className="staff-sidebar-footer">
+            <div className="staff-user-meta">
+              <span className="staff-demo-label">{user.role}</span>
+              <span className="staff-user-email" title={user.email}>
+                {user.email}
+              </span>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void signOut()}
+            >
+              {t("signOut", { ns: "staff" })}
+            </Button>
+          </div>
         </aside>
       ) : null}
       <div className="staff-content">
         <header className="staff-topbar">
-          <div>
+          <div className="staff-topbar-info">
             <p className="eyebrow">{t("staffTitle", { ns: "staff" })}</p>
             <h1>{user ? user.name : t("signIn", { ns: "staff" })}</h1>
           </div>
           {user ? (
-            <ConnectionIndicator
-              state={checkingSession ? "reconnecting" : "live"}
-            />
+            <div className="staff-topbar-meta">
+              <span className="staff-role-chip">{user.role}</span>
+              <ConnectionIndicator
+                state={checkingSession ? "reconnecting" : "live"}
+              />
+            </div>
           ) : null}
         </header>
-        <main className="staff-main">
+        <main
+          className="staff-main"
+          data-page={user ? "dashboard" : "login"}
+        >
           {checkingSession ? (
             <p role="status">{t("checkingSession", { ns: "staff" })}</p>
           ) : user ? (
             <>
-              <section
-                className="staff-login-card"
-                aria-label={t("staffWelcome", { ns: "staff" })}
-              >
-                <h2>{t("signedInAs", { ns: "staff", role: user.role })}</h2>
-                <p>{user.email}</p>
-                <p>{t("secureSession", { ns: "staff" })}</p>
-              </section>
+              {isStaffRoot && (
+                <section
+                  className="staff-login-card"
+                  aria-label={t("staffWelcome", { ns: "staff" })}
+                >
+                  <h2>{t("signedInAs", { ns: "staff", role: user.role })}</h2>
+                  <p>{user.email}</p>
+                  <p>{t("secureSession", { ns: "staff" })}</p>
+                </section>
+              )}
+              {judgeMode && (
+                <details className="staff-demo-banner">
+                  <summary>{t("howItWorks", { ns: "staff" })}</summary>
+                  <p>{t("howItWorksCollection", { ns: "staff" })}</p>
+                  <p>{t("howItWorksReview", { ns: "staff" })}</p>
+                </details>
+              )}
               <Outlet />
             </>
           ) : (
@@ -124,14 +198,29 @@ export function StaffShell() {
                 <label htmlFor="hospital-id">
                   {t("hospitalId", { ns: "staff" })}
                 </label>
-                <input
-                  id="hospital-id"
-                  type="text"
-                  autoComplete="organization"
-                  required
-                  value={hospitalId}
-                  onChange={(event) => setHospitalId(event.target.value)}
-                />
+                {hospitals.length > 0 ? (
+                  <select
+                    id="hospital-id"
+                    required
+                    value={hospitalId}
+                    onChange={(event) => setHospitalId(event.target.value)}
+                  >
+                    {hospitals.map((hospital) => (
+                      <option key={hospital.id} value={hospital.id}>
+                        {hospital.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id="hospital-id"
+                    type="text"
+                    autoComplete="organization"
+                    required
+                    value={hospitalId}
+                    onChange={(event) => setHospitalId(event.target.value)}
+                  />
+                )}
                 <label htmlFor="staff-email">
                   {t("email", { ns: "staff" })}
                 </label>

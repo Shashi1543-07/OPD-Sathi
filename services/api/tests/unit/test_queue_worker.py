@@ -47,7 +47,7 @@ class FakeConnection:
         self.statements.append(sql)
         if "SELECT id, hospital_id, payload FROM outbox" in sql:
             return FakeResult([] if self.processed else [self.event])
-        if "WHERE status = 'queued' ORDER BY" in sql:
+        if "WHERE status = 'queued'" in sql and "service_date >=" in sql:
             return FakeResult(self.rows)
         if "SELECT id AS visit_id" in sql and "WHERE hospital_id" in sql:
             return FakeResult([self.visit])

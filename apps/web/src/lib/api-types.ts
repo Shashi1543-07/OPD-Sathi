@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/auth/hospitals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Hospital Directory
+         * @description List hospital names for the staff sign-in picker (no staff or patient data).
+         */
+        get: operations["hospital_directory_auth_hospitals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -311,6 +331,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/intake/sessions/{visit_id}/language": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Language
+         * @description Switch the patient's language mid-interview; earlier answers are kept as given.
+         */
+        post: operations["change_language_intake_sessions__visit_id__language_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/consent": {
         parameters: {
             query?: never;
@@ -434,6 +474,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/intake/sessions/{visit_id}/help": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Staff Help
+         * @description The patient pressed "Call staff": raise an acknowledgeable alert on the staff board.
+         */
+        post: operations["request_staff_help_intake_sessions__visit_id__help_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/needs-assistance": {
         parameters: {
             query?: never;
@@ -462,6 +522,26 @@ export interface paths {
         put?: never;
         /** Confirm Summary */
         post: operations["confirm_summary_intake_sessions__visit_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/offline-submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replay Offline Submission
+         * @description Replay one encrypted local kiosk submission through the regular intake engine.
+         */
+        post: operations["replay_offline_submission_intake_offline_submissions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -531,6 +611,28 @@ export interface paths {
         };
         /** Staff Queue */
         get: operations["staff_queue_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/patients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Staff Patients
+         * @description Return a tenant-scoped visit register for staff review.
+         *
+         *     ``days`` limits the register to visits since local midnight, ``days - 1`` days ago.
+         */
+        get: operations["staff_patients_patients_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -770,6 +872,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/intake/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Speech Capabilities
+         * @description Tell the kiosk which speech features the server provides for this deployment.
+         */
+        get: operations["speech_capabilities_intake_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/sessions/{visit_id}/transcribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transcribe Answer
+         * @description Transcribe one recorded answer; the audio is processed in memory and never stored.
+         */
+        post: operations["transcribe_answer_intake_sessions__visit_id__transcribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/sessions/{visit_id}/speak": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Speak Prompt
+         * @description Speak approved text only: bank questions, the consent notice, or this read-back.
+         */
+        post: operations["speak_prompt_intake_sessions__visit_id__speak_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/sessions/{visit_id}/prescription-photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read Prescription Photo
+         * @description Read medicine names from an old prescription photo; the image is never stored.
+         */
+        post: operations["read_prescription_photo_intake_sessions__visit_id__prescription_photo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -778,6 +960,28 @@ export interface components {
         AISettingsPatch: {
             /** Llm Enabled */
             llm_enabled: boolean;
+        };
+        /**
+         * AISummary
+         * @description Doctor-facing English translation produced by the language model; history only.
+         */
+        AISummary: {
+            /** Brief En */
+            brief_en: string;
+            /** Answers En */
+            answers_en?: {
+                [key: string]: string;
+            };
+            /**
+             * Model
+             * @default
+             */
+            model: string;
+            /**
+             * Generated At
+             * @default
+             */
+            generated_at: string;
         };
         /** AddOrReplace */
         AddOrReplace: {
@@ -840,6 +1044,11 @@ export interface components {
                 [key: string]: components["schemas"]["FieldMeta"];
             };
             patient_confirmation?: components["schemas"]["PatientConfirmation"];
+            ai_summary?: components["schemas"]["AISummary"] | null;
+            /** Followup Questions */
+            followup_questions?: {
+                [key: string]: string;
+            };
             /**
              * Disclaimer
              * @default Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis.
@@ -863,6 +1072,7 @@ export interface components {
             confirmed_by_patient: boolean;
             /** Confirmed At */
             confirmed_at?: string | null;
+            patient?: components["schemas"]["PatientContext"] | null;
         };
         /** ConsentPayload */
         ConsentPayload: {
@@ -1005,6 +1215,14 @@ export interface components {
             /** Is Active */
             is_active?: boolean | null;
         };
+        /** LanguagePayload */
+        LanguagePayload: {
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "hi" | "mr";
+        };
         /** LoginPayload */
         LoginPayload: {
             /**
@@ -1028,6 +1246,55 @@ export interface components {
              * @enum {string}
              */
             source: "patient_stated" | "document" | "nurse" | "doctor";
+        };
+        /** OfflineSubmissionPayload */
+        OfflineSubmissionPayload: {
+            /** Idempotency Key */
+            idempotency_key: string;
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "hi" | "mr";
+            /** Consent Granted */
+            consent_granted: boolean;
+            /** Consent Version */
+            consent_version: string;
+            /** Consent Sha256 */
+            consent_sha256: string;
+            /** Age */
+            age: number;
+            /**
+             * Sex
+             * @enum {string}
+             */
+            sex: "female" | "male" | "other" | "unknown";
+            /** Chief Complaint */
+            chief_complaint: string;
+            /**
+             * Duration
+             * @default
+             */
+            duration: string;
+            /** Severity */
+            severity: number;
+            /**
+             * Conditions
+             * @default
+             */
+            conditions: string;
+            /**
+             * Medications
+             * @default
+             */
+            medications: string;
+            /**
+             * Allergies
+             * @default
+             */
+            allergies: string;
+            /** Danger Tile Ids */
+            danger_tile_ids?: string[];
         };
         /** OverridePayload */
         OverridePayload: {
@@ -1057,6 +1324,26 @@ export interface components {
              * @default false
              */
             needs_assistance: boolean;
+        };
+        /**
+         * PatientContext
+         * @description Non-identifying visit context the doctor needs next to the history.
+         */
+        PatientContext: {
+            /** Age Years */
+            age_years?: number | null;
+            /** Sex */
+            sex?: string | null;
+            /** Language */
+            language?: string | null;
+            /** Token */
+            token?: string | null;
+            /** Urgency */
+            urgency?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Department Name */
+            department_name?: string | null;
         };
         /** RedFlag */
         RedFlag: {
@@ -1107,6 +1394,19 @@ export interface components {
         SocialHistory: {
             tobacco?: components["schemas"]["TextPair"] | null;
             alcohol?: components["schemas"]["TextPair"] | null;
+        };
+        /** SpeakPayload */
+        SpeakPayload: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "question" | "consent" | "readback";
+            /**
+             * Question Id
+             * @default
+             */
+            question_id: string;
         };
         /** TextPair */
         TextPair: {
@@ -1201,6 +1501,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    hospital_directory_auth_hospitals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
     login_auth_login_post: {
         parameters: {
             query?: never;
@@ -1811,6 +2133,43 @@ export interface operations {
             };
         };
     };
+    change_language_intake_sessions__visit_id__language_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LanguagePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     record_consent_intake_sessions__visit_id__consent_post: {
         parameters: {
             query?: never;
@@ -2093,6 +2452,39 @@ export interface operations {
             };
         };
     };
+    request_staff_help_intake_sessions__visit_id__help_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     flag_patient_needs_assistance_intake_sessions__visit_id__needs_assistance_post: {
         parameters: {
             query?: never;
@@ -2139,6 +2531,41 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replay_offline_submission_intake_offline_submissions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfflineSubmissionPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2259,6 +2686,40 @@ export interface operations {
                 status?: ("queued" | "called" | "in_consult") | null;
                 limit?: number;
                 cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    staff_patients_patients_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                days?: number | null;
             };
             header?: never;
             path?: never;
@@ -2742,6 +3203,131 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscriptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    speech_capabilities_intake_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    transcribe_answer_intake_sessions__visit_id__transcribe_post: {
+        parameters: {
+            query?: {
+                question_id?: string;
+            };
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    speak_prompt_intake_sessions__visit_id__speak_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpeakPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_prescription_photo_intake_sessions__visit_id__prescription_photo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

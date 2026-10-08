@@ -22,10 +22,12 @@ class FallbackTTS:
 
 
 def build_tts_provider(settings: Settings) -> TTSProvider:
-    if settings.tts_provider == "sarvam":
+    if settings.provider_mode == "demo-safe":
+        return MockTTS()
+    if settings.resolved_tts_provider == "sarvam":
         primary: TTSProvider = SarvamTTS(api_key=settings.sarvam_api_key, model=settings.tts_model)
         fallback = FallbackTTS(GoogleTTS(), MockTTS())
         return FallbackTTS(primary, fallback)
-    if settings.tts_provider == "google":
+    if settings.resolved_tts_provider == "google":
         return FallbackTTS(GoogleTTS(), MockTTS())
     return MockTTS()

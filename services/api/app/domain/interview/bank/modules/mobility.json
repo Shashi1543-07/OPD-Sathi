@@ -7,10 +7,108 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "How has this affected your usual movement or activities?",
-        "hi": "इससे आपकी रोज़ की गतिविधियों या चलने-फिरने पर क्या असर पड़ा है?",
-        "mr": "यामुळे तुमच्या रोजच्या हालचाली किंवा कामांवर काय परिणाम झाला आहे?"
-      }
+        "en": "How did it happen?",
+        "hi": "यह कैसे हुआ?",
+        "mr": "हे कसे झाले?"
+      },
+      "options": [
+        {
+          "id": "fall",
+          "label": {
+            "en": "Fell down",
+            "hi": "गिर गए",
+            "mr": "पडलो"
+          }
+        },
+        {
+          "id": "road",
+          "label": {
+            "en": "Road accident",
+            "hi": "सड़क दुर्घटना",
+            "mr": "रस्ता अपघात"
+          }
+        },
+        {
+          "id": "work",
+          "label": {
+            "en": "Hurt at work or while playing",
+            "hi": "काम या खेल में चोट",
+            "mr": "काम करताना किंवा खेळताना दुखापत"
+          }
+        },
+        {
+          "id": "bite",
+          "label": {
+            "en": "Animal or dog bite",
+            "hi": "जानवर या कुत्ते का काटना",
+            "mr": "प्राणी किंवा कुत्रा चावला"
+          }
+        },
+        {
+          "id": "no_injury",
+          "label": {
+            "en": "No injury - started on its own",
+            "hi": "चोट नहीं - अपने आप शुरू हुआ",
+            "mr": "दुखापत नाही - आपोआप सुरू झाले"
+          }
+        }
+      ],
+      "multi": false
+    },
+    {
+      "id": "mobility_effect",
+      "module": "mobility",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "What can you not do normally now?",
+        "hi": "अब आप सामान्य रूप से क्या नहीं कर पा रहे?",
+        "mr": "आता तुम्हाला काय नेहमीसारखे करता येत नाही?"
+      },
+      "options": [
+        {
+          "id": "walk",
+          "label": {
+            "en": "Walking",
+            "hi": "चलना",
+            "mr": "चालणे"
+          }
+        },
+        {
+          "id": "lift",
+          "label": {
+            "en": "Lifting the arm",
+            "hi": "हाथ उठाना",
+            "mr": "हात उचलणे"
+          }
+        },
+        {
+          "id": "bend",
+          "label": {
+            "en": "Bending",
+            "hi": "झुकना",
+            "mr": "वाकणे"
+          }
+        },
+        {
+          "id": "swelling",
+          "label": {
+            "en": "There is swelling",
+            "hi": "सूजन है",
+            "mr": "सूज आहे"
+          }
+        },
+        {
+          "id": "normal",
+          "label": {
+            "en": "I can move normally",
+            "hi": "मैं सामान्य रूप से चल-फिर सकता हूँ",
+            "mr": "मी नेहमीसारखी हालचाल करू शकतो"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

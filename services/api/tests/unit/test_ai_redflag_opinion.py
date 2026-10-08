@@ -124,7 +124,7 @@ async def test_provider_failure_and_timeout_return_no_extra_flags() -> None:
             *,
             session_id: str | None = None,
         ) -> dict[str, Any]:
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(MAX_REDFLAG_SECONDS + 0.3)
             return await super().generate_json(
                 prompt, schema, timeout, model, session_id=session_id
             )

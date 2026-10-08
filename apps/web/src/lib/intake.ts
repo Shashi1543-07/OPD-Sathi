@@ -1,6 +1,7 @@
 import type { Language } from "../i18n";
 import { staffAuth } from "./auth";
 import type { OfflineSubmission } from "./offlineOutbox";
+import type { SpeechCapabilities } from "./voice";
 
 const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const kioskKey = "osa.kiosk.access";
@@ -13,17 +14,31 @@ type Session = {
   stage?: string;
   assisted?: boolean;
 };
+
+export class IntakeRequestError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "IntakeRequestError";
+  }
+}
 export type ConsentCopy = {
   language: Language;
   version: string;
   sha256: string;
   text: string;
 };
+export type AnswerOption = { id: string; label: string; none: boolean };
 export type Question = {
   id: string;
   input: "text" | "scale";
   optional: boolean;
   prompt: string;
+  multi?: boolean;
+  options?: AnswerOption[];
 };
 export type DangerTile = { id: string; label: string };
 export type CaseSheet = {
@@ -43,13 +58,30 @@ export type CaseSheet = {
 export type IntakeResponse = {
   complete?: boolean;
   question?: Question;
+  progress?: { current: number; total: number };
   case_sheet?: CaseSheet;
   readback?: string;
   answered?: (Question & { answer: string | number })[];
 };
 
+// The kiosk device token survives tab restarts; it expires server-side (KIOSK_TOKEN_HOURS).
 function getKioskToken() {
-  return sessionStorage.getItem(kioskKey);
+  try {
+    return localStorage.getItem(kioskKey) ?? sessionStorage.getItem(kioskKey);
+  } catch {
+    return sessionStorage.getItem(kioskKey);
+  }
+}
+
+function setKioskToken(token: string | null) {
+  try {
+    if (token) localStorage.setItem(kioskKey, token);
+    else localStorage.removeItem(kioskKey);
+  } catch {
+    // Fall back to the tab-scoped store below.
+  }
+  if (token) sessionStorage.setItem(kioskKey, token);
+  else sessionStorage.removeItem(kioskKey);
 }
 
 function getPatientSession(): Session | null {
@@ -78,13 +110,16 @@ async function call<T>(
   });
   if (!response.ok) {
     const problem = (await response.json().catch(() => ({}))) as {
+      code?: string;
       detail?: string;
       title?: string;
     };
-    throw new Error(
+    throw new IntakeRequestError(
+      problem.code ?? "REQUEST_FAILED",
       problem.detail ??
         problem.title ??
         "The kiosk could not continue. Please ask staff for help.",
+      response.status,
     );
   }
   if (response.status === 204) return undefined as T;
@@ -144,14 +179,22 @@ export const intake = {
       method: "POST",
       body: JSON.stringify({ activation_code: activationCode }),
     });
-    sessionStorage.setItem(kioskKey, response.access_token);
+    setKioskToken(response.access_token);
   },
+  forgetKiosk: () => setKioskToken(null),
   start: async (language: Language) => {
-    const response = await call<Session & { consent: ConsentCopy }>(
-      "/intake/sessions",
-      { method: "POST", body: JSON.stringify({ language }) },
-      getKioskToken() ?? undefined,
-    );
+    let response: Session & { consent: ConsentCopy };
+    try {
+      response = await call<Session & { consent: ConsentCopy }>(
+        "/intake/sessions",
+        { method: "POST", body: JSON.stringify({ language }) },
+        getKioskToken() ?? undefined,
+      );
+    } catch (cause) {
+      // An expired or revoked kiosk token: return the kiosk to activation.
+      if (cause instanceof IntakeRequestError && cause.status === 401) setKioskToken(null);
+      throw cause;
+    }
     sessionStorage.setItem(patientKey, JSON.stringify(response));
     return response;
   },
@@ -256,11 +299,93 @@ export const intake = {
     if (!session) throw new Error("No active patient session");
     const response = await fetch(
       `${apiOrigin}/intake/sessions/${session.visit_id}/readback-audio`,
-      { headers: { Authorization: `Bearer ${session.patient_access_token}` }, cache: "no-store" },
+      {
+        headers: { Authorization: `Bearer ${session.patient_access_token}` },
+        cache: "no-store",
+      },
     );
     if (!response.ok) throw new Error("Read-back audio is unavailable");
     return response.blob();
   },
+  capabilities: () =>
+    call<SpeechCapabilities>(
+      "/intake/capabilities",
+      {},
+      getPatientSession()?.patient_access_token,
+    ),
+  transcribe: async (clip: Blob, questionId: string) => {
+    const session = getPatientSession();
+    if (!session) throw new Error("No active patient session");
+    const response = await fetch(
+      `${apiOrigin}/intake/sessions/${session.visit_id}/transcribe?question_id=${encodeURIComponent(questionId)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.patient_access_token}`,
+          "Content-Type": clip.type || "audio/webm",
+        },
+        body: clip,
+      },
+    );
+    if (!response.ok) throw new Error("Voice is unavailable");
+    return ((await response.json()) as { text: string }).text;
+  },
+  speechAudio: async (
+    kind: "question" | "consent" | "readback",
+    questionId = "",
+  ) => {
+    const session = getPatientSession();
+    if (!session) throw new Error("No active patient session");
+    const response = await fetch(
+      `${apiOrigin}/intake/sessions/${session.visit_id}/speak`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.patient_access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ kind, question_id: questionId }),
+      },
+    );
+    if (!response.ok) throw new Error("Audio unavailable");
+    return response.blob();
+  },
+  readPrescription: async (photo: Blob) => {
+    const session = getPatientSession();
+    if (!session) throw new Error("No active patient session");
+    const response = await fetch(
+      `${apiOrigin}/intake/sessions/${session.visit_id}/prescription-photo`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.patient_access_token}`,
+          "Content-Type": photo.type || "image/jpeg",
+        },
+        body: photo,
+      },
+    );
+    if (!response.ok) throw new Error("Prescription could not be read");
+    return (
+      (await response.json()) as {
+        medicines: { name: string; dose: string; how_often: string }[];
+      }
+    ).medicines;
+  },
+  changeLanguage: async (language: Language) => {
+    const result = await patientRequest<{ language: Language; consent: ConsentCopy }>(
+      "/language",
+      { method: "POST", body: JSON.stringify({ language }) },
+    );
+    const session = getPatientSession();
+    if (session)
+      sessionStorage.setItem(
+        patientKey,
+        JSON.stringify({ ...session, consent: result.consent }),
+      );
+    return result;
+  },
+  requestHelp: () =>
+    patientRequest<{ requested: boolean }>("/help", { method: "POST" }),
   needsAssistance: () =>
     patientRequest<{ needs_assistance: boolean }>("/needs-assistance", {
       method: "POST",

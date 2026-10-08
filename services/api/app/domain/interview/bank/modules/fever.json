@@ -7,10 +7,124 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "What changes have you noticed in how you feel?",
-        "hi": "आपने अपनी तबीयत में क्या बदलाव महसूस किए हैं?",
-        "mr": "तुमच्या तब्येतीत कोणते बदल जाणवले आहेत?"
-      }
+        "en": "How is the fever?",
+        "hi": "बुखार कैसा है?",
+        "mr": "ताप कसा आहे?"
+      },
+      "options": [
+        {
+          "id": "high",
+          "label": {
+            "en": "Very high fever",
+            "hi": "तेज़ बुखार",
+            "mr": "खूप जास्त ताप"
+          }
+        },
+        {
+          "id": "chills",
+          "label": {
+            "en": "With shivering or chills",
+            "hi": "कँपकँपी के साथ",
+            "mr": "थंडी वाजून"
+          }
+        },
+        {
+          "id": "comes_goes",
+          "label": {
+            "en": "Comes and goes",
+            "hi": "आता-जाता रहता है",
+            "mr": "येतो आणि जातो"
+          }
+        },
+        {
+          "id": "night",
+          "label": {
+            "en": "Mostly at night",
+            "hi": "ज़्यादातर रात में",
+            "mr": "बहुतेक रात्री"
+          }
+        },
+        {
+          "id": "continuous",
+          "label": {
+            "en": "All the time",
+            "hi": "लगातार रहता है",
+            "mr": "सतत असतो"
+          }
+        }
+      ],
+      "multi": true
+    },
+    {
+      "id": "fever_associated",
+      "module": "fever",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Along with the fever, do you have any of these?",
+        "hi": "बुखार के साथ क्या इनमें से कुछ है?",
+        "mr": "तापासोबत यापैकी काही आहे का?"
+      },
+      "options": [
+        {
+          "id": "body_ache",
+          "label": {
+            "en": "Body ache",
+            "hi": "बदन दर्द",
+            "mr": "अंगदुखी"
+          }
+        },
+        {
+          "id": "headache",
+          "label": {
+            "en": "Headache",
+            "hi": "सिरदर्द",
+            "mr": "डोकेदुखी"
+          }
+        },
+        {
+          "id": "cold",
+          "label": {
+            "en": "Cold or runny nose",
+            "hi": "सर्दी या नाक बहना",
+            "mr": "सर्दी किंवा नाक वाहणे"
+          }
+        },
+        {
+          "id": "rash",
+          "label": {
+            "en": "Rash on skin",
+            "hi": "त्वचा पर दाने",
+            "mr": "त्वचेवर पुरळ"
+          }
+        },
+        {
+          "id": "burning_urine",
+          "label": {
+            "en": "Burning urine",
+            "hi": "पेशाब में जलन",
+            "mr": "लघवीत जळजळ"
+          }
+        },
+        {
+          "id": "vomiting",
+          "label": {
+            "en": "Vomiting",
+            "hi": "उल्टी",
+            "mr": "उलट्या"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

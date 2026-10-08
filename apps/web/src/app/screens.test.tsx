@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe("Phase 1 preview screens", () => {
-  it("shows S1 welcome, language choices, and the preview boundary", () => {
+  it("shows S1 welcome, language choices, and kiosk activation", () => {
     renderRoute("/kiosk", <KioskWelcome />);
     expect(
       screen.getByRole("heading", { name: "Welcome" }),
@@ -35,7 +35,7 @@ describe("Phase 1 preview screens", () => {
       screen.getByRole("group", { name: "Choose your language" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/does not save or submit information/i),
+      screen.getByRole("heading", { name: "Activate this kiosk" }),
     ).toBeInTheDocument();
   });
 
@@ -55,9 +55,24 @@ describe("Phase 1 preview screens", () => {
     ).toHaveLength(8);
   });
 
+  it("localizes the Judge Mode safety ribbon with the selected kiosk language", () => {
+    useLanguageStore.getState().setLanguage("hi");
+    renderRoute(
+      "/kiosk?demo=1",
+      <Routes>
+        <Route path="/kiosk" element={<KioskShell />}>
+          <Route index element={<KioskWelcome />} />
+        </Route>
+      </Routes>,
+    );
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "डेमो मोड · केवल स्वास्थ्य जानकारी लेना — निदान नहीं",
+    );
+  });
+
   it("shows the connected staff login form", async () => {
     renderRoute("/staff", <StaffShell />);
-    expect(await screen.findByLabelText("Hospital ID")).toBeRequired();
+    expect(await screen.findByLabelText("Hospital")).toBeRequired();
     expect(screen.getByLabelText("Email")).toBeRequired();
     expect(screen.getByLabelText("Password")).toBeRequired();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();

@@ -4,7 +4,7 @@ COMPOSE ?= docker compose
 WEB_DIR := apps/web
 API_DIR := services/api
 
-.PHONY: up down api worker web migrate seed seed-bulk demo-seed types lint fmt test test-unit test-int e2e eval eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live prompts-audio prompts-audio-check simulate-queue demo-ratelimit load-test chaos scan sbom backup restore retention retention-apply screenshots
+.PHONY: up down api worker web migrate seed seed-bulk demo-seed demo-data clear-demo-data types lint fmt test test-unit test-int e2e eval eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live prompts-audio prompts-audio-check simulate-queue demo-ratelimit load load-test chaos chaos-isolated scan sbom backup restore retention retention-apply screenshots
 
 up:
 	$(COMPOSE) up -d postgres redis
@@ -26,6 +26,12 @@ migrate:
 
 seed demo-seed:
 	cd $(API_DIR) && $(PYTHON) -m app.cli seed-demo
+
+demo-data:
+	$(COMPOSE) run --rm --build api python -m app.cli seed-demo-data
+
+clear-demo-data:
+	$(COMPOSE) run --rm --build api python -m app.cli clear-demo-data
 
 seed-bulk:
 	cd $(API_DIR) && $(PYTHON) -m app.cli seed-bulk --visits 100000
@@ -49,10 +55,10 @@ test test-unit test-int:
 	npm --prefix $(WEB_DIR) test
 
 e2e:
-	@echo "Playwright flows are added in the UI phases."
+	npm --prefix $(WEB_DIR) run e2e
 
 eval:
-	@echo "Evaluation suites are added with their corresponding feature phases."
+	PYTHONPATH=$(API_DIR) $(PYTHON) eval/run_all.py
 
 eval-interview:
 	PYTHONPATH=$(API_DIR) python eval/interview/evaluate.py
@@ -89,11 +95,16 @@ prompts-audio:
 prompts-audio-check:
 	PYTHONPATH=$(API_DIR) $(PYTHON) $(API_DIR)/scripts/generate_prompt_audio.py --check
 
+load: load-test
+
 load-test:
 	k6 run infra/k6/smoke.js
 
 chaos:
 	PYTHONPATH=$(API_DIR) $(PYTHON) scripts/chaos_smoke.py
+
+chaos-isolated:
+	$(PYTHON) scripts/chaos_isolated.py --confirm-isolated
 
 scan:
 	bandit -r $(API_DIR)/app -lll
@@ -118,7 +129,7 @@ retention-apply:
 	PYTHONPATH=$(API_DIR) $(PYTHON) $(API_DIR)/scripts/retention.py --hospital-id $(HOSPITAL_ID) --apply
 
 screenshots:
-	@echo "Use the documented Playwright screenshot workflows in docs/DEMO.md."
+	npm --prefix $(WEB_DIR) run screenshots
 
 simulate-queue:
 	cd $(API_DIR) && N=$(or $(N),50) URGENT=$(or $(URGENT),10) $(PYTHON) scripts/simulate_queue.py

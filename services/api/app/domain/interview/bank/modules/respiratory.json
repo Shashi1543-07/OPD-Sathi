@@ -7,10 +7,108 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "What changes have you noticed in your breathing or cough?",
-        "hi": "साँस लेने या खाँसी में आपने क्या बदलाव देखा है?",
-        "mr": "श्वास घेण्यात किंवा खोकल्यात तुम्हाला काय बदल जाणवला आहे?"
-      }
+        "en": "Tell us about the cough or breathing.",
+        "hi": "खाँसी या साँस के बारे में बताइए।",
+        "mr": "खोकला किंवा श्वासाबद्दल सांगा."
+      },
+      "options": [
+        {
+          "id": "dry",
+          "label": {
+            "en": "Dry cough",
+            "hi": "सूखी खाँसी",
+            "mr": "कोरडा खोकला"
+          }
+        },
+        {
+          "id": "phlegm",
+          "label": {
+            "en": "Cough with phlegm",
+            "hi": "बलगम वाली खाँसी",
+            "mr": "कफ असलेला खोकला"
+          }
+        },
+        {
+          "id": "blood",
+          "label": {
+            "en": "Blood in phlegm",
+            "hi": "बलगम में खून",
+            "mr": "कफात रक्त"
+          }
+        },
+        {
+          "id": "breathless",
+          "label": {
+            "en": "Breathless on walking",
+            "hi": "चलने पर साँस फूलना",
+            "mr": "चालताना दम लागणे"
+          }
+        },
+        {
+          "id": "wheeze",
+          "label": {
+            "en": "Wheezing sound",
+            "hi": "साँस में सीटी जैसी आवाज़",
+            "mr": "श्वासात शिट्टीसारखा आवाज"
+          }
+        }
+      ],
+      "multi": true
+    },
+    {
+      "id": "respiratory_history",
+      "module": "respiratory",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Do any of these apply to you?",
+        "hi": "क्या इनमें से कुछ आप पर लागू होता है?",
+        "mr": "यापैकी काही तुम्हाला लागू होते का?"
+      },
+      "options": [
+        {
+          "id": "tb_contact",
+          "label": {
+            "en": "Someone at home has TB",
+            "hi": "घर में किसी को टीबी है",
+            "mr": "घरात कोणाला टीबी आहे"
+          }
+        },
+        {
+          "id": "asthma",
+          "label": {
+            "en": "Had asthma before",
+            "hi": "पहले से दमा है",
+            "mr": "आधीपासून दमा आहे"
+          }
+        },
+        {
+          "id": "smoke",
+          "label": {
+            "en": "Smoking or chulha smoke",
+            "hi": "धूम्रपान या चूल्हे का धुआँ",
+            "mr": "धूम्रपान किंवा चुलीचा धूर"
+          }
+        },
+        {
+          "id": "weight_loss",
+          "label": {
+            "en": "Losing weight",
+            "hi": "वज़न कम हो रहा है",
+            "mr": "वजन कमी होत आहे"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

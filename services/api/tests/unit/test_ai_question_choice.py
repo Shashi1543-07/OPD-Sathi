@@ -99,7 +99,7 @@ async def test_provider_failure_uses_deterministic_choice() -> None:
 
 
 @pytest.mark.asyncio
-async def test_slow_provider_falls_back_within_the_600ms_budget() -> None:
+async def test_slow_provider_falls_back_within_the_decision_budget() -> None:
     class SlowProvider(FixtureProvider):
         async def generate_json(
             self,
@@ -110,7 +110,7 @@ async def test_slow_provider_falls_back_within_the_600ms_budget() -> None:
             *,
             session_id: str | None = None,
         ) -> dict[str, Any]:
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(MAX_DECISION_SECONDS + 0.3)
             return await super().generate_json(
                 prompt, schema, timeout, model, session_id=session_id
             )
@@ -167,7 +167,7 @@ async def test_intake_persists_selected_id_and_reuses_it_on_refresh() -> None:
         "phase": "interview",
     }
     app_state = SimpleNamespace(
-        settings=Settings(_env_file=None, llm_enabled=True),
+        settings=Settings(_env_file=None, llm_enabled=True, ai_question_choice=True),
         llm_provider=provider,
         redis_state=redis,
     )

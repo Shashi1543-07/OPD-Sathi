@@ -78,13 +78,27 @@ async def test_hospital_switch_is_scoped_and_cached_only_for_the_request() -> No
 
 
 @pytest.mark.asyncio
-async def test_global_kill_switch_and_missing_setting_fail_closed() -> None:
+async def test_global_kill_switch_wins_and_missing_setting_follows_operator() -> None:
     killed_request, killed_connection = _request(True, global_enabled=False)
     missing_request, missing_connection = _request(None)
+    opted_out_request, _ = _request(False)
     assert not await _hospital_llm_enabled(killed_request, uuid4())
-    assert not await _hospital_llm_enabled(missing_request, uuid4())
+    # No saved preference: the operator's configured key decides; an explicit "off" wins.
+    assert await _hospital_llm_enabled(missing_request, uuid4())
+    assert not await _hospital_llm_enabled(opted_out_request, uuid4())
     assert killed_connection.calls == 0
     assert missing_connection.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_unreadable_setting_store_fails_closed() -> None:
+    request, connection = _request(True)
+
+    async def broken(*_args: object, **_kwargs: object) -> bool:
+        raise RuntimeError("store unavailable")
+
+    connection.scalar = broken  # type: ignore[method-assign]
+    assert not await _hospital_llm_enabled(request, uuid4())
 
 
 def test_token_limit_is_configurable_but_hard_capped() -> None:

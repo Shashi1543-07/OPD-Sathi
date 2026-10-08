@@ -17,9 +17,25 @@ from app.db.repositories import CaseSheetRepository, InterviewTurnRepository
 from app.db.session import set_hospital_scope
 from app.domain.case_sheet import CaseSheet
 from app.domain.case_sheet_patch import CaseSheetPatchError, apply_case_sheet_patch
+from app.domain.redflags.engine import RULES
 from app.pdf import render_case_sheet_pdf
 
 router = APIRouter(tags=["case sheets"])
+_RULE_REASONS = {rule.id: rule.reason_en for rule in RULES}
+
+
+def _with_flag_reasons(data: dict[str, Any]) -> dict[str, Any]:
+    """Give every red flag an English reason so doctors never see only the raw evidence."""
+    flags = data.get("red_flags")
+    if not isinstance(flags, list):
+        return data
+    filled = [
+        {**flag, "reason_en": _RULE_REASONS.get(str(flag.get("id")))}
+        if isinstance(flag, dict) and not flag.get("reason_en") and flag.get("id") in _RULE_REASONS
+        else flag
+        for flag in flags
+    ]
+    return {**data, "red_flags": filled}
 
 
 class PatchModel(BaseModel):
@@ -40,12 +56,25 @@ class Remove(PatchModel):
 PatchOperation = Annotated[AddOrReplace | Remove, Field(discriminator="op")]
 
 
+class PatientContext(BaseModel):
+    """Non-identifying visit context the doctor needs next to the history."""
+
+    age_years: int | None = None
+    sex: str | None = None
+    language: str | None = None
+    token: str | None = None
+    urgency: str | None = None
+    status: str | None = None
+    department_name: str | None = None
+
+
 class CaseSheetResponse(BaseModel):
     visit_id: UUID
     version: int
     case_sheet: CaseSheet
     confirmed_by_patient: bool = False
     confirmed_at: datetime | None = None
+    patient: PatientContext | None = None
 
 
 class TranscriptTurn(BaseModel):
@@ -93,6 +122,7 @@ async def _check_visit_department(
     hospital_id: UUID,
     visit_id: UUID,
     actor_id: UUID,
+    role: str | None = None,
 ) -> None:
     visit_department = await connection.scalar(
         text(
@@ -102,6 +132,8 @@ async def _check_visit_department(
     )
     if not isinstance(visit_department, UUID):
         raise _problem(404, "NOT_FOUND", "Visit not found", "The requested visit is unavailable.")
+    if role == "admin":
+        return  # Administrators oversee every department; reads are still audited.
     assigned_department = await connection.scalar(
         text(
             "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
@@ -120,7 +152,7 @@ async def get_case_sheet(
     visit_id: UUID,
     request: Request,
     response: Response,
-    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse"))],
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse", "admin"))],
 ) -> CaseSheetResponse:
     hospital_id = UUID(principal["hospital_id"])
     actor_id = UUID(principal["sub"])
@@ -131,6 +163,24 @@ async def get_case_sheet(
             hospital_id=hospital_id,
             visit_id=visit_id,
             actor_id=actor_id,
+            role=principal.get("role"),
+        )
+        context = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT v.age_years, p.sex, v.language, v.token_label AS token, "
+                        "v.urgency, v.status, d.name_en AS department_name FROM visits v "
+                        "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
+                        "LEFT JOIN departments d ON d.hospital_id = v.hospital_id "
+                        "AND d.id = v.department_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .first()
         )
         saved = await CaseSheetRepository(connection, request.app.state.settings).get(
             hospital_id=hospital_id, visit_id=visit_id
@@ -155,9 +205,10 @@ async def get_case_sheet(
     return CaseSheetResponse(
         visit_id=visit_id,
         version=version,
-        case_sheet=saved["data"],
+        case_sheet=_with_flag_reasons(saved["data"]),
         confirmed_by_patient=saved.get("confirmed_by_patient") is True,
         confirmed_at=saved.get("confirmed_at"),
+        patient=PatientContext(**dict(context)) if context else None,
     )
 
 
@@ -165,7 +216,7 @@ async def get_case_sheet(
 async def export_case_sheet_pdf(
     visit_id: UUID,
     request: Request,
-    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse"))],
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse", "admin"))],
 ) -> StarletteResponse:
     hospital_id = UUID(principal["hospital_id"])
     actor_id = UUID(principal["sub"])
@@ -176,6 +227,7 @@ async def export_case_sheet_pdf(
             hospital_id=hospital_id,
             visit_id=visit_id,
             actor_id=actor_id,
+            role=principal.get("role"),
         )
         saved = await CaseSheetRepository(connection, request.app.state.settings).get(
             hospital_id=hospital_id, visit_id=visit_id
@@ -188,8 +240,10 @@ async def export_case_sheet_pdf(
             (
                 await connection.execute(
                     text(
-                        "SELECT token_label, urgency_reasons FROM visits "
-                        "WHERE hospital_id = :hospital_id AND id = :visit_id"
+                        "SELECT v.token_label, v.urgency_reasons, v.age_years, p.sex "
+                        "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
+                        "AND p.id = v.patient_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},
                 )
@@ -205,7 +259,12 @@ async def export_case_sheet_pdf(
                 "The requested visit is unavailable.",
             )
         reasons = [
-            str(item.get("reason_en") or item.get("evidence") or "")
+            str(
+                item.get("reason_en")
+                or _RULE_REASONS.get(str(item.get("id")))
+                or item.get("evidence")
+                or ""
+            )
             for item in saved["data"].get("red_flags", [])
             if isinstance(item, dict)
         ]
@@ -220,10 +279,16 @@ async def export_case_sheet_pdf(
             resource_id=saved["id"],
             meta={"version": int(saved["version"]), "red_flag_count": len(reasons)},
         )
+    sex = {"female": "Female", "male": "Male", "other": "Other"}.get(str(visit.get("sex")), "")
+    age = visit.get("age_years")
+    patient_line = " · ".join(
+        part for part in (f"{age} years" if isinstance(age, int) else "", sex) if part
+    )
     pdf = render_case_sheet_pdf(
         saved["data"],
         queue_number=visit["token_label"] or "",
         attention_reasons=reasons,
+        patient_line=patient_line,
     )
     return StarletteResponse(
         content=pdf,
@@ -312,7 +377,7 @@ async def patch_case_sheet(
     return CaseSheetResponse(
         visit_id=visit_id,
         version=new_version,
-        case_sheet=updated,
+        case_sheet=_with_flag_reasons(updated),
         confirmed_by_patient=saved.get("confirmed_by_patient") is True,
         confirmed_at=saved.get("confirmed_at"),
     )
@@ -322,7 +387,7 @@ async def patch_case_sheet(
 async def get_transcript(
     visit_id: UUID,
     request: Request,
-    principal: Annotated[dict[str, Any], Depends(require_role("doctor"))],
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "admin"))],
 ) -> TranscriptResponse:
     hospital_id = UUID(principal["hospital_id"])
     actor_id = UUID(principal["sub"])
@@ -333,6 +398,7 @@ async def get_transcript(
             hospital_id=hospital_id,
             visit_id=visit_id,
             actor_id=actor_id,
+            role=principal.get("role"),
         )
         turns = await InterviewTurnRepository(
             connection, request.app.state.settings

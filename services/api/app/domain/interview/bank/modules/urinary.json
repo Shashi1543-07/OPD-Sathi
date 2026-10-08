@@ -7,10 +7,100 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "What changes have you noticed when passing urine?",
-        "hi": "पेशाब करते समय आपने क्या बदलाव देखा है?",
-        "mr": "लघवी करताना तुम्हाला काय बदल जाणवला आहे?"
-      }
+        "en": "What problem do you have when passing urine?",
+        "hi": "पेशाब करते समय क्या परेशानी है?",
+        "mr": "लघवी करताना कोणता त्रास आहे?"
+      },
+      "options": [
+        {
+          "id": "burning",
+          "label": {
+            "en": "Burning or pain",
+            "hi": "जलन या दर्द",
+            "mr": "जळजळ किंवा वेदना"
+          }
+        },
+        {
+          "id": "frequent",
+          "label": {
+            "en": "Going very often",
+            "hi": "बार-बार जाना",
+            "mr": "वारंवार जाणे"
+          }
+        },
+        {
+          "id": "blood",
+          "label": {
+            "en": "Blood in urine",
+            "hi": "पेशाब में खून",
+            "mr": "लघवीत रक्त"
+          }
+        },
+        {
+          "id": "less",
+          "label": {
+            "en": "Passing very little urine",
+            "hi": "बहुत कम पेशाब",
+            "mr": "खूप कमी लघवी"
+          }
+        },
+        {
+          "id": "cannot_hold",
+          "label": {
+            "en": "Cannot hold urine",
+            "hi": "पेशाब रोक नहीं पाते",
+            "mr": "लघवी रोखता येत नाही"
+          }
+        }
+      ],
+      "multi": true
+    },
+    {
+      "id": "urinary_associated",
+      "module": "urinary",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Do you also have any of these?",
+        "hi": "क्या इनमें से कुछ और भी है?",
+        "mr": "यापैकी आणखी काही आहे का?"
+      },
+      "options": [
+        {
+          "id": "fever",
+          "label": {
+            "en": "Fever",
+            "hi": "बुखार",
+            "mr": "ताप"
+          }
+        },
+        {
+          "id": "flank",
+          "label": {
+            "en": "Pain in the side of the back",
+            "hi": "कमर के बगल में दर्द",
+            "mr": "कंबरेच्या बाजूला वेदना"
+          }
+        },
+        {
+          "id": "swelling",
+          "label": {
+            "en": "Swelling of feet or face",
+            "hi": "पैरों या चेहरे पर सूजन",
+            "mr": "पाय किंवा चेहऱ्यावर सूज"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

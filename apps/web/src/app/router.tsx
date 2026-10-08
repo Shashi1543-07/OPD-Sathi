@@ -1,97 +1,149 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
-import { ComponentGallery } from "./ComponentGallery";
 import { KioskShell } from "./KioskShell";
 import { KioskWelcome } from "./KioskWelcome";
-import { KioskPreview } from "./KioskPreview";
 import { StaffShell } from "./StaffShell";
-import { PatientStatus } from "./PatientStatus";
-import { KioskIntake } from "./KioskIntake";
-import { KioskOfflineIntake } from "./KioskOfflineIntake";
-import { StaffQueueBoard } from "./StaffQueueBoard";
-import { DoctorConsultation } from "./DoctorConsultation";
-import { NurseConsole } from "./NurseConsole";
-import { AdminConsole } from "./AdminConsole";
-import { AnalyticsDashboard } from "./AnalyticsDashboard";
 import {
   StaffLanding,
   StaffPageGate,
-  StaffPlaceholderPage,
 } from "./StaffNavigation";
+
+function RouteLoading() {
+  return (
+    <p className="route-loading" role="status">
+      Loading…
+    </p>
+  );
+}
 
 export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/kiosk" replace /> },
   {
     path: "/kiosk",
     element: <KioskShell />,
+    HydrateFallback: RouteLoading,
     children: [
       { index: true, element: <KioskWelcome /> },
-      { path: "intake", element: <KioskIntake /> },
-      { path: "offline-intake", element: <KioskOfflineIntake /> },
+      {
+        path: "intake",
+        lazy: async () => {
+          const { KioskIntake } = await import("./KioskIntake");
+          return { Component: KioskIntake };
+        },
+      },
+      {
+        path: "offline-intake",
+        lazy: async () => {
+          const { KioskOfflineIntake } = await import("./KioskOfflineIntake");
+          return { Component: KioskOfflineIntake };
+        },
+      },
       ...(import.meta.env.DEV
-        ? [{ path: "preview/:step", element: <KioskPreview /> }]
+        ? [
+            {
+              path: "preview/:step",
+              lazy: async () => {
+                const { KioskPreview } = await import("./KioskPreview");
+                return { Component: KioskPreview };
+              },
+            },
+          ]
         : []),
     ],
   },
   {
     path: "/staff",
     element: <StaffShell />,
+    HydrateFallback: RouteLoading,
     children: [
       { index: true, element: <StaffLanding /> },
       {
         path: "dashboard",
-        element: (
-          <StaffPageGate page="dashboard">
-            <StaffPlaceholderPage page="dashboard" />
-          </StaffPageGate>
-        ),
+        element: <Navigate to="/staff/reports" replace />,
       },
       {
         path: "queue",
-        element: (
-          <StaffPageGate page="queue">
-            <StaffQueueBoard />
-          </StaffPageGate>
-        ),
+        lazy: async () => {
+          const { StaffQueueBoard } = await import("./StaffQueueBoard");
+          return {
+            Component: () => (
+              <StaffPageGate page="queue">
+                <StaffQueueBoard />
+              </StaffPageGate>
+            ),
+          };
+        },
       },
       {
         path: "consultations",
-        element: (
-          <StaffPageGate page="consultations">
-            <DoctorConsultation />
-          </StaffPageGate>
-        ),
+        lazy: async () => {
+          const { DoctorConsultation } = await import("./DoctorConsultation");
+          return {
+            Component: () => (
+              <StaffPageGate page="consultations">
+                <DoctorConsultation />
+              </StaffPageGate>
+            ),
+          };
+        },
       },
       {
         path: "patients",
-        element: (
-          <StaffPageGate page="patients">
-            <NurseConsole />
-          </StaffPageGate>
-        ),
+        lazy: async () => {
+          const { NurseConsole } = await import("./NurseConsole");
+          return {
+            Component: () => (
+              <StaffPageGate page="patients">
+                <NurseConsole />
+              </StaffPageGate>
+            ),
+          };
+        },
       },
       {
         path: "reports",
-        element: (
-          <StaffPageGate page="reports">
-            <AnalyticsDashboard />
-          </StaffPageGate>
-        ),
+        lazy: async () => {
+          const { AnalyticsDashboard } = await import("./AnalyticsDashboard");
+          return {
+            Component: () => (
+              <StaffPageGate page="reports">
+                <AnalyticsDashboard />
+              </StaffPageGate>
+            ),
+          };
+        },
       },
       {
         path: "settings",
-        element: (
-          <StaffPageGate page="settings">
-            <AdminConsole />
-          </StaffPageGate>
-        ),
+        lazy: async () => {
+          const { AdminConsole } = await import("./AdminConsole");
+          return {
+            Component: () => (
+              <StaffPageGate page="settings">
+                <AdminConsole />
+              </StaffPageGate>
+            ),
+          };
+        },
       },
     ],
   },
   {
     path: "/s/:token",
-    element: <PatientStatus />,
+    HydrateFallback: RouteLoading,
+    lazy: async () => {
+      const { PatientStatus } = await import("./PatientStatus");
+      return { Component: PatientStatus };
+    },
   },
   ...(import.meta.env.DEV
-    ? [{ path: "/dev/components", element: <ComponentGallery /> }]
+    ? [
+        {
+          path: "/dev/components",
+          lazy: async () => {
+            const { ComponentGallery } = await import("./ComponentGallery");
+            return { Component: ComponentGallery };
+          },
+        },
+      ]
     : []),
 ]);

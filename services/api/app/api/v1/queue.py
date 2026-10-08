@@ -7,9 +7,10 @@ import hmac
 import json
 import time
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -23,12 +24,14 @@ from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.ids import uuid7
 from app.core.security import AuthenticationTokenError, decode_access_token
-from app.db.repositories import QueueRepository
+from app.db.repositories import QueueRepository, decrypt_case_sheet
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import average_consult_minutes, estimate_wait, queue_score
 from app.domain.queue.tokens import status_token_digest
 from app.domain.redflags.engine import RULES
+
+_HOSPITAL_TZ = ZoneInfo("Asia/Kolkata")
 
 router = APIRouter(tags=["queue"])
 STAFF_ROLES = ("nurse", "doctor", "admin")
@@ -352,6 +355,103 @@ async def staff_queue(
     }
 
 
+@router.get("/patients")
+async def staff_patients(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    days: Annotated[int | None, Query(ge=1, le=90)] = None,
+) -> dict[str, Any]:
+    """Return a tenant-scoped visit register for staff review.
+
+    ``days`` limits the register to visits since local midnight, ``days - 1`` days ago.
+    """
+    hospital_id = UUID(principal["hospital_id"])
+    role = principal["role"]
+    since: datetime | None = None
+    if days is not None:
+        local_midnight = datetime.now(_HOSPITAL_TZ).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        since = local_midnight - timedelta(days=days - 1)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        department_id: UUID | None = None
+        if role != "admin":
+            assigned_department = await connection.scalar(
+                text(
+                    "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
+                    "AND id = :actor_id AND is_active = true"
+                ),
+                {"hospital_id": hospital_id, "actor_id": UUID(principal["sub"])},
+            )
+            if not isinstance(assigned_department, UUID):
+                raise _problem(
+                    403, "FORBIDDEN", "Permission denied", "No staff department is assigned."
+                )
+            department_id = assigned_department
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT v.id AS visit_id, v.token_label AS token, v.status, v.urgency, "
+                        "v.age_years, v.language, p.sex, d.name_en AS department, v.registered_at, "
+                        "(cs.visit_id IS NOT NULL) AS case_sheet_available, "
+                        "cs.data AS case_sheet_data "
+                        "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
+                        "AND p.id = v.patient_id JOIN departments d "
+                        "ON d.hospital_id = v.hospital_id "
+                        "AND d.id = v.department_id LEFT JOIN case_sheets cs "
+                        "ON cs.hospital_id = v.hospital_id AND cs.visit_id = v.id "
+                        "WHERE v.hospital_id = :hospital_id AND d.is_active = true "
+                        "AND (CAST(:department_id AS uuid) IS NULL "
+                        "OR v.department_id = CAST(:department_id AS uuid)) "
+                        "AND (CAST(:since AS timestamptz) IS NULL "
+                        "OR v.registered_at >= CAST(:since AS timestamptz)) "
+                        "ORDER BY v.registered_at DESC, v.id DESC LIMIT :limit"
+                    ),
+                    {
+                        "hospital_id": hospital_id,
+                        "department_id": department_id,
+                        "since": since,
+                        "limit": limit,
+                    },
+                )
+            )
+            .mappings()
+            .all()
+        )
+    return {
+        "items": [
+            {
+                "visit_id": str(row["visit_id"]),
+                "token": row["token"],
+                "language": row["language"],
+                "status": row["status"],
+                "urgency": row["urgency"],
+                "age_years": row["age_years"],
+                "sex": row["sex"],
+                "department": row["department"],
+                "registered_at": row["registered_at"].isoformat(),
+                "complaint": _complaint(
+                    decrypt_case_sheet(
+                        row["case_sheet_data"], row["visit_id"], request.app.state.settings
+                    )
+                ),
+                "case_sheet_available": row["case_sheet_available"],
+            }
+            for row in rows
+        ],
+        "limit": limit,
+        "days": days,
+    }
+
+
+def _complaint(case_sheet: dict[str, Any] | None) -> str:
+    complaint = (case_sheet or {}).get("chief_complaint") or {}
+    return str(complaint.get("text_en") or complaint.get("text_original") or "")
+
+
 @router.post("/queue/{visit_id}/routing/confirm")
 async def confirm_routing(
     visit_id: UUID,
@@ -626,9 +726,12 @@ async def open_alerts(
                 "v.department_id, v.token_label, e.acknowledged_at "
                 "FROM red_flag_events e JOIN visits v ON v.hospital_id = e.hospital_id "
                 "AND v.id = e.visit_id WHERE e.hospital_id = :hospital_id "
-                "AND (e.source = 'rule' OR e.rule_id = 'RF_DS_TILE') "
+                "AND (e.source = 'rule' OR e.rule_id IN ('RF_DS_TILE', 'PATIENT_HELP')) "
                 "AND ((:acknowledged = true AND e.acknowledged_at IS NOT NULL) OR "
                 "(:acknowledged = false AND e.acknowledged_at IS NULL)) "
+                # Open alerts only matter while the patient is still in the building.
+                "AND (:acknowledged = true OR v.status IN ('registering', "
+                "'awaiting_confirmation', 'queued', 'called', 'in_consult')) "
                 "AND (CAST(:department_id AS uuid) IS NULL OR "
                 "v.department_id = CAST(:department_id AS uuid)) "
                 "ORDER BY e.created_at DESC LIMIT 100"
@@ -648,9 +751,9 @@ async def open_alerts(
                     for key, value in row.items()
                     if key not in {"created_at", "acknowledged_at"}
                 },
-                "reason_en": RED_FLAG_REASONS.get(
-                    row["rule_id"], "A danger-sign help tile was selected."
-                ),
+                "reason_en": "Patient asked for help at the kiosk"
+                if row["rule_id"] == "PATIENT_HELP"
+                else RED_FLAG_REASONS.get(row["rule_id"], "A danger-sign help tile was selected."),
                 "created_at": row["created_at"].isoformat(),
                 "acknowledged_at": row["acknowledged_at"].isoformat()
                 if row["acknowledged_at"]
@@ -944,7 +1047,8 @@ async def staff_queue_socket(
                                 "WHERE e.hospital_id = :hospital_id "
                                 "AND (CAST(:department_id AS uuid) IS NULL OR "
                                 "v.department_id = CAST(:department_id AS uuid)) "
-                                "AND (e.source = 'rule' OR e.rule_id = 'RF_DS_TILE') "
+                                "AND (e.source = 'rule' OR "
+                                "e.rule_id IN ('RF_DS_TILE', 'PATIENT_HELP')) "
                                 "AND e.acknowledged_at IS NULL "
                                 "AND e.created_at <= now() - interval '60 seconds' "
                                 "ORDER BY e.created_at LIMIT 100"

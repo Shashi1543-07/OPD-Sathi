@@ -7,10 +7,124 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "What changes have you noticed with eating or digestion?",
-        "hi": "खाने या पाचन में आपने क्या बदलाव देखा है?",
-        "mr": "खाण्यात किंवा पचनात तुम्हाला काय बदल जाणवला आहे?"
-      }
+        "en": "Which stomach problems do you have?",
+        "hi": "पेट की कौन-सी परेशानी है?",
+        "mr": "पोटाचा कोणता त्रास आहे?"
+      },
+      "options": [
+        {
+          "id": "vomiting",
+          "label": {
+            "en": "Vomiting",
+            "hi": "उल्टी",
+            "mr": "उलट्या"
+          }
+        },
+        {
+          "id": "loose",
+          "label": {
+            "en": "Loose motions",
+            "hi": "दस्त",
+            "mr": "जुलाब"
+          }
+        },
+        {
+          "id": "constipation",
+          "label": {
+            "en": "Constipation",
+            "hi": "कब्ज़",
+            "mr": "बद्धकोष्ठता"
+          }
+        },
+        {
+          "id": "acidity",
+          "label": {
+            "en": "Acidity or burning",
+            "hi": "एसिडिटी या जलन",
+            "mr": "आम्लपित्त किंवा जळजळ"
+          }
+        },
+        {
+          "id": "appetite",
+          "label": {
+            "en": "Loss of appetite",
+            "hi": "भूख न लगना",
+            "mr": "भूक न लागणे"
+          }
+        },
+        {
+          "id": "blood_stool",
+          "label": {
+            "en": "Blood or black stool",
+            "hi": "मल में खून या काला मल",
+            "mr": "शौचात रक्त किंवा काळी शौच"
+          }
+        }
+      ],
+      "multi": true
+    },
+    {
+      "id": "digestive_site",
+      "module": "digestive",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Where in the stomach do you feel it?",
+        "hi": "पेट में कहाँ महसूस होता है?",
+        "mr": "पोटात कुठे जाणवते?"
+      },
+      "options": [
+        {
+          "id": "upper",
+          "label": {
+            "en": "Upper stomach",
+            "hi": "ऊपरी पेट",
+            "mr": "पोटाचा वरचा भाग"
+          }
+        },
+        {
+          "id": "navel",
+          "label": {
+            "en": "Around the navel",
+            "hi": "नाभि के आसपास",
+            "mr": "बेंबीभोवती"
+          }
+        },
+        {
+          "id": "lower_right",
+          "label": {
+            "en": "Lower right side",
+            "hi": "नीचे दाईं ओर",
+            "mr": "खाली उजव्या बाजूला"
+          }
+        },
+        {
+          "id": "lower_left",
+          "label": {
+            "en": "Lower left side",
+            "hi": "नीचे बाईं ओर",
+            "mr": "खाली डाव्या बाजूला"
+          }
+        },
+        {
+          "id": "whole",
+          "label": {
+            "en": "Whole stomach",
+            "hi": "पूरे पेट में",
+            "mr": "संपूर्ण पोटात"
+          }
+        },
+        {
+          "id": "no_pain",
+          "label": {
+            "en": "No pain",
+            "hi": "दर्द नहीं है",
+            "mr": "दुखत नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

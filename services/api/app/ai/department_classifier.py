@@ -8,7 +8,8 @@ from app.ai.prompts.builders import build_department_prompt
 from app.ai.providers.llm.base import LLMProvider
 from app.domain.routing.engine import Route
 
-MAX_DEPARTMENT_SECONDS = 0.6
+# Runs once at confirmation, in parallel with the red-flag second opinion.
+MAX_DEPARTMENT_SECONDS = 5.0
 
 
 def department_json_schema(codes: tuple[str, ...]) -> dict[str, Any]:

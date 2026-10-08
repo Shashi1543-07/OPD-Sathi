@@ -7,10 +7,22 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Is there anything else about this concern you want the staff to know?",
-        "hi": "इस परेशानी के बारे में और कुछ बताना चाहेंगे?",
-        "mr": "या त्रासाबद्दल आणखी काही सांगू इच्छिता का?"
-      }
+        "en": "Is there anything else you want the doctor to know?",
+        "hi": "क्या आप डॉक्टर को कुछ और बताना चाहते हैं?",
+        "mr": "तुम्हाला डॉक्टरांना आणखी काही सांगायचे आहे का?"
+      },
+      "options": [
+        {
+          "id": "none",
+          "label": {
+            "en": "No - that is all",
+            "hi": "नहीं - बस इतना ही",
+            "mr": "नाही - एवढेच"
+          },
+          "none": true
+        }
+      ],
+      "multi": false
     }
   ]
 }

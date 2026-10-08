@@ -7,10 +7,115 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "What changes have you noticed on your skin?",
-        "hi": "त्वचा पर आपने क्या बदलाव देखा है?",
-        "mr": "त्वचेवर तुम्हाला कोणते बदल दिसले आहेत?"
-      }
+        "en": "What do you notice on your skin?",
+        "hi": "त्वचा पर क्या दिख रहा है?",
+        "mr": "त्वचेवर काय दिसत आहे?"
+      },
+      "options": [
+        {
+          "id": "rash",
+          "label": {
+            "en": "Rash or red spots",
+            "hi": "दाने या लाल धब्बे",
+            "mr": "पुरळ किंवा लाल डाग"
+          }
+        },
+        {
+          "id": "itching",
+          "label": {
+            "en": "Itching",
+            "hi": "खुजली",
+            "mr": "खाज"
+          }
+        },
+        {
+          "id": "boils",
+          "label": {
+            "en": "Boils or pus",
+            "hi": "फोड़े या मवाद",
+            "mr": "फोड किंवा पू"
+          }
+        },
+        {
+          "id": "patches",
+          "label": {
+            "en": "Patches or colour change",
+            "hi": "चकत्ते या रंग बदलना",
+            "mr": "चट्टे किंवा रंग बदलणे"
+          }
+        },
+        {
+          "id": "wound",
+          "label": {
+            "en": "Wound not healing",
+            "hi": "घाव भर नहीं रहा",
+            "mr": "जखम भरत नाही"
+          }
+        },
+        {
+          "id": "swelling",
+          "label": {
+            "en": "Swelling",
+            "hi": "सूजन",
+            "mr": "सूज"
+          }
+        }
+      ],
+      "multi": true
+    },
+    {
+      "id": "skin_site",
+      "module": "skin",
+      "input": "text",
+      "optional": true,
+      "prompt": {
+        "en": "Where on the body is it?",
+        "hi": "शरीर पर कहाँ है?",
+        "mr": "शरीरावर कुठे आहे?"
+      },
+      "options": [
+        {
+          "id": "face",
+          "label": {
+            "en": "Face",
+            "hi": "चेहरा",
+            "mr": "चेहरा"
+          }
+        },
+        {
+          "id": "arms",
+          "label": {
+            "en": "Hands or arms",
+            "hi": "हाथ",
+            "mr": "हात"
+          }
+        },
+        {
+          "id": "legs",
+          "label": {
+            "en": "Legs or feet",
+            "hi": "पैर",
+            "mr": "पाय"
+          }
+        },
+        {
+          "id": "body",
+          "label": {
+            "en": "Chest / back / belly",
+            "hi": "छाती / पीठ / पेट",
+            "mr": "छाती / पाठ / पोट"
+          }
+        },
+        {
+          "id": "all_over",
+          "label": {
+            "en": "All over the body",
+            "hi": "पूरे शरीर पर",
+            "mr": "संपूर्ण शरीरावर"
+          }
+        }
+      ],
+      "multi": true
     }
   ]
 }

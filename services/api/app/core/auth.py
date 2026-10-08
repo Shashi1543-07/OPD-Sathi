@@ -5,9 +5,11 @@ from collections.abc import Callable, Coroutine
 from typing import Any, cast
 
 from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
 
 from app.config import Settings, get_settings
-from app.core.errors import ApiProblemError
+from app.core.errors import ApiProblemError, api_problem_exception_handler
 from app.core.security import AuthenticationTokenError, decode_access_token
 
 PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
@@ -15,6 +17,7 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/healthz"),
         ("GET", "/readyz"),
         ("GET", "/metrics"),
+        ("GET", "/auth/hospitals"),
         ("POST", "/auth/login"),
         ("POST", "/auth/refresh"),
         ("POST", "/auth/logout"),
@@ -77,6 +80,17 @@ async def authentication_gate(request: Request) -> None:
     ):
         return
     _request_token(request)
+
+
+class AuthenticationGateMiddleware(BaseHTTPMiddleware):
+    """Apply the public-route allow-list to HTTP only; WebSockets authenticate in-frame."""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        try:
+            await authentication_gate(request)
+        except ApiProblemError as exc:
+            return await api_problem_exception_handler(request, exc)
+        return await call_next(request)
 
 
 def require_role(*roles: str) -> Callable[..., Coroutine[Any, Any, dict[str, Any]]]:

@@ -7,10 +7,78 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Is there past health information you would like the staff to know?",
-        "hi": "क्या आप अपने पुराने स्वास्थ्य के बारे में कुछ बताना चाहेंगे?",
-        "mr": "तुमच्या पूर्वीच्या आरोग्याबद्दल काही माहिती सांगू इच्छिता का?"
-      }
+        "en": "Do you have any long-term illness?",
+        "hi": "क्या आपको कोई पुरानी बीमारी है?",
+        "mr": "तुम्हाला कोणता जुना आजार आहे का?"
+      },
+      "options": [
+        {
+          "id": "diabetes",
+          "label": {
+            "en": "Diabetes (sugar)",
+            "hi": "शुगर (डायबिटीज़)",
+            "mr": "मधुमेह (शुगर)"
+          }
+        },
+        {
+          "id": "bp",
+          "label": {
+            "en": "High BP",
+            "hi": "हाई बीपी",
+            "mr": "उच्च रक्तदाब (बीपी)"
+          }
+        },
+        {
+          "id": "heart",
+          "label": {
+            "en": "Heart disease",
+            "hi": "दिल की बीमारी",
+            "mr": "हृदयविकार"
+          }
+        },
+        {
+          "id": "asthma",
+          "label": {
+            "en": "Asthma",
+            "hi": "दमा",
+            "mr": "दमा"
+          }
+        },
+        {
+          "id": "tb",
+          "label": {
+            "en": "TB (now or before)",
+            "hi": "टीबी (अभी या पहले)",
+            "mr": "टीबी (आता किंवा आधी)"
+          }
+        },
+        {
+          "id": "thyroid",
+          "label": {
+            "en": "Thyroid",
+            "hi": "थायरॉइड",
+            "mr": "थायरॉईड"
+          }
+        },
+        {
+          "id": "pregnant",
+          "label": {
+            "en": "Currently pregnant",
+            "hi": "अभी गर्भवती हूँ",
+            "mr": "सध्या गर्भवती आहे"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "No long-term illness",
+            "hi": "कोई पुरानी बीमारी नहीं",
+            "mr": "कोणताही जुना आजार नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": true
     }
   ]
 }

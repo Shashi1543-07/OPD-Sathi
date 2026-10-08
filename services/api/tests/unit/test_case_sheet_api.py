@@ -25,6 +25,10 @@ class FakeConnection:
     async def scalar(self, *_args, **_kwargs):
         return next(self.values)
 
+    async def execute(self, *_args, **_kwargs):
+        # Patient context lookup (age, sex, token) for the doctor's banner.
+        return SimpleNamespace(mappings=lambda: SimpleNamespace(first=lambda: None))
+
 
 class FakeCaseSheetRepository:
     def __init__(self, *, version: int = 1) -> None:
@@ -105,7 +109,7 @@ async def test_case_sheet_pdf_is_department_scoped_and_audited(monkeypatch) -> N
         async def execute(self, *_args, **_kwargs):
             return Result()
 
-    def render_pdf(case_sheet, *, queue_number, attention_reasons):
+    def render_pdf(case_sheet, *, queue_number, attention_reasons, patient_line=""):
         rendered.append(
             {
                 "case_sheet": case_sheet,

@@ -20,9 +20,7 @@ def _load_default_credentials() -> CredentialsLike:
     """Load Google credentials in a worker thread without exposing provider internals."""
     import google.auth
 
-    credentials, _ = google.auth.default(
-        scopes=["https://www.googleapis.com/auth/cloud-platform"]
-    )
+    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     return cast(CredentialsLike, credentials)
 
 

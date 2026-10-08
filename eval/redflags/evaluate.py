@@ -1,5 +1,6 @@
 """Evaluate the deterministic red-flag rules against labelled synthetic scripts."""
 
+import argparse
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -60,7 +61,7 @@ def score(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def main() -> None:
+def main(*, write_report: bool = True) -> None:
     rows = [json.loads(line) for line in DATA.read_text(encoding="utf-8").splitlines() if line]
     profile = {
         "scripts": len(rows),
@@ -88,20 +89,23 @@ def main() -> None:
     report = Path(__file__).parents[2] / "docs" / "EVALUATION.md"
     routing_path = Path(__file__).parents[1] / "routing" / "evaluation.json"
     routing = json.loads(routing_path.read_text(encoding="utf-8")) if routing_path.exists() else {}
-    report.write_text(
-        "# Synthetic evaluation results\n\n"
-        "> Draft rule and routing content has not received clinical or native-speaker review. "
-        "These synthetic cases are generated from the same phrase vocabulary as the rules, so "
-        "scores are implementation checks and do not estimate real-world clinical performance.\n\n"
-        "## Red flags\n\n```json\n"
-        + json.dumps(summary, ensure_ascii=False, indent=2)
-        + "\n```\n\n"
-        "## Department routing\n\n```json\n"
-        + json.dumps(routing, ensure_ascii=False, indent=2)
-        + "\n```\n",
-        encoding="utf-8",
-    )
+    if write_report:
+        report.write_text(
+            "# Synthetic evaluation results\n\n"
+            "> Draft rule and routing content has not received clinical or native-speaker review. "
+            "These synthetic cases are generated from the same phrase vocabulary as the rules, so "
+            "scores are implementation checks and do not estimate real-world clinical performance.\n\n"
+            "## Red flags\n\n```json\n"
+            + json.dumps(summary, ensure_ascii=False, indent=2)
+            + "\n```\n\n"
+            "## Department routing\n\n```json\n"
+            + json.dumps(routing, ensure_ascii=False, indent=2)
+            + "\n```\n",
+            encoding="utf-8",
+        )
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-write", action="store_true", help="do not update docs/EVALUATION.md")
+    main(write_report=not parser.parse_args().no_write)

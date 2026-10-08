@@ -1,70 +1,83 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-const locales = {
-  en: {
-    languageButton: "English",
-    activationLabel: "One-time activation code",
-    activate: "Activate kiosk",
-    start: "Start patient check-in",
-    agree: "I agree and want to continue",
-    dangerTitle: "Do you need help right now?",
-    tile: "Chest discomfort",
-    next: "Next",
-    chiefPrompt: "What would you like the doctor to know?",
-    durationPrompt: "How long have you noticed this concern?",
-    summaryTitle: "Please check what you told us",
-    confirm: "This is correct",
-  },
-  hi: {
-    languageButton: "हिन्दी",
-    activationLabel: "एक बार का सक्रियण कोड",
-    activate: "कियोस्क सक्रिय करें",
-    start: "मरीज़ का चेक-इन शुरू करें",
-    agree: "मैं सहमत हूँ और आगे बढ़ना चाहता/चाहती हूँ",
-    dangerTitle: "क्या आपको अभी मदद चाहिए?",
-    tile: "सीने में तकलीफ़",
-    next: "अगला",
-    chiefPrompt: "आप क्या बताना चाहेंगे?",
-    durationPrompt: "आपको यह परेशानी कब से है?",
-    summaryTitle: "कृपया अपने जवाब जाँचें",
-    confirm: "यह सही है",
-  },
-  mr: {
-    languageButton: "मराठी",
-    activationLabel: "एकदाच वापरायचा सक्रियकरण कोड",
-    activate: "किऑस्क सक्रिय करा",
-    start: "रुग्णाची नोंदणी सुरू करा",
-    agree: "माझी संमती आहे, पुढे सुरू ठेवा",
-    dangerTitle: "तुम्हाला आत्ता मदत हवी आहे का?",
-    tile: "छातीत त्रास",
-    next: "पुढे",
-    chiefPrompt: "तुम्हाला काय सांगायचे आहे?",
-    durationPrompt: "तुम्हाला हा त्रास किती काळापासून आहे?",
-    summaryTitle: "तुम्ही दिलेली माहिती तपासा",
-    confirm: "हे बरोबर आहे",
-  },
-} as const;
+type Locale = "en" | "hi" | "mr";
 
-type Locale = keyof typeof locales;
+function copyFor(locale: Locale) {
+  const read = (namespace: string) =>
+    JSON.parse(
+      readFileSync(resolve(process.cwd(), "src", "locales", locale, `${namespace}.json`), "utf8"),
+    ) as Record<string, string>;
+  return { intake: read("intake"), kiosk: read("kiosk") };
+}
+
+const languageButtons: Record<Locale, string> = {
+  en: "English",
+  hi: "हिन्दी",
+  mr: "मराठी",
+};
+
+const sampleQuestions: Record<Locale, { chief: string; fever: string; duration: string; days: string }> = {
+  en: { chief: "What is the main problem?", fever: "Fever", duration: "Since when?", days: "1 to 3 days" },
+  hi: { chief: "मुख्य परेशानी क्या है?", fever: "बुखार", duration: "कब से?", days: "1 से 3 दिन" },
+  mr: { chief: "मुख्य त्रास काय आहे?", fever: "ताप", duration: "केव्हापासून?", days: "1 ते 3 दिवस" },
+};
 
 async function installApiMocks(page: Page, locale: Locale) {
-  const copy = locales[locale];
-  const answered: { id: string; prompt: string; answer: string | number }[] = [];
-  let questionIndex = 0;
+  const sample = sampleQuestions[locale];
   const questions = [
-    { id: "chief_concern", prompt: copy.chiefPrompt, input: "text", optional: false },
-    { id: "duration", prompt: copy.durationPrompt, input: "text", optional: true },
-    { id: "severity", prompt: "0 to 10", input: "scale", optional: true },
+    {
+      id: "chief_concern",
+      prompt: sample.chief,
+      input: "text",
+      optional: false,
+      multi: true,
+      options: [{ id: "fever", label: sample.fever, none: false }],
+    },
+    {
+      id: "duration",
+      prompt: sample.duration,
+      input: "text",
+      optional: true,
+      multi: false,
+      options: [{ id: "days_1_3", label: sample.days, none: false }],
+    },
+    { id: "severity", prompt: "0 – 10", input: "scale", optional: true, multi: false, options: [] },
   ];
-  const questionResponse = () => ({
-    complete: false,
-    question: questions[questionIndex],
-    answered: [...answered],
+  const answered: { id: string; prompt: string; answer: string | number | null }[] = [];
+  let questionIndex = 0;
+  const caseSheet = () => ({
+    language: locale,
+    chief_complaint: { text_original: sample.fever, text_en: "Fever" },
+    hpi: {},
+    past_history: { conditions: [] },
+    medications: [],
+    allergies: [],
+    family_history: [],
+    red_flags: [{ id: "RF_DS_TILE", level: "urgent" }],
   });
-  await page.route("**/kiosks/activate", async (route) =>
+  const current = () =>
+    questionIndex < questions.length
+      ? {
+          complete: false,
+          question: questions[questionIndex],
+          progress: { current: questionIndex + 1, total: questions.length },
+          answered: [...answered],
+        }
+      : {
+          complete: true,
+          readback: "Please review what you told us.",
+          answered: [...answered],
+          case_sheet: caseSheet(),
+        };
+
+  await page.route("**/healthz", (route) => route.fulfill({ json: { status: "ok" } }));
+  await page.route("**/intake/capabilities", (route) =>
+    route.fulfill({ json: { stt: "browser", tts: "browser", ai: false } }),
+  );
+  await page.route("**/kiosks/activate", (route) =>
     route.fulfill({ json: { access_token: "kiosk-test-token" } }),
   );
   await page.route("**/intake/sessions", async (route) => {
@@ -83,60 +96,34 @@ async function installApiMocks(page: Page, locale: Locale) {
       },
     });
   });
-  await page.route("**/intake/sessions/*/consent", async (route) =>
+  await page.route("**/intake/sessions/*/consent", (route) =>
     route.fulfill({ json: { granted: true, next: "identity" } }),
   );
-  await page.route("**/intake/sessions/*/identity", async (route) =>
+  await page.route("**/intake/sessions/*/identity", (route) =>
     route.fulfill({ json: { next: "danger_signs" } }),
   );
-  await page.route("**/intake/sessions/*/danger-tiles", async (route) =>
-    route.fulfill({ json: { tiles: [{ id: "chest_pain", label: copy.tile }] } }),
+  await page.route("**/intake/sessions/*/danger-tiles", (route) =>
+    route.fulfill({ json: { tiles: [{ id: "chest_pain", label: "Chest pain / छाती" }] } }),
   );
   await page.route("**/intake/sessions/*/danger-signs", async (route) => {
     expect(JSON.parse(route.request().postData() ?? "{}").tile_ids).toContain("chest_pain");
     await route.fulfill({ json: { staff_help_required: true } });
   });
-  await page.route("**/intake/sessions/*/interview/next-question", async (route) => {
-    await route.fulfill({ json: questionIndex < questions.length ? questionResponse() : {
-      complete: true,
-      readback: "Please review what you told us.",
-      answered: [...answered],
-      case_sheet: {
-        language: locale,
-        chief_complaint: { text_original: "fever", text_en: "fever" },
-        hpi: {},
-        past_history: { conditions: [] },
-        medications: [],
-        allergies: [],
-        family_history: [],
-        red_flags: [{ id: "CHEST_PAIN", level: "urgent" }],
-      },
-    } });
-  });
+  await page.route("**/intake/sessions/*/interview/next-question", (route) =>
+    route.fulfill({ json: current() }),
+  );
   await page.route("**/intake/sessions/*/interview/answers", async (route) => {
     const payload = JSON.parse(route.request().postData() ?? "{}");
     const question = questions[questionIndex];
-    if (route.request().method() === "PATCH") {
-      const previous = answered.find((item) => item.id === payload.question_id);
-      if (previous) previous.answer = payload.answer;
-      return route.fulfill({ json: questionResponse() });
-    }
-    if (!payload.skip) answered.push({ id: question.id, prompt: question.prompt, answer: payload.answer });
+    answered.push({
+      id: question.id,
+      prompt: question.prompt,
+      answer: payload.skip ? null : payload.answer,
+    });
     questionIndex += 1;
-    const complete = questionIndex >= questions.length;
-    await route.fulfill({ json: complete ? {
-      complete: true,
-      readback: "Please review what you told us.",
-      answered: [...answered],
-      case_sheet: {
-        language: locale,
-        chief_complaint: { text_original: String(answered[0]?.answer ?? "fever"), text_en: "fever" },
-        hpi: {}, past_history: { conditions: [] }, medications: [], allergies: [], family_history: [],
-        red_flags: [{ id: "CHEST_PAIN", level: "urgent" }],
-      },
-    } : questionResponse() });
+    await route.fulfill({ json: current() });
   });
-  await page.route("**/intake/sessions/*/confirm", async (route) =>
+  await page.route("**/intake/sessions/*/confirm", (route) =>
     route.fulfill({
       json: {
         confirmed: true,
@@ -145,6 +132,8 @@ async function installApiMocks(page: Page, locale: Locale) {
         status_token: "S".repeat(43),
         status_url: `/s/${"S".repeat(43)}`,
         position: 1,
+        department_name: "General Medicine",
+        wait_minutes: 10,
       },
     }),
   );
@@ -152,39 +141,46 @@ async function installApiMocks(page: Page, locale: Locale) {
 
 for (const language of ["en", "hi", "mr"] as const) {
   test(`Phase 4 check-in completes in ${language}`, async ({ page }) => {
-    const copy = locales[language];
+    const { intake, kiosk } = copyFor(language);
+    const sample = sampleQuestions[language];
     await installApiMocks(page, language);
     await page.goto("/kiosk");
-    await page.getByRole("button", { name: copy.languageButton }).first().click();
-    await page.getByLabel(copy.activationLabel).fill("A".repeat(40));
-    await page.getByRole("button", { name: copy.activate }).click();
-    await page.getByRole("button", { name: copy.start }).click();
-    await page.getByRole("button", { name: copy.agree }).first().click();
-    await page.getByLabel(/Age in years|उम्र|वय/).fill("34");
-    await page.getByRole("button", { name: /Continue|आगे बढ़ें|पुढे सुरू ठेवा/ }).click();
-    await page.getByRole("heading", { name: copy.dangerTitle }).waitFor();
-    await page.getByRole("button", { name: copy.tile }).click();
-    await page.getByRole("button", { name: copy.next }).click();
-    await page.getByPlaceholder(/Type your answer|अपना जवाब|तुमचे उत्तर/).fill("fever");
-    await page.getByRole("button", { name: copy.next }).click();
-    await expect(page.getByText(copy.durationPrompt)).toBeVisible();
-    await page.getByRole("button", { name: /Skip this question|यह सवाल छोड़ें|हा प्रश्न वगळा/ }).click();
-    await page.getByRole("button", { name: /Change previous answer|पिछला जवाब बदलें|मागील उत्तर बदला/ }).click();
-    await page.getByPlaceholder(/Type your answer|अपना जवाब|तुमचे उत्तर/).fill("fever and cough");
-    await page.getByRole("button", { name: copy.next }).click();
-    await page.getByRole("button", { name: "7" }).click();
-    await page.getByRole("button", { name: copy.next }).click();
-    await expect(page.getByRole("heading", { name: copy.summaryTitle })).toBeVisible();
+    await page.getByRole("button", { name: languageButtons[language] }).first().click();
+    await page.getByLabel(kiosk.activationCode).fill("A".repeat(40));
+    await page.getByRole("button", { name: kiosk.activate }).click();
+    await page.getByRole("button", { name: kiosk.startIntake }).click();
+
+    await page.getByRole("button", { name: intake.consentAgree }).click();
+    await page.getByLabel(intake.ageQuestion).fill("34");
+    await page.getByRole("radio", { name: intake.sexFemale }).click();
+    await page.getByRole("button", { name: intake.next, exact: true }).click();
+
+    await page.getByRole("heading", { name: intake.dangerTitle }).waitFor();
+    await page.getByRole("button", { name: "Chest pain / छाती" }).click();
+    await page.getByRole("button", { name: intake.dangerContinue }).click();
+
+    await expect(page.getByRole("heading", { name: sample.chief })).toBeVisible();
+    await page.getByRole("button", { name: sample.fever }).click();
+    await page.getByRole("button", { name: intake.next, exact: true }).click();
+    await expect(page.getByRole("heading", { name: sample.duration })).toBeVisible();
+    await page.getByRole("button", { name: intake.skip, exact: true }).click();
+    await page.getByRole("radio", { name: "7", exact: true }).click();
+    await page.getByRole("button", { name: intake.next, exact: true }).click();
+
+    await expect(page.getByRole("heading", { name: intake.reviewTitle })).toBeVisible();
     const accessibility = await new AxeBuilder({ page }).analyze();
-    expect(accessibility.violations.filter((item) => ["critical", "serious"].includes(item.impact ?? ""))).toEqual([]);
+    expect(
+      accessibility.violations.filter((item) =>
+        ["critical", "serious"].includes(item.impact ?? ""),
+      ),
+    ).toEqual([]);
     if (language === "en") {
       const screenshotDirectory = resolve(process.cwd(), "..", "..", "docs", "screenshots", "phase-04");
       mkdirSync(screenshotDirectory, { recursive: true });
       await page.screenshot({ path: resolve(screenshotDirectory, "summary-en.png"), fullPage: true });
     }
-    await page.getByRole("button", { name: copy.confirm }).click();
-    await expect(page.getByRole("heading", { name: /Your information is ready|आपकी जानकारी|तुमची माहिती/ })).toBeVisible();
+    await page.getByRole("button", { name: intake.confirm }).click();
+    await expect(page.getByRole("heading", { name: intake.doneTitle })).toBeVisible();
     await expect(page.getByText("GEN-007")).toBeVisible();
-    await expect(page.locator(".token-receipt svg")).toBeVisible();
   });
 }

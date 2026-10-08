@@ -13,6 +13,8 @@ import i18n from "../i18n";
 import { staffAuth } from "../lib/auth";
 import { DoctorConsultation } from "./DoctorConsultation";
 
+vi.mock("./ConsultPatientRail", () => ({ ConsultPatientRail: () => null }));
+
 const sheet = {
   schema_version: "1.0",
   language: "en",
@@ -30,7 +32,7 @@ const sheet = {
   },
   red_flags: [],
   field_meta: {
-    "/chief_complaint/text_original": {
+    "/chief_complaint": {
       source: "patient_text",
       confidence: 0.9,
       confirmed: true,
@@ -67,7 +69,7 @@ describe("Phase 7.4 doctor consultation", () => {
     renderConsult("/staff/consultations");
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Choose a patient from the queue to open their consultation.",
+      "Pick a patient from the list on the left to open their case sheet.",
     );
     expect(screen.getByRole("link", { name: "Back to queue" })).toBeVisible();
   });

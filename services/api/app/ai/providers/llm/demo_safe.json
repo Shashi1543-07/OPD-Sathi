@@ -1,0 +1,6 @@
+{
+  "question_id": {"enum": "first"},
+  "department_code": {"enum": "first"},
+  "flags": [],
+  "findings": []
+}

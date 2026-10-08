@@ -1,5 +1,44 @@
 {
   "$defs": {
+    "AISummary": {
+      "additionalProperties": false,
+      "description": "Doctor-facing English translation produced by the language model; history only.",
+      "properties": {
+        "brief_en": {
+          "maxLength": 600,
+          "title": "Brief En",
+          "type": "string"
+        },
+        "answers_en": {
+          "additionalProperties": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "propertyNames": {
+            "maxLength": 80
+          },
+          "title": "Answers En",
+          "type": "object"
+        },
+        "model": {
+          "default": "",
+          "maxLength": 80,
+          "title": "Model",
+          "type": "string"
+        },
+        "generated_at": {
+          "default": "",
+          "maxLength": 40,
+          "title": "Generated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "brief_en"
+      ],
+      "title": "AISummary",
+      "type": "object"
+    },
     "Duration": {
       "additionalProperties": false,
       "properties": {
@@ -547,6 +586,28 @@
     },
     "patient_confirmation": {
       "$ref": "#/$defs/PatientConfirmation"
+    },
+    "ai_summary": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AISummary"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "followup_questions": {
+      "additionalProperties": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "propertyNames": {
+        "maxLength": 80
+      },
+      "title": "Followup Questions",
+      "type": "object"
     },
     "disclaimer": {
       "default": "Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis.",

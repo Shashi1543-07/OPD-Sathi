@@ -126,9 +126,7 @@ def _display(value: Any, language: str) -> str:
         return _list(value, language)
     if isinstance(value, dict):
         if "value" in value and "unit" in value:
-            unit = _DURATION_UNITS.get(language, {}).get(
-                str(value["unit"]), str(value["unit"])
-            )
+            unit = _DURATION_UNITS.get(language, {}).get(str(value["unit"]), str(value["unit"]))
             return f"{value['value']} {unit}"
         if "name" in value:
             details = [str(value["name"])]
@@ -137,7 +135,10 @@ def _display(value: Any, language: str) -> str:
             return " · ".join(details)
         original = value.get("text_original")
         english = value.get("text_en")
-        selected = original if language in {"hi", "mr"} else english or original
+        # Doctor-facing: English first, the patient's own words alongside when different.
+        if english and original and english != original:
+            return f"{english} ({original})"
+        selected = english or original
         return str(selected) if selected else ""
     if value is None:
         return ""
@@ -158,13 +159,21 @@ def _row(label: str, value: Any, language: str) -> str:
 
 
 def render_case_sheet_pdf(
-    case_sheet: dict[str, Any], *, queue_number: str, attention_reasons: list[str]
+    case_sheet: dict[str, Any],
+    *,
+    queue_number: str,
+    attention_reasons: list[str],
+    patient_line: str = "",
 ) -> bytes:
-    """Return an A4 HTML-rendered PDF with escaped patient-provided text."""
+    """Return an A4 HTML-rendered PDF with escaped patient-provided text.
+
+    The sheet is for the doctor, so labels and values are English; the patient's own
+    words follow each translated value in brackets.
+    """
     from weasyprint import HTML
 
     language = case_sheet.get("language", "en")
-    labels = _LABELS.get(language, _LABELS["en"])
+    labels = _LABELS["en"]
     hpi = case_sheet.get("hpi") or {}
     past = case_sheet.get("past_history") or {}
     complaint = _row(labels["complaint"], case_sheet.get("chief_complaint"), language)
@@ -206,6 +215,28 @@ def render_case_sheet_pdf(
         )
     )
     family_rows = _row(labels["family"], case_sheet.get("family_history"), language)
+    social_block = (
+        f"<h2>{escape(labels['social'])}</h2><dl>{social_rows}</dl>" if social_rows else ""
+    )
+    women_block = (
+        f"<h2>{escape(labels['womenHealth'])}</h2><dl>{women_rows}</dl>" if women_rows else ""
+    )
+    ai_summary = case_sheet.get("ai_summary") or {}
+    brief_block = (
+        f"<div class='brief'><strong>AI summary (verify with patient):</strong> "
+        f"{escape(str(ai_summary.get('brief_en')))}</div>"
+        if ai_summary.get("brief_en")
+        else ""
+    )
+    language_names = {"en": "English", "hi": "Hindi", "mr": "Marathi"}
+    meta_line = " · ".join(
+        part
+        for part in (
+            patient_line,
+            f"Answered in {language_names.get(str(language), str(language))}",
+        )
+        if part
+    )
     reasons = "".join(f"<li>{escape(reason)}</li>" for reason in attention_reasons if reason)
     routing = case_sheet.get("routing") or {}
     urgency_block = ""
@@ -236,28 +267,43 @@ dt {{ color:#526170; }}
 dd {{ margin:0; white-space:pre-wrap; overflow-wrap:anywhere; }}
 ul {{ margin:2pt 0 0; padding-left:14pt; }}
 .columns {{ display:grid; grid-template-columns:1fr 1fr; gap:10pt; }}
+.meta {{ color:#526170; margin:3pt 0 0; }}
+.brief {{ margin-top:6pt; padding:5pt 7pt; background:#eef6ff; border-radius:3pt; }}
 </style></head><body>
 <div class="top">
-  <h1>{escape(labels['title'])}</h1>
-  <div class="token">{escape(labels['queueNumber'])}: {escape(queue_number or '—')}</div>
+  <div><h1>{escape(labels["title"])}</h1><p class="meta">{escape(meta_line)}</p></div>
+  <div class="token">{escape(labels["queueNumber"])}: {escape(queue_number or "—")}</div>
 </div>
 {urgency_block}
-<h2>{escape(labels['complaint'])}</h2><dl>{complaint}</dl>
+{brief_block}
+<h2>{escape(labels["complaint"])}</h2><dl>{complaint}</dl>
 <div class="columns">
-  <section><h2>{escape(labels['present'])}</h2><dl>{hpi_rows}</dl></section>
-  <section><h2>{escape(labels['past'])}</h2><dl>{past_rows}</dl>
-    {_row(labels['routing'], routing.get('department_code'), language)}
+  <section><h2>{escape(labels["present"])}</h2><dl>{hpi_rows}</dl></section>
+  <section><h2>{escape(labels["past"])}</h2><dl>{past_rows}</dl>
+    {_row(labels["routing"], routing.get("department_code"), language)}
     {family_rows}
-    <h2>{escape(labels['social'])}</h2><dl>{social_rows}</dl>
-    <h2>{escape(labels['womenHealth'])}</h2><dl>{women_rows}</dl>
+    {social_block}
+    {women_block}
   </section>
 </div>
 </body></html>"""
     return cast(bytes, HTML(string=html).write_pdf())
 
 
-def warm_pdf_renderer() -> None:
-    """Load fonts and Pango before readiness so the first export stays responsive."""
+def warm_pdf_renderer() -> bool:
+    """Load fonts and Pango before readiness so the first export stays responsive.
+
+    Returns False when the native WeasyPrint libraries are missing (for example on a
+    Windows host without GTK); the API still starts and only PDF export is unavailable.
+    """
+    try:
+        _warm()
+    except OSError:
+        return False
+    return True
+
+
+def _warm() -> None:
     render_case_sheet_pdf(
         {
             "language": "en",

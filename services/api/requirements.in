@@ -11,6 +11,8 @@ redis
 arq
 google-genai==2.28.0
 jsonschema
+# IANA time zones for zoneinfo on hosts without a system database (Windows)
+tzdata
 
 # Test and development tooling
 httpx

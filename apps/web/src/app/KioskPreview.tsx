@@ -45,7 +45,11 @@ export function KioskPreview() {
         {current === "s2" && (
           <div className="preview-panel">
             <p>{t("consentText", { ns: "kiosk" })}</p>
-            <AudioPrompt language={language} promptId="ui.consent" />
+            <AudioPrompt
+              language={language}
+              promptId="ui.consent"
+              text={t("consentText", { ns: "kiosk" })}
+            />
             <div className="preview-actions">
               <ChoiceButton
                 selected={choice === "agree"}
@@ -162,7 +166,11 @@ export function KioskPreview() {
         )}
         {current === "s6" && (
           <div className="preview-panel">
-            <AudioPrompt language={language} promptId="ui.confirm" />
+            <AudioPrompt
+              language={language}
+              promptId="ui.confirm"
+              text={t("yesCorrect", { ns: "kiosk" })}
+            />
             <ul className="summary-list">
               {["summaryConcern", "summaryDuration", "summaryHistory"].map(
                 (key) => (
