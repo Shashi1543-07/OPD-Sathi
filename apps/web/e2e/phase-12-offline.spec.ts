@@ -26,6 +26,9 @@ test("offline short form stores encrypted data, warns on danger, and syncs once 
   });
 
   await page.goto("/kiosk/offline-intake");
+  // Let the lazily loaded form arrive before the network drops (in production the
+  // service worker has already cached it; the dev server serves it on demand).
+  await expect(page.getByLabel("Age in years")).toBeVisible();
   await context.setOffline(true);
   await page.getByLabel("Age in years").fill("37");
   await page.getByLabel("What would you like the doctor to know?").fill("Synthetic breathing concern");

@@ -123,7 +123,8 @@ jobs:
           GITLEAKS_BASE: ${{ github.event.before }}
           GITLEAKS_HEAD: ${{ github.sha }}
         run: |
-          if [[ "$GITLEAKS_BASE" =~ ^0+$ ]]; then
+          if [[ "$GITLEAKS_BASE" =~ ^0+$ ]] || ! git cat-file -e "${GITLEAKS_BASE}^{commit}" 2>/dev/null; then
+            # New branch, or a force-push replaced the previous commit: scan everything.
             LOG_OPTS="--all"
           else
             git cat-file -e "${GITLEAKS_BASE}^{commit}"

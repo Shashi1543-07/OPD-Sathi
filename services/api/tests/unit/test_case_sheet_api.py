@@ -177,8 +177,10 @@ def test_case_sheet_pdf_contains_english_and_devanagari_text() -> None:
         [pdftotext, "-", "-"], input=pdf, capture_output=True, check=True
     ).stdout.decode("utf-8")
 
+    # Doctor copy is English-first; the patient's own Devanagari words still render.
     assert "सिर में द" in extracted
-    assert "मुख्य शिकायत" in text
+    assert "Chief complaint" in text
+    assert "Headache" in text
     assert len(PdfReader(BytesIO(pdf)).pages) == 1
     assert "GM-042" in text
     assert "Synthetic attention reason" in text

@@ -423,13 +423,24 @@ test("5,000-row virtual queue applies a live urgent update in under 100 ms", asy
   const renderedRows = await page.locator(".qb-item").count();
   expect(renderedRows).toBeLessThan(50);
 
-  await page.evaluate(() => {
-    (
-      window as typeof window & { queueUpdateStarted?: number }
-    ).queueUpdateStarted = performance.now();
-  });
   await authenticated;
   expect(queueSocket).toBeDefined();
+  // Time inside the page: from just before the delta is sent until the browser has
+  // rendered the urgent row. This measures the app, not Playwright's polling.
+  await page.evaluate(() => {
+    const scope = window as typeof window & {
+      queueUpdateStarted?: number;
+      queueUpdateRendered?: number;
+    };
+    const observer = new MutationObserver(() => {
+      if (document.querySelector(".qb-item--urgent")) {
+        scope.queueUpdateRendered = performance.now();
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+    scope.queueUpdateStarted = performance.now();
+  });
   queueSocket?.send(
     JSON.stringify({
       type: "queue.delta",
@@ -447,15 +458,14 @@ test("5,000-row virtual queue applies a live urgent update in under 100 ms", asy
       ],
     }),
   );
-  await expect(page.locator(".qb-item--urgent strong")).toHaveText(
-    "GEN-0001",
-  );
-  const elapsed = await page.evaluate(
-    () =>
-      performance.now() -
-      (window as typeof window & { queueUpdateStarted?: number })
-        .queueUpdateStarted!,
-  );
+  await expect(page.locator(".qb-item--urgent strong").first()).toHaveText("GEN-0001");
+  const elapsed = await page.evaluate(() => {
+    const scope = window as typeof window & {
+      queueUpdateStarted?: number;
+      queueUpdateRendered?: number;
+    };
+    return scope.queueUpdateRendered! - scope.queueUpdateStarted!;
+  });
   console.log(`queue_urgent_update_ms=${elapsed.toFixed(2)}`);
   expect(elapsed).toBeLessThan(100);
 });
