@@ -22,6 +22,9 @@ import type { components } from "../lib/api-types";
 import { staffAuth } from "../lib/auth";
 import { ConfidenceChip } from "../components/ui";
 import { ConsultPatientRail } from "./ConsultPatientRail";
+import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
+import type { Triage } from "./queueBoardModel";
+import { TriageWhy } from "./TriageWhy";
 
 type CaseSheet = components["schemas"]["CaseSheet"] & {
   ai_summary?: {
@@ -45,6 +48,8 @@ type PatientContext = {
   urgency?: string | null;
   status?: string | null;
   department_name?: string | null;
+  triage?: Triage | null;
+  queued_at?: string | null;
 };
 type TranscriptTurn = {
   turn_index: number;
@@ -550,6 +555,9 @@ export function DoctorConsultation() {
                   {urgency !== "routine" && <AlertTriangle aria-hidden="true" size={13} />}
                   {t(`urgency_${urgency}`)}
                 </span>
+                {patient?.triage && (
+                  <TriageWhy triage={patient.triage} queuedAt={patient.queued_at ?? null} />
+                )}
                 {patient?.department_name && <span>{patient.department_name}</span>}
                 {patient?.language && (
                   <span>{t("answeredIn", { language: t(`lang_${patient.language}`) })}</span>
@@ -642,10 +650,18 @@ export function DoctorConsultation() {
                     <li key={flag.id}>
                       <strong>{t(`urgency_${flag.level}`)}</strong> ·{" "}
                       {flag.reason_en ?? flag.evidence}
-                      {flag.reason_en && flag.evidence && (
-                        <span className="cx-flag-evidence" lang={data.language}>
-                          {t("patientWords")}: “{flag.evidence}”
+                      {flag.reason_en && flag.evidence && DANGER_TILE_LABELS[flag.evidence] ? (
+                        <span className="cx-flag-evidence">
+                          Selected on the safety screen: {DANGER_TILE_LABELS[flag.evidence]}
                         </span>
+                      ) : (
+                        flag.reason_en &&
+                        flag.evidence &&
+                        !flag.evidence.startsWith("Structured intake answers") && (
+                          <span className="cx-flag-evidence" lang={data.language}>
+                            {t("patientWords")}: “{flag.evidence}”
+                          </span>
+                        )
                       )}
                     </li>
                   ))}

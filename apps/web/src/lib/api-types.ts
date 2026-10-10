@@ -1367,6 +1367,12 @@ export interface components {
             status?: string | null;
             /** Department Name */
             department_name?: string | null;
+            /** Triage */
+            triage?: {
+                [key: string]: unknown;
+            } | null;
+            /** Queued At */
+            queued_at?: string | null;
         };
         /** RedFlag */
         RedFlag: {

@@ -63,9 +63,16 @@ test("staff see the triage score and every point that made it up", async ({ page
   await page.goto("/staff");
   const row = page.getByRole("region", { name: "Queue patients" });
   await row.getByText("Score 36").click();
-  await expect(row.getByText("36/100 · Priority")).toBeVisible();
-  await expect(row.getByText("Patients never see this score.")).toBeVisible();
-  await expect(row.getByText("Breathless on walking", { exact: true })).toBeVisible();
-  await expect(row.getByText(/22-minute head start, never more than 45/)).toBeVisible();
-  await expect(row.getByText(/AI check agrees with this level/)).toBeVisible();
+  // The breakdown floats above the page so the scrolling list cannot cut it off.
+  const panel = page.getByRole("dialog", { name: "Triage score 36: why" });
+  await expect(panel.getByText("36/100 · Priority")).toBeVisible();
+  await expect(panel.getByText("Patients never see this score.")).toBeVisible();
+  await expect(panel.getByText("Breathless on walking", { exact: true })).toBeVisible();
+  await expect(panel.getByText(/22-minute head start, never more than 45/)).toBeVisible();
+  await expect(panel.getByText(/AI check agrees with this level/)).toBeVisible();
+  const box = await panel.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box && viewport && box.y >= 0 && box.y + box.height <= viewport.height).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
 });

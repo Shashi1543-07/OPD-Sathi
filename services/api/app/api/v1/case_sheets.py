@@ -66,6 +66,9 @@ class PatientContext(BaseModel):
     urgency: str | None = None
     status: str | None = None
     department_name: str | None = None
+    # Staff-only triage score and the reason for every point (never shown to patients).
+    triage: dict[str, Any] | None = None
+    queued_at: datetime | None = None
 
 
 class CaseSheetResponse(BaseModel):
@@ -170,7 +173,8 @@ async def get_case_sheet(
                 await connection.execute(
                     text(
                         "SELECT v.age_years, p.sex, v.language, v.token_label AS token, "
-                        "v.urgency, v.status, d.name_en AS department_name FROM visits v "
+                        "v.urgency, v.status, d.name_en AS department_name, "
+                        "v.acuity AS triage, v.queued_at FROM visits v "
                         "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
                         "LEFT JOIN departments d ON d.hospital_id = v.hospital_id "
                         "AND d.id = v.department_id "

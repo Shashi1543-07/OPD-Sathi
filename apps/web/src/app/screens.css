@@ -896,6 +896,7 @@
   justify-content: space-between;
   padding: 0 clamp(var(--space-4), 3vw, var(--space-6));
   min-height: 3.5rem;
+  padding-block: 0.4rem;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -947,6 +948,10 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Contain absolutely positioned descendants (visually-hidden labels); without this they
+     extended the page itself, so scrolling past the end dragged the sidebar up. */
+  position: relative;
+  overscroll-behavior: contain;
   padding: var(--space-5) clamp(var(--space-4), 3vw, var(--space-6));
 }
 .staff-main[data-page="login"] {
@@ -3737,12 +3742,31 @@
   background: var(--surface-subtle);
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: flex;
+  flex: 1 1 24rem;
+  flex-wrap: nowrap;
   gap: 0.25rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
   padding: 0.25rem;
+  scroll-padding-inline: 0.5rem;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.qb-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+.qb-tabs::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
 }
 .qb-tabs button {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  white-space: nowrap;
   background: transparent;
   border: 0;
   border-radius: 999px;
@@ -3764,6 +3788,7 @@
 .qb-toolbar-right {
   align-items: center;
   display: flex;
+  flex: 0 0 auto;
   gap: var(--space-4);
 }
 .qb-select {
@@ -3806,6 +3831,17 @@
 .qb-alerts {
   display: grid;
   gap: var(--space-2);
+  max-height: min(34vh, 19rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
+  scrollbar-width: thin;
+}
+.qb-alerts-title {
+  color: var(--urgent-ink);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  margin: 0;
 }
 .qb-alert {
   align-items: center;
@@ -3896,9 +3932,6 @@
 .qb-viewport {
   max-height: min(64vh, 720px);
   min-height: 0;
-}
-.qb-item:has(.qb-more[open]) {
-  z-index: 5;
 }
 .qb-item {
   left: 0;
@@ -3993,46 +4026,41 @@
 }
 /* Triage score and its explanation (staff only). */
 /* Each virtual row is its own stacking context; lift the one whose pop-over is open. */
-.qb-item:has(.qb-why[open]),
-.qb-item:has(.qb-more[open]) {
-  z-index: 40;
-}
 .qb-urgency {
   display: grid;
   justify-items: start;
   gap: 0.25rem;
 }
 .qb-why {
-  position: relative;
-  font-size: 0.8rem;
-}
-.qb-why summary {
-  cursor: pointer;
-  list-style: none;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
   font-weight: 600;
+  padding: 0.1rem 0.2rem;
   white-space: nowrap;
 }
-.qb-why summary::-webkit-details-marker {
-  display: none;
+.qb-why:hover,
+.qb-why[aria-expanded="true"] {
+  background: var(--surface-hover);
+}
+.qb-why:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 .qb-why-link {
   color: var(--primary);
   text-decoration: underline;
 }
 .qb-why-panel {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 0.35rem);
-  left: 0;
-  width: min(26rem, 80vw);
+  width: min(28rem, calc(100vw - 1rem));
   display: grid;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 12px 32px rgb(11 37 69 / 16%);
+  align-content: start;
+  gap: 0.6rem;
+  padding: 0.95rem 1.1rem;
   color: var(--navy-900);
   font-size: 0.85rem;
   line-height: 1.4;
@@ -4089,39 +4117,26 @@
 }
 
 .qb-more {
-  position: relative;
-}
-.qb-more summary {
   align-items: center;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  color: var(--text-primary);
   cursor: pointer;
   display: inline-flex;
   height: 2.25rem;
   justify-content: center;
-  list-style: none;
   width: 2.25rem;
 }
-.qb-more summary::-webkit-details-marker {
-  display: none;
-}
-.qb-more summary:hover,
-.qb-more[open] summary {
+.qb-more:hover,
+.qb-more[aria-expanded="true"] {
   background: var(--surface-hover);
 }
 .qb-menu {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 12px 32px rgb(11 37 69 / 16%);
   display: grid;
   gap: var(--space-2);
-  min-width: 16rem;
+  min-width: 17rem;
   padding: var(--space-3);
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 20;
 }
 .qb-menu > .qb-btn {
   justify-content: flex-start;
@@ -4288,7 +4303,7 @@
   box-shadow: var(--shadow-xs);
   display: grid;
   grid-template-rows: auto auto 1fr auto;
-  max-height: calc(100vh - 7.5rem);
+  max-height: calc(100dvh - 3.5rem - 2 * var(--space-5));
   min-height: 0;
   overflow: hidden;
   position: sticky;
@@ -4790,8 +4805,9 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
-  max-height: calc(100vh - 12rem);
+  max-height: calc(100dvh - 3.5rem - 2 * var(--space-5));
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.9rem 1rem;
   position: sticky;
   scrollbar-width: thin;

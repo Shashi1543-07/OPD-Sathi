@@ -1,4 +1,6 @@
 import { Bot, UserCheck } from "lucide-react";
+import { Popover } from "../components/ui";
+import { withTileLabels } from "../lib/dangerTiles";
 import type { Triage } from "./queueBoardModel";
 
 const KIND_LABEL: Record<string, string> = {
@@ -30,13 +32,18 @@ export function TriageWhy({ triage, queuedAt }: { triage: Triage; queuedAt: stri
       ? new Date(arrived.getTime() - triage.head_start_min * 60_000)
       : null;
   return (
-    <details className="qb-why">
-      <summary>
-        Score {triage.score}
-        <span aria-hidden="true"> · </span>
-        <span className="qb-why-link">Why?</span>
-      </summary>
-      <div className="qb-why-panel">
+    <Popover
+      triggerClassName="qb-why"
+      panelClassName="qb-why-panel"
+      ariaLabel={`Triage score ${triage.score}: why`}
+      label={
+        <>
+          Score {triage.score}
+          <span aria-hidden="true"> · </span>
+          <span className="qb-why-link">Why?</span>
+        </>
+      }
+    >
         <p className="qb-why-total">
           <strong>
             {triage.score}/100 · {LEVEL[triage.level] ?? triage.level}
@@ -50,7 +57,7 @@ export function TriageWhy({ triage, queuedAt }: { triage: Triage; queuedAt: stri
             {triage.components.map((component, index) => (
               <li key={`${component.kind}-${index}`}>
                 <b>+{component.points}</b>
-                <span>{component.label}</span>
+                <span>{withTileLabels(component.label)}</span>
                 <em>
                   {KIND_LABEL[component.kind] ?? component.kind}
                   {component.source === "AI second opinion" ? " · AI" : ""}
@@ -79,7 +86,6 @@ export function TriageWhy({ triage, queuedAt }: { triage: Triage; queuedAt: stri
             ? `${AI_VERDICT[triage.ai_review.verdict]}${triage.ai_review.reason_en ? `: ${triage.ai_review.reason_en}` : "."}`
             : "AI check not available for this patient."}
         </p>
-      </div>
-    </details>
+    </Popover>
   );
 }

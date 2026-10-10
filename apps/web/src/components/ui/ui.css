@@ -818,3 +818,19 @@
   --color-ink: var(--navy-900, #0b2545);
   --color-border: var(--border, #d5e0e3);
 }
+
+/* Floating panel (Popover): fixed to the window, above scrolling lists. */
+.ui-popover {
+  position: fixed;
+  z-index: 1000;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 40px rgb(11 37 69 / 18%);
+  color: var(--text-primary);
+}
+.ui-popover:focus {
+  outline: none;
+}

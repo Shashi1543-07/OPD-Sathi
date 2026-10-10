@@ -3,7 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, FileText, Hand, MoreHorizontal, RefreshCw, Users } from "lucide-react";
-import { ConnectionIndicator, UrgencyBadge } from "../components/ui";
+import { ConnectionIndicator, Popover, UrgencyBadge } from "../components/ui";
 import { TriageWhy } from "./TriageWhy";
 import { apiSocketUrl } from "../lib/api";
 import { staffAuth } from "../lib/auth";
@@ -618,7 +618,9 @@ export function StaffQueueBoard() {
               type="button"
               key={department.id}
               aria-pressed={department.id === departmentId}
-              onClick={() => {
+              onClick={(event) => {
+                // The tab row scrolls sideways; keep the chosen tab fully in view.
+                event.currentTarget.scrollIntoView?.({ block: "nearest", inline: "nearest" });
                 if (department.id === departmentId) return;
                 sequenceRef.current = 0;
                 setDepartmentId(department.id);
@@ -653,6 +655,9 @@ export function StaffQueueBoard() {
         </div>
       </div>
 
+      {alerts.length > 1 && (
+        <p className="qb-alerts-title">{alerts.length} alerts need attention · newest first</p>
+      )}
       {alerts.length > 0 && (
         <section className="qb-alerts" aria-label="Unacknowledged staff alerts" aria-live="assertive">
           {alerts.map((alert) => {
@@ -767,17 +772,24 @@ export function StaffQueueBoard() {
                           {nextAction.label}
                         </button>
                         {(item.status !== "in_consult" || canOverride) && (
-                          <details className="qb-more">
-                            <summary aria-label={`More actions for ${item.token}`}>
-                              <MoreHorizontal aria-hidden="true" size={18} />
-                            </summary>
-                            <div className="qb-menu">
+                          <Popover
+                            align="end"
+                            triggerClassName="qb-more"
+                            panelClassName="qb-menu"
+                            ariaLabel={`More actions for ${item.token}`}
+                            label={<MoreHorizontal aria-hidden="true" size={18} />}
+                          >
+                            {(closeMenu) => (
+                            <>
                               {(item.status === "queued" || item.status === "called") && (
                                 <button
                                   type="button"
                                   className="qb-btn qb-btn--ghost"
                                   disabled={busy}
-                                  onClick={() => void action(item.visit_id, "no-show")}
+                                  onClick={() => {
+                                    closeMenu();
+                                    void action(item.visit_id, "no-show");
+                                  }}
                                 >
                                   Mark no show
                                 </button>
@@ -826,14 +838,18 @@ export function StaffQueueBoard() {
                                     type="button"
                                     className="qb-btn qb-btn--primary"
                                     disabled={busy || (overrideValues[item.visit_id]?.reason.trim().length ?? 0) < 5}
-                                    onClick={() => void override(item.visit_id)}
+                                    onClick={() => {
+                                      closeMenu();
+                                      void override(item.visit_id);
+                                    }}
                                   >
                                     Apply override
                                   </button>
                                 </div>
                               )}
-                            </div>
-                          </details>
+                            </>
+                            )}
+                          </Popover>
                         )}
                       </div>
                     </div>
