@@ -4,6 +4,8 @@ OPD Saathi is a multilingual, voice-first patient history-taking and queue syste
 
 ## Run the demo (Windows, macOS or Linux with Docker)
 
+**New teammate?** Follow [CONTRIBUTING.md](CONTRIBUTING.md). It covers getting access, cloning, running the app and pushing your changes step by step.
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start-demo.ps1
 ```

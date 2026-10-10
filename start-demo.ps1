@@ -48,7 +48,8 @@ if (-not (Test-Path ".env")) {
   $text = $text -replace "(?m)^JWT_SECRET=.*$", "JWT_SECRET=$(New-Hex)"
   $text = $text -replace "(?m)^DEMO_ADMIN_PASSWORD=.*$", "DEMO_ADMIN_PASSWORD=Saathi-$(New-Hex)"
   $text = $text -replace "(?m)^DEMO_STAFF_PASSWORD=.*$", "DEMO_STAFF_PASSWORD=Saathi-$(New-Hex)"
-  Set-Content -Path ".env" -Value $text -Encoding utf8
+  # Windows PowerShell's "-Encoding utf8" adds a BOM, which corrupts the first variable name.
+  [System.IO.File]::WriteAllText((Join-Path $PSScriptRoot ".env"), $text, (New-Object System.Text.UTF8Encoding $false))
 }
 
 $envLines = Get-Content ".env"
@@ -62,8 +63,12 @@ $gemini = Get-EnvValue $envLines "GEMINI_API_KEY"
 $sarvam = Get-EnvValue $envLines "SARVAM_API_KEY"
 
 # The web container serves the app; free the port or pick another one.
-$busy = Get-NetTCPConnection -LocalPort $WebPort -State Listen -ErrorAction SilentlyContinue |
-  Where-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName -ne "com.docker.backend" }
+# Get-NetTCPConnection is Windows-only; on macOS/Linux (pwsh) skip the check.
+$busy = $null
+if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+  $busy = Get-NetTCPConnection -LocalPort $WebPort -State Listen -ErrorAction SilentlyContinue |
+    Where-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName -ne "com.docker.backend" }
+}
 if ($busy) {
   Write-Host "Port $WebPort is used by another program (often 'npm run dev'); using 8080 instead." -ForegroundColor Yellow
   $WebPort = 8080

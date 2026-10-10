@@ -1,0 +1,5 @@
+# Files that run inside Linux containers must keep LF line endings,
+# even when Git on Windows converts other files to CRLF.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.conf      text eol=lf
