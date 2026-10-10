@@ -39,7 +39,6 @@ RED_FLAG_REASONS = {rule.id: rule.reason_en for rule in RULES}
 # Alerts that do not come from a red-flag rule.
 _SPECIAL_ALERTS = {
     "PATIENT_HELP": "Patient asked for help at the kiosk",
-    "EMERGENCY_BUTTON": "EMERGENCY button pressed at the kiosk. Go to the kiosk now.",
     "AI_TRIAGE_REVIEW": "AI review suggests this patient may be more urgent. Please check.",
 }
 
@@ -764,7 +763,7 @@ async def open_alerts(
                 # An AI "urgent" is a suggestion a nurse must see and confirm.
                 "AND (e.source = 'rule' OR (e.source = 'llm' AND e.level = 'urgent') "
                 "OR e.rule_id IN ('RF_DS_TILE', 'PATIENT_HELP', "
-                "'EMERGENCY_BUTTON', 'AI_TRIAGE_REVIEW')) "
+                "'AI_TRIAGE_REVIEW')) "
                 "AND ((:acknowledged = true AND e.acknowledged_at IS NOT NULL) OR "
                 "(:acknowledged = false AND e.acknowledged_at IS NULL)) "
                 # Open alerts only matter while the patient is still in the building. An
@@ -1109,7 +1108,7 @@ async def staff_queue_socket(
                                 "AND (e.source = 'rule' OR "
                                 "(e.source = 'llm' AND e.level = 'urgent') OR "
                                 "e.rule_id IN ('RF_DS_TILE', 'PATIENT_HELP', "
-                                "'EMERGENCY_BUTTON', 'AI_TRIAGE_REVIEW')) "
+                                "'AI_TRIAGE_REVIEW')) "
                                 "AND e.acknowledged_at IS NULL "
                                 "AND e.created_at <= now() - interval '60 seconds' "
                                 "ORDER BY e.created_at LIMIT 100"

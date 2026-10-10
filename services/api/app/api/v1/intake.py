@@ -26,7 +26,6 @@ from app.core.auth import require_kiosk, require_patient, require_role
 from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.ids import uuid7
-from app.core.ratelimit import check_rate_limit
 from app.core.security import issue_access_token
 from app.db.repositories import (
     CaseSheetRepository,
@@ -877,109 +876,6 @@ async def create_session(
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": copy,
     }
-
-
-@router.post("/emergency", status_code=status.HTTP_201_CREATED)
-async def kiosk_emergency(
-    request: Request,
-    principal: Annotated[dict[str, Any], Depends(require_kiosk())],
-) -> dict[str, Any]:
-    """Emergency button on the kiosk: alert every staff screen at once, with no form.
-
-    Someone unconscious, not breathing or bleeding heavily must not fill in a history first.
-    The alert brings a person to the kiosk; it gives no place in the queue, so pressing it
-    to skip the line does not work.
-    """
-    hospital_id, kiosk_id = _identity(principal)
-    settings = request.app.state.settings
-    limit = await check_rate_limit(
-        request.app.state.redis_state,
-        request.app.state.memory_limiter,
-        key=f"osa:{settings.app_env}:rl:emergency:{kiosk_id}",
-        limit=3,
-        window_seconds=60,
-        fail_closed=False,
-    )
-    if limit is not None and not limit.allowed:
-        # Staff were alerted moments ago; tell the kiosk it worked rather than failing.
-        return {"alerted": True, "repeat": True}
-    event_id = uuid7()
-    async with request.app.state.engine.begin() as connection:
-        await set_hospital_scope(connection, hospital_id)
-        try:
-            visit_id, _ = await IntakeRepository(connection, settings).create_session(
-                hospital_id=hospital_id, language="en", kiosk_id=kiosk_id
-            )
-        except LookupError as exc:
-            raise _error(
-                409, "KIOSK_NOT_READY", "Kiosk unavailable", "Ask staff to check this kiosk."
-            ) from exc
-        label = await connection.scalar(
-            text("SELECT label FROM kiosks WHERE hospital_id = :hospital_id AND id = :kiosk_id"),
-            {"hospital_id": hospital_id, "kiosk_id": kiosk_id},
-        )
-        evidence = f"Emergency button pressed at kiosk: {label or 'kiosk'}"
-        await connection.execute(
-            text(
-                "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, "
-                "evidence) VALUES (:id, :hospital_id, :visit_id, 'tile', 'EMERGENCY_BUTTON', "
-                "'urgent', :evidence)"
-            ),
-            {
-                "id": event_id,
-                "hospital_id": hospital_id,
-                "visit_id": visit_id,
-                "evidence": evidence[:240],
-            },
-        )
-        await connection.execute(
-            text(
-                "UPDATE visits SET urgency = 'urgent', "
-                "urgency_reasons = '[\"EMERGENCY_BUTTON\"]'::jsonb "
-                "WHERE hospital_id = :hospital_id AND id = :visit_id"
-            ),
-            {"hospital_id": hospital_id, "visit_id": visit_id},
-        )
-        departments = (
-            await connection.execute(
-                text(
-                    "SELECT id FROM departments WHERE hospital_id = :hospital_id "
-                    "AND is_active = true"
-                ),
-                {"hospital_id": hospital_id},
-            )
-        ).scalars().all()
-        await audit(
-            connection,
-            request,
-            hospital_id=hospital_id,
-            actor_type="kiosk",
-            actor_id=kiosk_id,
-            action="intake.emergency_button",
-            resource_type="visit",
-            resource_id=visit_id,
-        )
-    # Every department's staff screen chimes, not only the kiosk's default department.
-    await _publish_alerts(
-        request.app.state.redis_state,
-        app_env=settings.app_env,
-        hospital_id=hospital_id,
-        alerts=[
-            {
-                "type": "alert.urgent",
-                "id": str(event_id),
-                "visit_id": str(visit_id),
-                "rule_id": "EMERGENCY_BUTTON",
-                "level": "urgent",
-                "reason_en": "EMERGENCY button pressed at the kiosk. Go to the kiosk now.",
-                "evidence": evidence[:240],
-                "token_label": None,
-                "department_id": str(department_id),
-            }
-            for department_id in departments
-        ],
-    )
-    return {"alerted": True, "repeat": False}
 
 
 @router.post("/assisted-sessions", status_code=status.HTTP_201_CREATED)

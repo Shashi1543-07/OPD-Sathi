@@ -187,13 +187,6 @@ export const intake = {
     setKioskToken(response.access_token);
   },
   forgetKiosk: () => setKioskToken(null),
-  /** Emergency button: alerts every staff screen at once; no patient details needed. */
-  emergency: () =>
-    call<{ alerted: boolean }>(
-      "/intake/emergency",
-      { method: "POST" },
-      getKioskToken() ?? undefined,
-    ),
   start: async (language: Language) => {
     let response: Session & { consent: ConsentCopy };
     try {

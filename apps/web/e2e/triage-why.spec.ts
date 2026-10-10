@@ -69,34 +69,3 @@ test("staff see the triage score and every point that made it up", async ({ page
   await expect(row.getByText(/22-minute head start, never more than 45/)).toBeVisible();
   await expect(row.getByText(/AI check agrees with this level/)).toBeVisible();
 });
-
-async function activatedKiosk(page: Page) {
-  await page.route("**/healthz", (route) => route.fulfill({ json: { status: "ok" } }));
-  await page.addInitScript(() => localStorage.setItem("osa.kiosk.access", "synthetic-kiosk-token"));
-}
-
-test("the emergency button calls staff at once, with no form", async ({ page }) => {
-  await activatedKiosk(page);
-  let calls = 0;
-  await page.route("**/intake/emergency", async (route) => {
-    calls += 1;
-    expect(route.request().headers().authorization).toBe("Bearer synthetic-kiosk-token");
-    await route.fulfill({ status: 201, json: { alerted: true, repeat: false } });
-  });
-  await page.goto("/kiosk");
-  await page.getByRole("button", { name: "Emergency? Get help now" }).click();
-  await expect(page.getByRole("heading", { name: "Help is coming" })).toBeVisible();
-  await expect(page.getByText(/go to Casualty \(Emergency\) now/)).toBeVisible();
-  expect(calls).toBe(1);
-  await page.getByRole("button", { name: "Back to start" }).click();
-  await expect(page.getByRole("button", { name: "Start patient check-in" })).toBeVisible();
-});
-
-test("if the emergency alert cannot be sent, the kiosk still says what to do", async ({ page }) => {
-  await activatedKiosk(page);
-  await page.route("**/intake/emergency", (route) => route.fulfill({ status: 503, json: {} }));
-  await page.goto("/kiosk");
-  await page.getByRole("button", { name: "Emergency? Get help now" }).click();
-  await expect(page.getByRole("heading", { name: /could not be sent/ })).toBeVisible();
-  await expect(page.getByText(/shout for help and go to Casualty/)).toBeVisible();
-});

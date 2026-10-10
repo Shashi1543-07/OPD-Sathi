@@ -5306,43 +5306,7 @@
   overflow-x: auto;
 }
 
-/* Emergency button and notice (kiosk welcome and intake). */
-.emergency-entry {
-  width: min(100%, 60rem);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  border: 2px solid #fda29b;
-  border-radius: 1.25rem;
-  background: #fef3f2;
-}
-.emergency-entry p {
-  flex: 1 1 18rem;
-  margin: 0;
-  color: #7a271a;
-  font-size: 1.05rem;
-}
-.emergency-button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 4rem;
-  padding: 0 1.5rem;
-  border: 0;
-  border-radius: 999px;
-  background: #b42318;
-  color: #fff;
-  font: inherit;
-  font-size: 1.35rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-.emergency-button:hover {
-  background: #912018;
-}
+/* Shown after "Get help now" on the safety screen. */
 .emergency-notice {
   width: min(100%, 44rem);
   margin: 0 auto;

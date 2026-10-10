@@ -170,8 +170,6 @@
   "offlineConsentRequired": "Please agree before saving your check-in.",
   "offlineBack": "Back to welcome",
   "offlineProvisionalToken": "Provisional — staff must confirm your real queue token.",
-  "emergencyButton": "Emergency? Get help now",
-  "emergencyHint": "For someone unconscious, not breathing, bleeding heavily, having a fit or severe chest pain. No form needed.",
   "emergencySentTitle": "Help is coming",
   "emergencySentBody": "Staff have been alerted. Stay here with the patient.",
   "emergencyCasualty": "If the person is not breathing, unconscious or bleeding heavily, shout for help and go to Casualty (Emergency) now.",

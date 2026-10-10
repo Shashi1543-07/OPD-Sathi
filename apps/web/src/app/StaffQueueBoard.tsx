@@ -675,9 +675,7 @@ export function StaffQueueBoard() {
                     {alert.evidence && !help
                       ? alert.rule_id === "AI_TRIAGE_REVIEW" || alert.source === "llm"
                         ? ` — AI quoted: “${alert.evidence}”`
-                        : alert.rule_id === "EMERGENCY_BUTTON"
-                          ? ` — ${alert.evidence}`
-                          : ` — patient said “${alert.evidence}”`
+                        : ` — patient said “${alert.evidence}”`
                       : ""}
                   </span>
                 </div>

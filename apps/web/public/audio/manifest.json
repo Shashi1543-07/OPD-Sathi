@@ -2669,27 +2669,6 @@
       "duration_seconds": 0.12
     },
     {
-      "id": "ui.kiosk.emergencyButton",
-      "lang": "en",
-      "text_sha256": "28ab4a2cc2d54e6b8a98b25c24ac2495e12237472a75c9f681ad8e219d95885d",
-      "file": "en/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.emergencyButton",
-      "lang": "hi",
-      "text_sha256": "5c9d145e6b8c65b0517e4f676a2332ed4d6354ef5f4fa5261ba723129a5a2692",
-      "file": "hi/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.emergencyButton",
-      "lang": "mr",
-      "text_sha256": "43296572b6416ffaa9580f7c1b93ed893b71a6c02b211712e1ab35cb7860a9af",
-      "file": "mr/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
       "id": "ui.kiosk.emergencyCasualty",
       "lang": "en",
       "text_sha256": "9ed1264db20e4502a22d6088c07cad6e8b6c894387cc4ab0df1bd3d0b43773f3",
@@ -2749,27 +2728,6 @@
       "id": "ui.kiosk.emergencyFailed",
       "lang": "mr",
       "text_sha256": "a20674005c4fb76691cfe503c34c9d65f8ade594b03600e17d63ddcf3fcbdbd8",
-      "file": "mr/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.emergencyHint",
-      "lang": "en",
-      "text_sha256": "f2d4f57b599ab9b62fa14a43a32382acf65e491112fe84015b7c105318962a8c",
-      "file": "en/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.emergencyHint",
-      "lang": "hi",
-      "text_sha256": "d71fd683e982cf3646a216e077052379b1980c078ea74fff7c0081383fcaf484",
-      "file": "hi/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.emergencyHint",
-      "lang": "mr",
-      "text_sha256": "50beaf7f6bacb9f8317fde428bc69ec33d2b2e5520dc423a67b4d3631f59d6b3",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },

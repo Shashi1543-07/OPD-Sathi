@@ -314,30 +314,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/intake/emergency": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Kiosk Emergency
-         * @description Emergency button on the kiosk: alert every staff screen at once, with no form.
-         *
-         *     Someone unconscious, not breathing or bleeding heavily must not fill in a history first.
-         *     The alert brings a person to the kiosk; it gives no place in the queue, so pressing it
-         *     to skip the line does not work.
-         */
-        post: operations["kiosk_emergency_intake_emergency_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/intake/assisted-sessions": {
         parameters: {
             query?: never;
@@ -2141,28 +2117,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    kiosk_emergency_intake_emergency_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
                 };
             };
         };
