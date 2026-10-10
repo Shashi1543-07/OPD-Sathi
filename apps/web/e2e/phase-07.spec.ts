@@ -299,7 +299,7 @@ test("administrator creates a kiosk and dismisses its one-time activation code",
   await runAxe(page);
   await page.getByRole("tab", { name: "Kiosks" }).click();
   await page.getByLabel("Kiosk label").fill("Synthetic reception kiosk");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Register kiosk" }).click();
   await expect(page.getByText("synthetic-one-time-activation")).toBeVisible();
   await saveScreenshot(page, "admin-kiosk-one-time-code.png");
   await page.getByRole("button", { name: "I copied the code" }).click();

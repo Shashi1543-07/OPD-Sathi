@@ -63,7 +63,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Combine weighted daily rollups without averaging averages."""
     totals: dict[str, float] = defaultdict(float)
     languages: dict[str, int] = defaultdict(int)
-    departments: list[dict[str, Any]] = []
+    departments: dict[str, dict[str, Any]] = {}
     for row in rows:
         for key in (
             "patient_count",
@@ -84,8 +84,10 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             mix = json.loads(mix)
         for language, count in mix.items():
             languages[language] += int(count)
-        patients = int(row["patient_count"] or 0)
-        departments.append(
+        # A range has one row per department per day: add them up, never list a
+        # department twice or average its daily averages.
+        department = departments.setdefault(
+            str(row["department_id"]),
             {
                 "department_id": str(row["department_id"]),
                 "name": {
@@ -93,14 +95,26 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
                     "hi": row["name_hi"],
                     "mr": row["name_mr"],
                 },
-                "patients": patients,
-                "urgent_count": int(row["urgent_count"] or 0),
-                "average_wait_seconds": _mean(
-                    float(row["wait_seconds_total"] or 0),
-                    int(row["wait_sample_count"] or 0),
-                ),
-            }
+                "patients": 0,
+                "urgent_count": 0,
+                "wait_seconds_total": 0.0,
+                "wait_sample_count": 0,
+            },
         )
+        department["patients"] += int(row["patient_count"] or 0)
+        department["urgent_count"] += int(row["urgent_count"] or 0)
+        department["wait_seconds_total"] += float(row["wait_seconds_total"] or 0)
+        department["wait_sample_count"] += int(row["wait_sample_count"] or 0)
+    department_load = [
+        {
+            "department_id": item["department_id"],
+            "name": item["name"],
+            "patients": item["patients"],
+            "urgent_count": item["urgent_count"],
+            "average_wait_seconds": _mean(item["wait_seconds_total"], item["wait_sample_count"]),
+        }
+        for item in departments.values()
+    ]
     patients = int(totals["patient_count"])
     confirmed = int(totals["confirmed_count"])
     return {
@@ -124,7 +138,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "doctor_edit_rate_percent": round(100 * totals["doctor_edited_count"] / patients, 1)
         if patients
         else None,
-        "department_load": sorted(departments, key=lambda item: item["patients"], reverse=True),
+        "department_load": sorted(department_load, key=lambda item: item["patients"], reverse=True),
     }
 
 
@@ -150,29 +164,50 @@ async def _record_view(
 
 
 @router.get("/summary")
-async def analytics_summary(request: Request, principal: AdminPrincipal) -> dict[str, Any]:
+async def analytics_summary(
+    request: Request,
+    principal: AdminPrincipal,
+    days: Annotated[int | None, Query(ge=1, le=365)] = None,
+    department_id: UUID | None = None,
+) -> dict[str, Any]:
+    """Today's figures by default; with ``days`` the same window the timeseries uses."""
     hospital_id, actor_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
+    end_day = datetime.now(_KOLKATA).date()
+    start_day = end_day - timedelta(days=(days or 1) - 1)
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
+        meta: dict[str, Any] = {}
+        if days is not None or department_id is not None:
+            meta = {"days": days, "department_id": str(department_id) if department_id else None}
         await _record_view(
             connection,
             request,
             hospital_id=hospital_id,
             actor_id=actor_id,
             action="analytics.summary.viewed",
-            meta={},
+            meta=meta,
         )
-        rows = (
-            (
-                await connection.execute(
-                    text(_ROLLUP_DAY_SQL),
-                    {"hospital_id": hospital_id, "service_date": datetime.now(_KOLKATA).date()},
-                )
+        if days is None and department_id is None:
+            statement, params = (
+                _ROLLUP_DAY_SQL,
+                {"hospital_id": hospital_id, "service_date": end_day},
             )
-            .mappings()
-            .all()
-        )
-    return summarize([dict(row) for row in rows])
+        else:
+            statement, params = (
+                _ROLLUP_RANGE_SQL,
+                {
+                    "hospital_id": hospital_id,
+                    "start_day": start_day,
+                    "end_day": end_day,
+                    "department_id": department_id,
+                },
+            )
+        rows = (await connection.execute(text(statement), params)).mappings().all()
+    return {
+        **summarize([dict(row) for row in rows]),
+        "start_day": start_day.isoformat(),
+        "end_day": end_day.isoformat(),
+    }
 
 
 @router.get("/timeseries")
@@ -211,6 +246,7 @@ async def analytics_export(
     request: Request,
     principal: AdminPrincipal,
     days: Annotated[int, Query(ge=1, le=365)] = 30,
+    department_id: UUID | None = None,
 ) -> StreamingResponse:
     hospital_id, actor_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
     end_day = datetime.now(_KOLKATA).date()
@@ -223,7 +259,10 @@ async def analytics_export(
             hospital_id=hospital_id,
             actor_id=actor_id,
             action="analytics.csv.exported",
-            meta={"days": days},
+            meta={
+                "days": days,
+                "department_id": str(department_id) if department_id else None,
+            },
         )
 
     async def csv_rows() -> AsyncIterator[str]:
@@ -255,7 +294,7 @@ async def analytics_export(
                     "hospital_id": hospital_id,
                     "start_day": start_day,
                     "end_day": end_day,
-                    "department_id": None,
+                    "department_id": department_id,
                 },
             )
             async for row in result.mappings():

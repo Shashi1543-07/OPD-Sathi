@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 const screenshots = resolve(process.cwd(), "..", "..", "docs", "screenshots", "phase-11");
 const hospitalId = "00000000-0000-7000-8000-000000001101";
 
-test("admin analytics shows scoped trends, editable baseline, and CSV export accessibly", async ({ page }) => {
+test("admin analytics shows scoped trends, a configurable baseline, and CSV export accessibly", async ({ page }) => {
   await page.route("**/auth/refresh", (route) => route.fulfill({ json: {
     access_token: "synthetic-admin-token",
     token_type: "bearer",
@@ -19,7 +19,8 @@ test("admin analytics shows scoped trends, editable baseline, and CSV export acc
       hospital_id: hospitalId,
     },
   } }));
-  await page.route("**/analytics/summary", (route) => route.fulfill({ json: {
+  await page.route("**/admin/departments?limit=100", (route) => route.fulfill({ json: { items: [], next_cursor: null } }));
+  await page.route(/\/analytics\/summary\?days=30$/, (route) => route.fulfill({ json: {
     patients: 12,
     average_wait_seconds: 240,
     average_consult_seconds: 360,
@@ -35,12 +36,14 @@ test("admin analytics shows scoped trends, editable baseline, and CSV export acc
       urgent_count: 2,
       average_wait_seconds: 240,
     }],
+    start_day: "2026-09-08",
+    end_day: "2026-10-07",
   } }));
-  await page.route("**/analytics/timeseries?days=30", (route) => route.fulfill({ json: {
+  await page.route(/\/analytics\/timeseries\?days=30$/, (route) => route.fulfill({ json: {
     days: 30,
     items: [{ service_date: "2026-10-07", patient_count: 12 }],
   } }));
-  await page.route("**/analytics/export.csv?days=30", (route) => route.fulfill({
+  await page.route(/\/analytics\/export\.csv\?days=30$/, (route) => route.fulfill({
     status: 200,
     contentType: "text/csv",
     body: "service_date,department_en,patients\n2026-10-07,General Medicine,12\n",
@@ -48,9 +51,11 @@ test("admin analytics shows scoped trends, editable baseline, and CSV export acc
 
   await page.goto("/staff/reports");
   await expect(page.getByRole("heading", { name: "Reports" })).toBeVisible();
-  await expect(page.getByText("General Medicine")).toBeVisible();
-  await expect(page.getByRole("img", { name: "Daily patient counts for the last 30 days" })).toBeVisible();
-  await expect(page.getByLabel("Editable minutes saved per patient")).toHaveValue("3");
+  await expect(page.getByRole("rowheader", { name: "General Medicine" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Daily patient visits, Last 30 days: 12 in total" })).toBeVisible();
+  await page.getByRole("button", { name: "Configure metric" }).click();
+  await expect(page.getByLabel("Minutes saved per visit")).toHaveValue("3");
+  await page.getByRole("button", { name: "Cancel" }).click();
 
   const accessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
@@ -62,6 +67,6 @@ test("admin analytics shows scoped trends, editable baseline, and CSV export acc
   mkdirSync(screenshots, { recursive: true });
   await page.screenshot({ path: resolve(screenshots, "admin-analytics.png"), fullPage: true });
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download 30-day CSV" }).click();
+  await page.getByRole("button", { name: "Export CSV" }).click();
   expect((await download).suggestedFilename()).toBe("opd-analytics.csv");
 });
