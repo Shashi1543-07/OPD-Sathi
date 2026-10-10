@@ -4,7 +4,7 @@ COMPOSE ?= docker compose
 WEB_DIR := apps/web
 API_DIR := services/api
 
-.PHONY: up down api worker web migrate seed seed-bulk demo-seed demo-data clear-demo-data types lint fmt test test-unit test-int e2e eval eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live prompts-audio prompts-audio-check simulate-queue demo-ratelimit load load-test chaos chaos-isolated scan sbom backup restore retention retention-apply screenshots
+.PHONY: up down api worker web migrate seed seed-bulk demo-seed demo-data clear-demo-data demo-history clear-demo-history clear-bulk types lint fmt test test-unit test-int e2e eval eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live prompts-audio prompts-audio-check simulate-queue demo-ratelimit load load-test chaos chaos-isolated scan sbom backup restore retention retention-apply screenshots
 
 up:
 	$(COMPOSE) up -d postgres redis
@@ -35,6 +35,15 @@ clear-demo-data:
 
 seed-bulk:
 	cd $(API_DIR) && $(PYTHON) -m app.cli seed-bulk --visits 100000
+
+demo-history:
+	$(COMPOSE) run --rm --build api python -m app.cli seed-demo-history --days 30
+
+clear-demo-history:
+	$(COMPOSE) run --rm --build api python -m app.cli clear-demo-history
+
+clear-bulk:
+	$(COMPOSE) run --rm --build api python -m app.cli clear-bulk
 
 types:
 	$(PYTHON) $(API_DIR)/scripts/write_openapi.py

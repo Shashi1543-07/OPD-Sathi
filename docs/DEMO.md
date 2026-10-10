@@ -41,6 +41,7 @@ Recommended screen setup: kiosk in one window (full screen, F11), staff workspac
 ```powershell
 docker compose run --rm api python -m app.cli demo-kiosk --web-url http://localhost:5173   # new kiosk link
 docker compose run --rm api python -m app.cli seed-demo-data   # five sample visits for the staff screens
+docker compose run --rm api python -m app.cli seed-demo-history --days 30   # a month of finished OPD days for Reports (start-demo.ps1 already does this)
 docker compose logs -f api                                     # watch the API (AI calls log as llm_*)
 docker compose down                                            # stop
 ```

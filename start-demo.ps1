@@ -104,6 +104,9 @@ if ($LASTEXITCODE -ne 0) { throw "Migrations failed." }
 Write-Step "Preparing the demo hospital and staff accounts"
 docker compose run --rm -e DEMO_ADMIN_EMAIL=$adminEmail -e DEMO_ADMIN_PASSWORD=$adminPassword -e DEMO_STAFF_PASSWORD=$staffPassword api python -m app.cli seed-demo | Out-Host
 
+Write-Step "Adding a month of sample OPD history for Reports"
+docker compose run --rm api python -m app.cli seed-demo-history --days 30 | Out-Host
+
 Write-Step "Starting API, worker and web app"
 docker compose up -d @build api worker web
 if ($LASTEXITCODE -ne 0) { throw "Could not start the application containers." }
