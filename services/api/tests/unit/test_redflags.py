@@ -158,7 +158,9 @@ def test_rule_loader_rejects_duplicate_ids_and_incomplete_languages(tmp_path) ->
     with pytest.raises(ValueError, match="need en, hi, mr, and hinglish"):
         load_rules(path)
 
-    broken[0]["all_groups"] = [{"any": {"en": [], "hi": ["x"], "mr": ["x"], "hinglish": ["x"]}}]
+    broken[0]["all_groups"] = [
+        {"any": {"en": [], "hi": ["x"], "mr": ["x"], "hinglish": ["x"]}}
+    ]
     path.write_text(yaml.safe_dump(broken), encoding="utf-8")
     with pytest.raises(ValueError, match="phrase groups cannot be empty"):
         load_rules(path)

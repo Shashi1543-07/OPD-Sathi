@@ -35,7 +35,9 @@ def test_offline_submission_requires_consent_and_excludes_contact_details() -> N
             {**payload.model_dump(), "phone": "9876543210"}
         )
     with pytest.raises(ValidationError):
-        intake.OfflineSubmissionPayload.model_validate({**payload.model_dump(), "age": 121})
+        intake.OfflineSubmissionPayload.model_validate(
+            {**payload.model_dump(), "age": 121}
+        )
 
 
 @pytest.mark.asyncio
@@ -206,12 +208,7 @@ async def test_offline_replay_uses_regular_interview_and_idempotent_result(
     assert first["visit_id"] == second["visit_id"] == str(visit_id)
     assert len(created) == 1
     assert {row["question_id"] for row in Turns.rows} >= {
-        "chief_concern",
-        "duration",
-        "severity",
-        "past_history",
-        "medications",
-        "allergies",
+        "chief_concern", "duration", "severity", "past_history", "medications", "allergies"
     }
 
 
