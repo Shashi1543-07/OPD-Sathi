@@ -56,7 +56,8 @@ def test_evaluate_multilingual_negation(text: str, expected: set[str]) -> None:
 
 def test_tile_and_structured_conditions_are_conservative() -> None:
     flags = evaluate("", facts=PatientFacts(tile_ids=("DS_CHEST",), severity=10, age=0))
-    assert {flag.id for flag in flags} == {"RF_DS_TILE", "RF_SEVERE_PAIN"}
+    # A self-rated 10/10 is not a red flag by itself (it only adds a few triage points).
+    assert {flag.id for flag in flags} == {"RF_DS_TILE"}
     assert maximum_urgency(flags) == "urgent"
     assert {flag.id for flag in evaluate("fever", facts=PatientFacts(age=0))} == {"RF_CHILD_FEVER"}
     assert not evaluate("fever", facts=PatientFacts(age=6))

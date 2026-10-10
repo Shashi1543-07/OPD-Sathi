@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from math import ceil
 from typing import Literal
 
+from app.domain.triage.score import head_start_minutes
+
 Urgency = Literal["routine", "priority", "urgent"]
 MILLISECONDS_PER_MINUTE = 60_000
 
@@ -17,8 +19,17 @@ def queue_score(
     urgent_bonus_min: int = 360,
     priority_bonus_min: int = 45,
     vulnerable_bonus_min: int = 15,
+    acuity_score: int | None = None,
 ) -> int:
-    """Return virtual arrival time; low scores are served first."""
+    """Return virtual arrival time; low scores are served first.
+
+    With a triage score the head start grows with the score (capped), inside the band of
+    the visit's level, so a nurse's level override still decides. Urgent always goes first.
+    Visits from before triage scoring keep the fixed bonuses.
+    """
+    if acuity_score is not None and urgency in ("routine", "priority"):
+        minutes = head_start_minutes(urgency, max(0, min(100, acuity_score)))
+        return arrival_ms - minutes * MILLISECONDS_PER_MINUTE
     bonuses = {
         "routine": 0,
         "priority": priority_bonus_min,

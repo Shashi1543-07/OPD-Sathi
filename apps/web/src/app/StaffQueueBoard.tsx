@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, FileText, Hand, MoreHorizontal, RefreshCw, Users } from "lucide-react";
 import { ConnectionIndicator, UrgencyBadge } from "../components/ui";
+import { TriageWhy } from "./TriageWhy";
 import { apiSocketUrl } from "../lib/api";
 import { staffAuth } from "../lib/auth";
 import {
@@ -31,6 +32,8 @@ type StaffAlert = {
   evidence: string | null;
   reason_en?: string;
   token_label?: string | null;
+  /** "llm" marks an AI suggestion a nurse must confirm. */
+  source?: string;
 };
 type ConnectionState = "live" | "reconnecting" | "offline";
 
@@ -669,7 +672,13 @@ export function StaffQueueBoard() {
                   </strong>
                   <span>
                     {alert.reason_en ?? alert.rule_id ?? "Review this patient now."}
-                    {alert.evidence && !help ? ` — patient said “${alert.evidence}”` : ""}
+                    {alert.evidence && !help
+                      ? alert.rule_id === "AI_TRIAGE_REVIEW" || alert.source === "llm"
+                        ? ` — AI quoted: “${alert.evidence}”`
+                        : alert.rule_id === "EMERGENCY_BUTTON"
+                          ? ` — ${alert.evidence}`
+                          : ` — patient said “${alert.evidence}”`
+                      : ""}
                   </span>
                 </div>
                 <button type="button" className="qb-btn qb-btn--ghost" onClick={() => void acknowledge(alert.id)}>
@@ -737,8 +746,9 @@ export function StaffQueueBoard() {
                           <span className="qb-flag"><Hand aria-hidden="true" size={13} /> {t("patientNeedsAssistance")}</span>
                         )}
                       </div>
-                      <div>
+                      <div className="qb-urgency">
                         <UrgencyBadge level={item.urgency} />
+                        {item.triage && <TriageWhy triage={item.triage} queuedAt={item.queued_at} />}
                       </div>
                       <div className="qb-wait">{formatWait(waitMinutes(item.queued_at, now))}</div>
                       <div>

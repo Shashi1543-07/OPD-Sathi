@@ -110,14 +110,6 @@ RF_POISON_BITE:
   negative:
     - {text: "no snake bite"}
     - {text: "ordinary mosquito bite"}
-RF_SEVERE_PAIN:
-  positive:
-    - {text: "", facts: {severity: 9}}
-    - {text: "", facts: {severity: 10}}
-    - {text: "severe pain", facts: {severity: 9}}
-  negative:
-    - {text: "", facts: {severity: 8}}
-    - {text: "", facts: {severity: 0}}
 RF_HIGH_FEVER:
   positive:
     - {text: "fever 104"}

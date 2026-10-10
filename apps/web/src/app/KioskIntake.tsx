@@ -16,6 +16,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui";
+import { EmergencyNotice } from "./EmergencyNotice";
 import {
   intake,
   IntakeRequestError,
@@ -39,7 +40,15 @@ import {
 } from "../lib/voice";
 import "./intake.css";
 
-type Stage = "consent" | "identity" | "danger" | "interview" | "summary" | "done" | "help";
+type Stage =
+  | "consent"
+  | "identity"
+  | "danger"
+  | "interview"
+  | "summary"
+  | "done"
+  | "help"
+  | "emergency";
 type Answered = Question & { answer: string | number | null };
 type QueueTicket = {
   token: string;
@@ -558,6 +567,7 @@ export function KioskIntake() {
   const [turn, setTurn] = useState(0);
   const [consentGiven, setConsentGiven] = useState(stage !== "consent");
   const [quitOpen, setQuitOpen] = useState(false);
+  const [emergency, setEmergency] = useState<"sending" | "sent" | "failed">();
   const [readback, setReadback] = useState("");
   const [redFlagged, setRedFlagged] = useState(false);
   const [nurseComing, setNurseComing] = useState(false);
@@ -749,7 +759,7 @@ export function KioskIntake() {
 
   return (
     <main className="kiosk-main intake" aria-busy={busy}>
-      {stage !== "done" && stage !== "help" && (
+      {stage !== "done" && stage !== "help" && stage !== "emergency" && (
         <LanguageSwitch
           value={language}
           disabled={busy}
@@ -780,7 +790,7 @@ export function KioskIntake() {
       >
         <p>{t("quitBody")}</p>
       </ConfirmDialog>
-      <Stepper stage={stage} />
+      {stage !== "emergency" && <Stepper stage={stage} />}
       <section className="intake-card" lang={language}>
         {error && (
           <div className="intake-error" role="alert">
@@ -1023,19 +1033,40 @@ export function KioskIntake() {
                   {t("dangerNone")}
                 </button>
               ) : (
-                <button
-                  type="button"
-                  className="intake-btn intake-btn--primary"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      await intake.dangerSigns(selectedTiles);
-                      acceptInterviewResponse(await intake.nextQuestion());
-                    })
-                  }
-                >
-                  {t("dangerContinue")}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="intake-btn intake-btn--secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        await intake.dangerSigns(selectedTiles);
+                        acceptInterviewResponse(await intake.nextQuestion());
+                      })
+                    }
+                  >
+                    {t("dangerContinue")}
+                  </button>
+                  {/* A danger sign should not wait behind a questionnaire. */}
+                  <button
+                    type="button"
+                    className="intake-btn intake-btn--danger"
+                    disabled={busy}
+                    onClick={() => {
+                      setEmergency("sending");
+                      move("emergency");
+                      void intake
+                        .dangerSigns(selectedTiles)
+                        .then(() => setEmergency("sent"))
+                        .catch(() => setEmergency("failed"))
+                        // The visit stays open with its staff alert; the kiosk lets go of it
+                        // so the idle reset does not cancel it.
+                        .finally(() => intake.finish());
+                    }}
+                  >
+                    {t("dangerHelpNow")}
+                  </button>
+                </>
               )}
             </div>
           </>
@@ -1252,6 +1283,13 @@ export function KioskIntake() {
             </div>
             <p className="intake-restart no-print">{t("autoRestart", { seconds: secondsLeft })}</p>
           </div>
+        )}
+
+        {stage === "emergency" && emergency && (
+          <EmergencyNotice
+            state={emergency}
+            onDone={() => navigate("/kiosk", { replace: true })}
+          />
         )}
 
         {stage === "help" && (

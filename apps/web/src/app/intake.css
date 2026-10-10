@@ -743,6 +743,16 @@
   display: none;
 }
 
+/* Emergency: big, red, and never behind a form. */
+.intake-btn--danger {
+  background: #b42318;
+  border-color: #b42318;
+  color: #fff;
+}
+.intake-btn--danger:hover:not(:disabled) {
+  background: #912018;
+}
+
 @media print {
   .kiosk-header,
   .kiosk-footer,

@@ -31,7 +31,7 @@ async def _visit(
             await connection.execute(
                 text(
                     "SELECT id AS visit_id, hospital_id, department_id, status, urgency, "
-                    "age_years, pregnant, token_label, queued_at FROM visits "
+                    "age_years, pregnant, token_label, queued_at, acuity_score FROM visits "
                     "WHERE hospital_id = :hospital_id AND id = :visit_id"
                 ),
                 {"hospital_id": hospital_id, "visit_id": visit_id},
@@ -53,6 +53,7 @@ def _score(row: dict[str, Any], settings: Any) -> int:
         urgent_bonus_min=settings.urgent_bonus_min,
         priority_bonus_min=settings.priority_bonus_min,
         vulnerable_bonus_min=settings.vulnerable_bonus_min,
+        acuity_score=row.get("acuity_score"),
     )
 
 
@@ -185,7 +186,8 @@ async def rebuild_all(connection: AsyncConnection, client: Any, *, settings: Any
                 text(
                     "SELECT id AS visit_id, hospital_id, department_id, status, "
                     "urgency, age_years, "
-                    "pregnant, token_label, queued_at FROM visits WHERE status = 'queued' "
+                    "pregnant, token_label, queued_at, acuity_score FROM visits "
+                    "WHERE status = 'queued' "
                     "AND service_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date "
                     "ORDER BY hospital_id, "
                     "department_id, queued_at, id"

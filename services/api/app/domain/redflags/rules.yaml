@@ -165,13 +165,8 @@
         hi: [जहर पी लिया, दवा की ज्यादा मात्रा, सांप ने काटा, बिच्छू ने डंक मारा]
         mr: [विष प्यायले, औषधाचा जास्त डोस, साप चावला, विंचू चावला]
         hinglish: [zeher pi liya, dawa overdose, saanp ne kata, bichchu ne kata]
-- id: RF_SEVERE_PAIN
-  level: priority
-  status: draft_needs_clinician_review
-  reviewed_by: null
-  reason_en: The patient rated pain at 9 or 10 out of 10.
-  conditions:
-    severity_min: 9
+# The patient's own 0-10 rating is not a red flag on its own (anyone can tap 10); it is
+# counted lightly in the triage score instead (app/domain/triage/weights.yaml).
 - id: RF_HIGH_FEVER
   level: priority
   status: draft_needs_clinician_review

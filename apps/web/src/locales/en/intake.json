@@ -89,5 +89,6 @@
   "scanning": "Reading your prescription…",
   "scanFound": "We found these medicines. Please check and edit if needed.",
   "scanNone": "We could not read any medicine names. Please say or type them.",
-  "scanFailed": "Could not read the photo. Please say or type the medicine names."
+  "scanFailed": "Could not read the photo. Please say or type the medicine names.",
+  "dangerHelpNow": "Get help now (stop the questions)"
 }

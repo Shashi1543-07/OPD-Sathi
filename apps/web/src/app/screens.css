@@ -3991,6 +3991,103 @@
   display: flex;
   gap: 0.4rem;
 }
+/* Triage score and its explanation (staff only). */
+/* Each virtual row is its own stacking context; lift the one whose pop-over is open. */
+.qb-item:has(.qb-why[open]),
+.qb-item:has(.qb-more[open]) {
+  z-index: 40;
+}
+.qb-urgency {
+  display: grid;
+  justify-items: start;
+  gap: 0.25rem;
+}
+.qb-why {
+  position: relative;
+  font-size: 0.8rem;
+}
+.qb-why summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.qb-why summary::-webkit-details-marker {
+  display: none;
+}
+.qb-why-link {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.qb-why-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  width: min(26rem, 80vw);
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgb(11 37 69 / 16%);
+  color: var(--navy-900);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.qb-why-panel p {
+  margin: 0;
+}
+.qb-why-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.qb-why-total span {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+.qb-why-panel ul {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.qb-why-panel li {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr auto;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+.qb-why-panel li b {
+  color: var(--primary);
+  text-align: right;
+}
+.qb-why-panel li em {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+.qb-why-place {
+  color: var(--text-muted);
+}
+.qb-why-override,
+.qb-why-ai {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+.qb-why-ai--more_urgent {
+  color: #b42318;
+  font-weight: 700;
+}
+.qb-why-ai--none {
+  color: var(--text-dim);
+}
+
 .qb-more {
   position: relative;
 }
@@ -5207,4 +5304,68 @@
 .analytics-table-wrap {
   max-width: 100%;
   overflow-x: auto;
+}
+
+/* Emergency button and notice (kiosk welcome and intake). */
+.emergency-entry {
+  width: min(100%, 60rem);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid #fda29b;
+  border-radius: 1.25rem;
+  background: #fef3f2;
+}
+.emergency-entry p {
+  flex: 1 1 18rem;
+  margin: 0;
+  color: #7a271a;
+  font-size: 1.05rem;
+}
+.emergency-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 4rem;
+  padding: 0 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: #b42318;
+  color: #fff;
+  font: inherit;
+  font-size: 1.35rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.emergency-button:hover {
+  background: #912018;
+}
+.emergency-notice {
+  width: min(100%, 44rem);
+  margin: 0 auto;
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-6);
+  border: 3px solid #b42318;
+  border-radius: 1.5rem;
+  background: #fef3f2;
+  color: #7a271a;
+  text-align: center;
+}
+.emergency-notice h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3rem);
+  color: #b42318;
+}
+.emergency-notice p {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.5;
+}
+.emergency-casualty {
+  font-weight: 700;
 }

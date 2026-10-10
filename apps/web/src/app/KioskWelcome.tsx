@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
+import { Siren } from "lucide-react";
 import { LanguageSelector } from "../components/ui";
+import { EmergencyNotice } from "./EmergencyNotice";
 import { intake } from "../lib/intake";
 import { useLanguageStore } from "../languageStore";
 
@@ -52,6 +54,15 @@ export function KioskWelcome() {
     }
   };
 
+  const [emergency, setEmergency] = useState<"sending" | "sent" | "failed">();
+  const callEmergency = () => {
+    setEmergency("sending");
+    intake
+      .emergency()
+      .then(() => setEmergency("sent"))
+      .catch(() => setEmergency("failed"));
+  };
+
   const start = async () => {
     setBusy(true);
     setError("");
@@ -66,8 +77,29 @@ export function KioskWelcome() {
     }
   };
 
+  if (emergency) {
+    return (
+      <main className="kiosk-main">
+        <EmergencyNotice state={emergency} onDone={() => setEmergency(undefined)} />
+      </main>
+    );
+  }
+
   return (
     <main className="kiosk-main">
+      {activated && (
+        <section className="emergency-entry" aria-label={t("emergencyButton", { ns: "kiosk" })}>
+          <button
+            type="button"
+            className="emergency-button"
+            onClick={callEmergency}
+          >
+            <Siren aria-hidden="true" size={30} />
+            {t("emergencyButton", { ns: "kiosk" })}
+          </button>
+          <p>{t("emergencyHint", { ns: "kiosk" })}</p>
+        </section>
+      )}
       <section className="welcome-card">
         <p className="eyebrow">{t("clinicName", { ns: "kiosk" })}</p>
         <h1>{t("welcome", { ns: "common" })}</h1>

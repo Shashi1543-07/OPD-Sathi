@@ -20,11 +20,13 @@ from app.ai.providers.tts.base import pad_with_silence
 from app.ai.question_choice import select_question_id
 from app.ai.readback import build_readback, build_readback_from_answers
 from app.ai.redflag_opinion import combine_redflag_opinions, second_opinion_flags
+from app.ai.triage_review import review_triage
 from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
 from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.ids import uuid7
+from app.core.ratelimit import check_rate_limit
 from app.core.security import issue_access_token
 from app.db.repositories import (
     CaseSheetRepository,
@@ -58,9 +60,10 @@ from app.domain.interview.engine import (
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
 from app.domain.queue.tokens import create_status_token, status_token_digest
-from app.domain.redflags.engine import PatientFacts, RedFlag, evaluate, maximum_urgency
+from app.domain.redflags.engine import PatientFacts, RedFlag, evaluate
 from app.domain.routing.engine import Route
 from app.domain.routing.engine import route as route_department
+from app.domain.triage.score import assess, head_start_minutes, higher, option_flags
 
 router = APIRouter(prefix="/intake", tags=["intake"])
 _AI_LOGGER = structlog.get_logger(__name__)
@@ -74,6 +77,8 @@ _FOLLOWUP_WAIT_SECONDS = 1.5
 # AI follow-ups are drafted once the patient has said what the problem is and since when,
 # so the model sees an overview while the patient answers the next few bank questions.
 _FOLLOWUP_TRIGGER = "duration"
+# Parts of a visit's triage record that a re-score must not erase.
+_ACUITY_KEPT = ("override", "ai_review")
 _FOLLOWUP_BASIS = ("chief_concern", "duration")
 _DANGER_TILE_RULE_IDS = {
     "chest_pain": "DS_CHEST",
@@ -221,7 +226,7 @@ async def _evaluate_visit(
             await connection.execute(
                 text(
                     "SELECT v.age_years, v.pregnant, v.department_id, v.status, v.urgency, "
-                    "v.token_label, v.language, "
+                    "v.token_label, v.language, v.acuity_score, v.acuity, "
                     "v.urgency_reasons, p.sex FROM visits v JOIN patients p "
                     "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
                     "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
@@ -277,6 +282,7 @@ async def _evaluate_visit(
                 transcript=text_answer,
                 language=str(row.get("language", "en")),
                 session_id=str(visit_id),
+                facts=facts,
             )
         )
         if include_department:
@@ -329,6 +335,10 @@ async def _evaluate_visit(
             sex=row["sex"],
             pregnant=row["pregnant"],
         )
+    # A tapped answer that matches a red-flag rule counts the same in every language.
+    known = {flag.id for flag in flags}
+    flags = [*flags, *(flag for flag in option_flags(answers) if flag.id not in known)]
+    assessment = assess(flags, answers, age=row["age_years"], pregnant=row["pregnant"])
     existing = set(
         (
             await connection.execute(
@@ -374,26 +384,50 @@ async def _evaluate_visit(
                     "visit_id": str(visit_id),
                     "rule_id": flag.id,
                     "level": flag.level,
-                    "reason_en": flag.reason_en,
+                    "reason_en": (
+                        f"AI suggests (please confirm): {flag.reason_en}"
+                        if flag.source == "llm"
+                        else flag.reason_en
+                    ),
                     "evidence": flag.evidence,
                     "token_label": row["token_label"],
+                    "source": flag.source,
                 }
             )
-    urgency = maximum_urgency(flags)
-    urgency = max((row["urgency"], urgency), key=("routine", "priority", "urgent").index)
+    # Neither the level nor the score falls on its own once raised (safety first); staff
+    # can lower them with a recorded reason.
+    urgency = higher(row["urgency"], assessment.level)
+    previous_score = row.get("acuity_score")
+    acuity_score = previous_score
+    acuity = row.get("acuity") if isinstance(row.get("acuity"), dict) else None
+    if previous_score is None or assessment.score >= previous_score:
+        acuity_score = assessment.score
+        kept = {key: value for key, value in (acuity or {}).items() if key in _ACUITY_KEPT}
+        acuity = {**assessment.as_dict(), **kept}
+    if acuity is not None and acuity_score is not None:
+        acuity["level"] = urgency
+        # Urgent goes to the front; otherwise the head start shown is the one applied.
+        acuity["head_start_min"] = (
+            None if urgency == "urgent" else head_start_minutes(urgency, acuity_score)
+        )
     await connection.execute(
         text(
-            "UPDATE visits SET urgency = :urgency, urgency_reasons = CAST(:reasons AS jsonb) "
+            "UPDATE visits SET urgency = :urgency, urgency_reasons = CAST(:reasons AS jsonb), "
+            "acuity_score = :acuity_score, acuity = CAST(:acuity AS jsonb) "
             "WHERE hospital_id = :hospital_id AND id = :visit_id"
         ),
         {
             "urgency": urgency,
             "reasons": json.dumps(sorted(reason_ids)),
+            "acuity_score": acuity_score,
+            "acuity": json.dumps(acuity) if acuity is not None else None,
             "hospital_id": hospital_id,
             "visit_id": visit_id,
         },
     )
-    if row["status"] == "queued" and urgency != row["urgency"]:
+    if row["status"] == "queued" and (
+        urgency != row["urgency"] or acuity_score != previous_score
+    ):
         await connection.execute(
             text(
                 "INSERT INTO outbox (id, hospital_id, topic, payload) VALUES "
@@ -845,6 +879,109 @@ async def create_session(
     }
 
 
+@router.post("/emergency", status_code=status.HTTP_201_CREATED)
+async def kiosk_emergency(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_kiosk())],
+) -> dict[str, Any]:
+    """Emergency button on the kiosk: alert every staff screen at once, with no form.
+
+    Someone unconscious, not breathing or bleeding heavily must not fill in a history first.
+    The alert brings a person to the kiosk; it gives no place in the queue, so pressing it
+    to skip the line does not work.
+    """
+    hospital_id, kiosk_id = _identity(principal)
+    settings = request.app.state.settings
+    limit = await check_rate_limit(
+        request.app.state.redis_state,
+        request.app.state.memory_limiter,
+        key=f"osa:{settings.app_env}:rl:emergency:{kiosk_id}",
+        limit=3,
+        window_seconds=60,
+        fail_closed=False,
+    )
+    if limit is not None and not limit.allowed:
+        # Staff were alerted moments ago; tell the kiosk it worked rather than failing.
+        return {"alerted": True, "repeat": True}
+    event_id = uuid7()
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        try:
+            visit_id, _ = await IntakeRepository(connection, settings).create_session(
+                hospital_id=hospital_id, language="en", kiosk_id=kiosk_id
+            )
+        except LookupError as exc:
+            raise _error(
+                409, "KIOSK_NOT_READY", "Kiosk unavailable", "Ask staff to check this kiosk."
+            ) from exc
+        label = await connection.scalar(
+            text("SELECT label FROM kiosks WHERE hospital_id = :hospital_id AND id = :kiosk_id"),
+            {"hospital_id": hospital_id, "kiosk_id": kiosk_id},
+        )
+        evidence = f"Emergency button pressed at kiosk: {label or 'kiosk'}"
+        await connection.execute(
+            text(
+                "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, "
+                "evidence) VALUES (:id, :hospital_id, :visit_id, 'tile', 'EMERGENCY_BUTTON', "
+                "'urgent', :evidence)"
+            ),
+            {
+                "id": event_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "evidence": evidence[:240],
+            },
+        )
+        await connection.execute(
+            text(
+                "UPDATE visits SET urgency = 'urgent', "
+                "urgency_reasons = '[\"EMERGENCY_BUTTON\"]'::jsonb "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        departments = (
+            await connection.execute(
+                text(
+                    "SELECT id FROM departments WHERE hospital_id = :hospital_id "
+                    "AND is_active = true"
+                ),
+                {"hospital_id": hospital_id},
+            )
+        ).scalars().all()
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="kiosk",
+            actor_id=kiosk_id,
+            action="intake.emergency_button",
+            resource_type="visit",
+            resource_id=visit_id,
+        )
+    # Every department's staff screen chimes, not only the kiosk's default department.
+    await _publish_alerts(
+        request.app.state.redis_state,
+        app_env=settings.app_env,
+        hospital_id=hospital_id,
+        alerts=[
+            {
+                "type": "alert.urgent",
+                "id": str(event_id),
+                "visit_id": str(visit_id),
+                "rule_id": "EMERGENCY_BUTTON",
+                "level": "urgent",
+                "reason_en": "EMERGENCY button pressed at the kiosk. Go to the kiosk now.",
+                "evidence": evidence[:240],
+                "token_label": None,
+                "department_id": str(department_id),
+            }
+            for department_id in departments
+        ],
+    )
+    return {"alerted": True, "repeat": False}
+
+
 @router.post("/assisted-sessions", status_code=status.HTTP_201_CREATED)
 async def create_assisted_session(
     payload: CreateAssistedSessionPayload,
@@ -1160,6 +1297,141 @@ async def save_danger_signs(
 
 def _followup_key(hospital_id: UUID, visit_id: UUID) -> str:
     return f"{_session_key(hospital_id, visit_id)}:followups"
+
+
+def _schedule_triage_review(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, interview_state: InterviewState
+) -> None:
+    """Have the model double-check the triage level after check-in, off the patient's path."""
+    task = asyncio.create_task(
+        _run_triage_review(
+            request, hospital_id=hospital_id, visit_id=visit_id, interview_state=interview_state
+        )
+    )
+    tasks: set[asyncio.Task[None]] = request.app.state.llm_background_tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+
+
+async def _run_triage_review(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, interview_state: InterviewState
+) -> None:
+    try:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT v.acuity, v.age_years, v.pregnant, v.department_id, "
+                            "v.token_label, p.sex FROM visits v JOIN patients p "
+                            "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
+                            "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                        ),
+                        {"hospital_id": hospital_id, "visit_id": visit_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        if row is None or not isinstance(row["acuity"], dict):
+            return
+        answers = []
+        for question_id in interview_state.asked:
+            value = interview_state.answers.get(question_id)
+            if value is None:
+                continue
+            question = question_for(interview_state, question_id)
+            answer = question.english(value) if isinstance(value, str) else f"{value}/10"
+            answers.append({"question": question.prompt["en"], "answer": answer})
+        review = await review_triage(
+            request.app.state.llm_provider,
+            age=row["age_years"],
+            sex=row["sex"],
+            pregnant=row["pregnant"],
+            answers=answers,
+            danger_signs=[
+                DANGER_TILES[tile]["en"]
+                for tile in interview_state.red_flag_ids
+                if tile in DANGER_TILES
+            ],
+            acuity=row["acuity"],
+            session_id=str(visit_id),
+        )
+        if review is None:
+            return
+        alerts: list[dict[str, Any]] = []
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            await connection.execute(
+                text(
+                    "UPDATE visits SET acuity = coalesce(acuity, '{}'::jsonb) || "
+                    "jsonb_build_object('ai_review', CAST(:review AS jsonb)) "
+                    "WHERE hospital_id = :hospital_id AND id = :visit_id"
+                ),
+                {"review": json.dumps(review), "hospital_id": hospital_id, "visit_id": visit_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO outbox (id, hospital_id, topic, payload) VALUES "
+                    "(:id, :hospital_id, 'queue.changed', CAST(:payload AS jsonb))"
+                ),
+                {
+                    "id": uuid7(),
+                    "hospital_id": hospital_id,
+                    "payload": json.dumps(
+                        {
+                            "op": "upsert",
+                            "visit_id": str(visit_id),
+                            "department_id": str(row["department_id"]),
+                        }
+                    ),
+                },
+            )
+            if review["verdict"] == "more_urgent":
+                # A nurse decides; the AI never reorders the queue by itself.
+                event_id = uuid7()
+                evidence = review["reason_en"] or "AI review suggests checking this patient."
+                inserted = await connection.scalar(
+                    text(
+                        "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, "
+                        "rule_id, level, evidence) VALUES (:id, :hospital_id, :visit_id, "
+                        "'llm', 'AI_TRIAGE_REVIEW', 'priority', :evidence) "
+                        "ON CONFLICT (hospital_id, visit_id, rule_id) WHERE rule_id IS NOT NULL "
+                        "DO NOTHING RETURNING id"
+                    ),
+                    {
+                        "id": event_id,
+                        "hospital_id": hospital_id,
+                        "visit_id": visit_id,
+                        "evidence": evidence[:240],
+                    },
+                )
+                if inserted is not None:
+                    alerts.append(
+                        {
+                            "type": "alert.urgent",
+                            "id": str(event_id),
+                            "visit_id": str(visit_id),
+                            "rule_id": "AI_TRIAGE_REVIEW",
+                            "level": "priority",
+                            "reason_en": "AI review suggests this patient may be more urgent.",
+                            "evidence": evidence[:240],
+                            "token_label": row["token_label"],
+                            "department_id": str(row["department_id"]),
+                        }
+                    )
+        await _publish_alerts(
+            request.app.state.redis_state,
+            app_env=request.app.state.settings.app_env,
+            hospital_id=hospital_id,
+            alerts=alerts,
+        )
+        _AI_LOGGER.info("ai_triage_review_ready", verdict=review["verdict"])
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        _AI_LOGGER.warning("ai_triage_review_failed", error_type=type(exc).__name__)
 
 
 def _followup_basis(interview_state: InterviewState) -> str:
@@ -1984,8 +2256,9 @@ async def confirm_summary(
             (
                 await connection.execute(
                     text(
-                        "SELECT urgency, urgency_reasons, age_years, pregnant, queued_at "
-                        "FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id"
+                        "SELECT urgency, urgency_reasons, age_years, pregnant, queued_at, "
+                        "acuity_score FROM visits "
+                        "WHERE hospital_id = :hospital_id AND id = :visit_id"
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},
                 )
@@ -2017,6 +2290,7 @@ async def confirm_summary(
         urgent_bonus_min=request.app.state.settings.urgent_bonus_min,
         priority_bonus_min=request.app.state.settings.priority_bonus_min,
         vulnerable_bonus_min=request.app.state.settings.vulnerable_bonus_min,
+        acuity_score=details["acuity_score"],
     )
     try:
         await QueueRedis(
@@ -2063,6 +2337,7 @@ async def confirm_summary(
                     urgent_bonus_min=request.app.state.settings.urgent_bonus_min,
                     priority_bonus_min=request.app.state.settings.priority_bonus_min,
                     vulnerable_bonus_min=request.app.state.settings.vulnerable_bonus_min,
+                    acuity_score=item.get("acuity_score"),
                 ),
                 str(item["visit_id"]),
             )
@@ -2116,6 +2391,12 @@ async def confirm_summary(
         json.dumps(state, separators=(",", ":")),
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
+    if getattr(request.app.state.llm_provider, "name", "mock") == "gemini" and (
+        await _hospital_llm_enabled(request, hospital_id)
+    ):
+        _schedule_triage_review(
+            request, hospital_id=hospital_id, visit_id=visit_id, interview_state=interview_state
+        )
     return queue_response
 
 
