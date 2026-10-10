@@ -388,7 +388,7 @@
   "configureTimeSaved": "अंदाजे वाचलेला वेळ",
   "baselineHint": "0 ते {{max}} मिनिटांदरम्यान; डीफॉल्ट {{fallback}} आहे. फक्त हा अंदाज बदलतो.",
   "baselineInvalid": "0 ते {{max}} मधील संख्या लिहा.",
-  "baselineStorage": "फक्त या ब्राउझरमध्ये जतन होते; इतर प्रशासक स्वतःची सेटिंग ठेवतात.",
+  "baselineStorage": "संपूर्ण रुग्णालयाला लागू: प्रत्येक प्रशासकाला एकच अंदाज दिसतो.",
   "saveBaseline": "जतन करा",
   "analyticsTrendTotal_one": "{{count, number}} भेट",
   "analyticsTrendTotal_other": "{{count, number}} भेटी",
@@ -452,5 +452,8 @@
   "kioskOnlineSummary_one": "{{count}} सक्रिय कियोस्कपैकी {{online}} आता ऑनलाइन",
   "kioskOnlineSummary_other": "{{count}} सक्रिय कियोस्कपैकी {{online}} आता ऑनलाइन",
   "analyticsNoSheetsEmpty": "या कालावधीत एकही केस शीट तयार झाली नाही.",
-  "analyticsDoctorEditHelp": "बदललेल्या केस शीटला केस शीट तयार झालेल्या भेटींनी भागले जाते. इतिहास घेण्यापूर्वी सोडलेले चेक-इन मोजले जात नाहीत."
+  "analyticsDoctorEditHelp": "बदललेल्या केस शीटला केस शीट तयार झालेल्या भेटींनी भागले जाते. इतिहास घेण्यापूर्वी सोडलेले चेक-इन मोजले जात नाहीत.",
+  "baselineUpdated": "शेवटचा बदल {{name}} यांनी {{when}} रोजी केला.",
+  "baselineSaveError": "सेटिंग जतन होऊ शकली नाही. कृपया पुन्हा प्रयत्न करा.",
+  "analyticsSettingsError": "वाचलेल्या वेळेची सेटिंग लोड होऊ शकली नाही."
 }

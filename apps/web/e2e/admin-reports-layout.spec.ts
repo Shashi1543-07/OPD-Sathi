@@ -67,6 +67,9 @@ async function signedInAdmin(page: Page) {
         ];
   }).flat();
   const total = days.reduce((sum, item) => sum + item.patient_count, 0);
+  await page.route("**/analytics/settings", (route) => route.fulfill({ json: {
+    minutes_saved_per_visit: 3, is_default: true, updated_at: null, updated_by_name: null,
+  } }));
   await page.route(/\/analytics\/summary\?/, (route) =>
     route.fulfill({
       json: {
