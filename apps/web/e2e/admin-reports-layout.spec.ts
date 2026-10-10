@@ -25,7 +25,13 @@ const kiosks = Array.from({ length: 12 }, (_, index) => ({
   id: `00000000-0000-7000-8000-0000000k${String(index).padStart(4, "0")}`,
   label: index < 4 ? "Reception kiosk" : `Ward kiosk ${index}`,
   is_active: index !== 2,
-  last_seen_at: null,
+  // One kiosk reported a moment ago, one two hours ago, the rest never.
+  last_seen_at:
+    index === 0
+      ? new Date(Date.now() - 30_000).toISOString()
+      : index === 1
+        ? new Date(Date.now() - 2 * 3_600_000).toISOString()
+        : null,
   created_at: "2026-10-02T09:30:00Z",
 }));
 
@@ -160,12 +166,18 @@ test("settings keeps the heading and tabs in place while long lists scroll insid
     await page.setViewportSize({ width: 1440, height: 900 });
   }
 
-  // Kiosks with the same name are told apart by their ID; connection is never guessed.
+  // Kiosks with the same name are told apart by their ID; "online" comes only from the
+  // kiosk's own recent heartbeat, never from the account being active.
   await page.getByRole("tab", { name: "Kiosks" }).click();
   const kioskList = page.getByRole("region", { name: "Registration kiosks list" });
   await expect(kioskList.getByText("Reception kiosk")).toHaveCount(4);
   await expect(kioskList.getByText("ID …000k0000")).toBeVisible();
-  await expect(kioskList.getByText("Not reported").first()).toBeVisible();
+  await expect(page.getByText("1 of 11 active kiosks online now")).toBeVisible();
+  await expect(kioskList.getByText("Online", { exact: true })).toHaveCount(1);
+  await expect(kioskList.getByText("Offline", { exact: true })).toHaveCount(1);
+  await expect(kioskList.getByText("Last seen 2 hours ago")).toBeVisible();
+  await expect(kioskList.getByText("Turned off", { exact: true })).toHaveCount(1);
+  await expect(kioskList.getByText("Not seen yet", { exact: true })).toHaveCount(9);
 
   const result = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

@@ -53,6 +53,20 @@ export function KioskShell() {
     );
   }, [location.search, navigate, setLanguage]);
 
+  // A small ping each minute while the kiosk is on screen, so staff can see it is online.
+  useEffect(() => {
+    const beat = () => {
+      if (document.visibilityState === "visible") void intake.heartbeat();
+    };
+    beat();
+    const timer = window.setInterval(beat, 60_000);
+    document.addEventListener("visibilitychange", beat);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", beat);
+    };
+  }, []);
+
   useEffect(() => {
     let disposed = false;
     const checkHealth = async () => {

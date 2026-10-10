@@ -442,5 +442,13 @@
   "confirmDeactivateOther": "You can activate it again at any time.",
   "adminResults": "{{title}} list",
   "aboutMetric": "About {{metric}}",
-  "prefixColumn": "Token prefix"
+  "prefixColumn": "Token prefix",
+  "connectionColumn": "Connection",
+  "kioskConn_online": "Online",
+  "kioskConn_offline": "Offline",
+  "kioskConn_unseen": "Not seen yet",
+  "kioskConn_off": "Turned off",
+  "kioskLastSeenAt": "Last seen {{when}}",
+  "kioskOnlineSummary_one": "{{online}} of {{count}} active kiosk online now",
+  "kioskOnlineSummary_other": "{{online}} of {{count}} active kiosks online now"
 }

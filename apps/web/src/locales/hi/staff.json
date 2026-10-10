@@ -442,5 +442,13 @@
   "confirmDeactivateOther": "आप इसे कभी भी फिर सक्रिय कर सकते हैं।",
   "adminResults": "{{title}} सूची",
   "aboutMetric": "{{metric}} के बारे में",
-  "prefixColumn": "टोकन प्रीफ़िक्स"
+  "prefixColumn": "टोकन प्रीफ़िक्स",
+  "connectionColumn": "कनेक्शन",
+  "kioskConn_online": "ऑनलाइन",
+  "kioskConn_offline": "ऑफ़लाइन",
+  "kioskConn_unseen": "अभी तक नहीं दिखा",
+  "kioskConn_off": "बंद किया गया",
+  "kioskLastSeenAt": "आख़िरी बार {{when}} दिखा",
+  "kioskOnlineSummary_one": "{{count}} सक्रिय कियोस्क में से {{online}} अभी ऑनलाइन",
+  "kioskOnlineSummary_other": "{{count}} सक्रिय कियोस्क में से {{online}} अभी ऑनलाइन"
 }

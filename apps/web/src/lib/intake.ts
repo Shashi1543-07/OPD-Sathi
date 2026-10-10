@@ -187,6 +187,16 @@ export const intake = {
     setKioskToken(response.access_token);
   },
   forgetKiosk: () => setKioskToken(null),
+  /** Tells the server this kiosk is switched on, so administrators can see it online. */
+  heartbeat: async () => {
+    const token = getKioskToken();
+    if (!token) return;
+    try {
+      await call<{ active: boolean }>("/kiosks/heartbeat", { method: "POST" }, token);
+    } catch {
+      // Offline or briefly unreachable: the next beat will report it.
+    }
+  },
   start: async (language: Language) => {
     let response: Session & { consent: ConsentCopy };
     try {

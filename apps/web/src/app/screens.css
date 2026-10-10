@@ -7715,3 +7715,55 @@
   line-height: 1.15;
   margin: 0;
 }
+
+/* Kiosk connection: online only when the kiosk itself reported in the last few minutes. */
+.adm-connection {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: start;
+}
+.adm-connection .adm-muted {
+  font-size: var(--font-size-xs);
+}
+.adm-conn {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  white-space: nowrap;
+}
+.adm-conn::before {
+  border-radius: 999px;
+  content: "";
+  height: 0.5rem;
+  width: 0.5rem;
+}
+.adm-conn--online {
+  background: var(--routine-tint);
+  color: var(--routine-ink);
+}
+.adm-conn--online::before {
+  background: #16a34a;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 25%, transparent);
+}
+.adm-conn--offline {
+  background: var(--priority-tint);
+  color: var(--priority-ink);
+}
+.adm-conn--offline::before {
+  background: currentColor;
+}
+.adm-conn--unseen,
+.adm-conn--off {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+.adm-conn--unseen::before {
+  border: 1.5px solid currentColor;
+}
+.adm-conn--off::before {
+  background: currentColor;
+}
