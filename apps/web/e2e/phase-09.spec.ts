@@ -78,6 +78,7 @@ test("staff case sheet shows source, confidence and AI assistance accessibly", a
   );
 
   await page.goto(`/staff/consultations?visit_id=${visitId}&status=called`);
+  await page.getByRole("tab", { name: "Patient history" }).click();
   await expect(page.getByText("Patient voice")).toBeVisible();
   await expect(page.getByText("91%")).toBeVisible();
   await expect(page.getByText("AI-assisted")).toBeVisible();

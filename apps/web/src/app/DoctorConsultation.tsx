@@ -1,27 +1,47 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
+import { flushSync } from "react-dom";
+import { Link, useBlocker, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   ClipboardList,
+  Clock3,
   Download,
   FileText,
   Hand,
+  History,
+  Info,
+  Keyboard,
+  Languages,
   Megaphone,
   MessageSquareText,
   Mic,
+  MoreHorizontal,
   Pencil,
   Play,
   Printer,
+  RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Stethoscope,
   UserRound,
 } from "lucide-react";
 import type { components } from "../lib/api-types";
 import { staffAuth } from "../lib/auth";
-import { ConfidenceChip } from "../components/ui";
-import { ConsultPatientRail } from "./ConsultPatientRail";
+import { ConfidenceChip, Popover } from "../components/ui";
+import { ConsultPatientRailView } from "./ConsultPatientRail";
+import { useConsultQueue } from "./consultQueue";
 import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
 import type { Triage } from "./queueBoardModel";
 import { TriageWhy } from "./TriageWhy";
@@ -66,8 +86,47 @@ type CaseSheetResult = {
   confirmed_at: string | null;
   patient?: PatientContext | null;
 };
+type Draft = { path: string; value: string; initial: string; label: string };
+type Tab = "overview" | "history" | "transcript" | "notes";
+type StepState = "done" | "active" | "next" | "upcoming";
 
 const emptyText = "—";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "tabOverview" },
+  { id: "history", label: "tabHistory" },
+  { id: "transcript", label: "tabTranscript" },
+  { id: "notes", label: "tabNotes" },
+];
+const STAFF_SOURCES = new Set(["doctor", "nurse"]);
+/** Case-sheet paths to field labels, for the list of staff edits. */
+const PATH_LABELS: [RegExp, string][] = [
+  [/^\/chief_complaint/, "chiefComplaint"],
+  [/^\/hpi\/onset/, "onsetDuration"],
+  [/^\/hpi\/severity/, "severity"],
+  [/^\/hpi\/location/, "site"],
+  [/^\/hpi\/character/, "character"],
+  [/^\/hpi\/timing/, "timing"],
+  [/^\/hpi\/associated_symptoms/, "associatedSymptoms"],
+  [/^\/hpi\/pertinent_negatives/, "negatives"],
+  [/^\/hpi\/aggravating/, "aggravating"],
+  [/^\/hpi\/relieving/, "relieving"],
+  [/^\/past_history\/conditions/, "pastHistory"],
+  [/^\/past_history\/surgeries/, "pastSurgery"],
+  [/^\/medications/, "medications"],
+  [/^\/allergies/, "allergies"],
+  [/^\/family_history/, "familyHistory"],
+  [/^\/social\/tobacco/, "tobacco"],
+  [/^\/social\/alcohol/, "alcohol"],
+];
+/** Where each visit status sits on the call → consult → complete path. */
+const WORKFLOW: Record<string, StepState[]> = {
+  queued: ["next", "upcoming", "upcoming"],
+  called: ["done", "next", "upcoming"],
+  in_consult: ["done", "active", "next"],
+  done: ["done", "done", "done"],
+};
+
+const visitParam = (search: string) => new URLSearchParams(search).get("visit_id");
 
 export function DoctorConsultation() {
   const { t, i18n } = useTranslation("staff");
@@ -75,6 +134,7 @@ export function DoctorConsultation() {
   const navigate = useNavigate();
   const visitId = searchParams.get("visit_id");
   const routeStatus = searchParams.get("status");
+  const queue = useConsultQueue(visitId);
   const [actionState, setActionState] = useState<{
     visitId: string;
     status: string;
@@ -85,11 +145,49 @@ export function DoctorConsultation() {
   const [transcript, setTranscript] = useState<TranscriptTurn[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [draft, setDraft] = useState<{ path: string; value: string }>();
+  const [draft, setDraft] = useState<Draft>();
   const [saving, setSaving] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [conflict, setConflict] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  // The section each patient was left on; a patient not opened yet starts on Overview.
+  const [tabs, setTabs] = useState<Record<string, Tab>>({});
+  const tab: Tab = (visitId && tabs[visitId]) || "overview";
   const firstEditRef = useRef<HTMLButtonElement>(null);
+  const focusEditPending = useRef(false);
+  const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const baseId = useId();
+
+  // An edit belongs to one patient: never carry it over to the next one.
+  const [draftVisit, setDraftVisit] = useState(visitId);
+  if (draftVisit !== visitId) {
+    setDraftVisit(visitId);
+    setDraft(undefined);
+    setConflict(false);
+  }
+  const dirty = Boolean(draft && draft.value !== draft.initial);
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      dirty &&
+      (currentLocation.pathname !== nextLocation.pathname ||
+        visitParam(currentLocation.search) !== visitParam(nextLocation.search)),
+  );
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const openTab = useCallback(
+    (next: Tab) => {
+      if (!visitId) return;
+      setTabs((current) => ({ ...current, [visitId]: next }));
+    },
+    [visitId],
+  );
 
   const load = useCallback(async (): Promise<CaseSheetResult | undefined> => {
     if (!visitId) {
@@ -137,6 +235,22 @@ export function DoctorConsultation() {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  // Printing always produces the full case sheet, whichever section is on screen.
+  useEffect(() => {
+    const before = () => flushSync(() => setPrinting(true));
+    const after = () => setPrinting(false);
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, []);
+  const printSheet = useCallback(() => {
+    flushSync(() => setPrinting(true));
+    window.print();
+  }, []);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.altKey || event.ctrlKey || event.metaKey) return;
@@ -147,13 +261,28 @@ export function DoctorConsultation() {
           ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
       )
         return;
-      if (event.key.toLowerCase() === "n") navigate("/staff/queue");
-      if (event.key.toLowerCase() === "e") firstEditRef.current?.focus();
-      if (event.key.toLowerCase() === "p") window.print();
+      const key = event.key.toLowerCase();
+      if (key === "n") navigate("/staff/queue");
+      if (key === "e") {
+        if (firstEditRef.current) firstEditRef.current.focus();
+        else {
+          focusEditPending.current = true;
+          openTab("history");
+        }
+      }
+      if (key === "p") printSheet();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigate]);
+  }, [navigate, openTab, printSheet]);
+
+  // "E" from another section opens Patient history; focus its first edit once it is drawn.
+  useEffect(() => {
+    if (focusEditPending.current && firstEditRef.current) {
+      focusEditPending.current = false;
+      firstEditRef.current.focus();
+    }
+  });
 
   async function saveEdit(versionOverride?: number) {
     if (!visitId || !sheet || !draft) return;
@@ -225,6 +354,7 @@ export function DoctorConsultation() {
         status:
           action === "call" ? "called" : action === "start" ? "in_consult" : "done",
       });
+      queue.reload();
       if (action === "complete") navigate("/staff/consultations");
     } catch (reason) {
       setError(
@@ -296,7 +426,7 @@ export function DoctorConsultation() {
                   aria-label={label}
                   value={draft.value}
                   onChange={(event) =>
-                    setDraft({ path, value: event.target.value })
+                    setDraft({ ...draft, value: event.target.value })
                   }
                 />
               ) : (
@@ -308,9 +438,10 @@ export function DoctorConsultation() {
                 ref={index === 0 ? firstEditRef : undefined}
                 type="button"
                 className="cx-edit"
-                onClick={() =>
-                  setDraft({ path, value: text === emptyText ? "" : text })
-                }
+                onClick={() => {
+                  const initial = text === emptyText ? "" : text;
+                  setDraft({ path, value: initial, initial, label });
+                }}
               >
                 <Pencil aria-hidden="true" size={13} />
                 {t("editField")}
@@ -328,6 +459,12 @@ export function DoctorConsultation() {
                 <SourceIcon aria-hidden="true" size={13} />
                 <span>{t(`source_${metadata.source}`)}</span>
               </span>
+              {STAFF_SOURCES.has(metadata.source) && (
+                <span className="cx-verified-chip">
+                  <ShieldCheck aria-hidden="true" size={12} />
+                  {t("staffVerified")}
+                </span>
+              )}
               {metadata.ai_assisted && <ConfidenceChip value={metadata.confidence} />}
               {metadata.ai_assisted && (
                 <span className="cx-ai-chip">{t("aiAssisted")}</span>
@@ -354,66 +491,106 @@ export function DoctorConsultation() {
     );
   }
 
-  const rail = <ConsultPatientRail activeVisitId={visitId} />;
-
-  if (!visitId) {
-    return (
-      <div className="cx">
-        {rail}
-        <section className="doctor-consult cx-main">
-          <div className="cx-placeholder">
-            <ClipboardList aria-hidden="true" size={40} />
-            <h2>{t("consultations")}</h2>
-            <p role="status">{t("chooseVisit")}</p>
-            <ul>
-              <li>{t("consultHintSheet")}</li>
-              <li>{t("consultHintEdit")}</li>
-              <li>{t("consultHintPdf")}</li>
-            </ul>
-            <Link className="cx-btn" to="/staff/queue">
-              {t("backToQueue")}
-            </Link>
-          </div>
+  const rail = <ConsultPatientRailView activeVisitId={visitId} queue={queue} />;
+  const leaveDialog =
+    blocker.state === "blocked" ? (
+      <div className="consult-dialog-backdrop">
+        <section
+          className="consult-conflict"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={`${baseId}-leave`}
+        >
+          <h3 id={`${baseId}-leave`}>{t("leaveTitle")}</h3>
+          <p>{t("leaveMessage", { field: draft?.label ?? "" })}</p>
+          <button type="button" onClick={() => blocker.reset()}>
+            {t("keepEditing")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(undefined);
+              blocker.proceed();
+            }}
+          >
+            {t("discardAndLeave")}
+          </button>
         </section>
       </div>
+    ) : null;
+  const shell = (content: ReactNode) => (
+    <div className="cx">
+      <div className="cx-layout">
+        {rail}
+        <section className="doctor-consult cx-main">{content}</section>
+      </div>
+      {leaveDialog}
+    </div>
+  );
+
+  if (!visitId) {
+    const noPatients = queue.state === "ready" && queue.items.length === 0;
+    return shell(
+      <div className="cx-empty">
+        <span className="cx-empty-icon">
+          <ClipboardList aria-hidden="true" size={28} />
+        </span>
+        <h2>{noPatients ? t("noPatientsTitle") : t("selectPatientTitle")}</h2>
+        <p role="status">{noPatients ? t("noPatientsText") : t("chooseVisit")}</p>
+        <ul className="cx-empty-hints">
+          <li>
+            <FileText aria-hidden="true" size={16} />
+            {t("consultHintSheet")}
+          </li>
+          <li>
+            <Pencil aria-hidden="true" size={16} />
+            {t("consultHintEdit")}
+          </li>
+          <li>
+            <Download aria-hidden="true" size={16} />
+            {t("consultHintPdf")}
+          </li>
+        </ul>
+        <div className="cx-empty-actions">
+          {noPatients && (
+            <button type="button" className="cx-btn" onClick={queue.reload}>
+              <RefreshCw aria-hidden="true" size={15} />
+              {t("refreshList")}
+            </button>
+          )}
+          <Link className="cx-btn" to="/staff/queue">
+            {t("backToQueue")}
+          </Link>
+        </div>
+      </div>,
     );
   }
   if (loading)
-    return (
-      <div className="cx">
-        {rail}
-        <section className="doctor-consult cx-main">
-          <p className="cx-placeholder" role="status">{t("loadingConsult")}</p>
-        </section>
-      </div>
+    return shell(
+      <p className="cx-placeholder" role="status">
+        {t("loadingConsult")}
+      </p>,
     );
   if (error && !sheet)
-    return (
-      <div className="cx">
-        {rail}
-        <section className="doctor-consult cx-main">
-          <div className="cx-placeholder">
-            <p role="alert">{error}</p>
-            <button type="button" className="cx-btn" onClick={() => void load()}>
-              {t("retry")}
-            </button>
-          </div>
-        </section>
-      </div>
+    return shell(
+      <div className="cx-placeholder">
+        <p role="alert">{error}</p>
+        <button type="button" className="cx-btn" onClick={() => void load()}>
+          {t("retry")}
+        </button>
+      </div>,
     );
   if (!sheet)
-    return (
-      <div className="cx">
-        {rail}
-        <section className="doctor-consult cx-main">
-          <p className="cx-placeholder" role="status">{t("caseSheetUnavailable")}</p>
-        </section>
-      </div>
+    return shell(
+      <p className="cx-placeholder" role="status">
+        {t("caseSheetUnavailable")}
+      </p>,
     );
 
   const data = sheet.case_sheet;
   const patient = sheet.patient;
   const hpi = data.hpi;
+  const fieldMeta = data.field_meta ?? {};
   const pair = (
     label: string,
     value: TextPair | null | undefined,
@@ -534,228 +711,635 @@ export function DoctorConsultation() {
   };
   const ModeIcon = (mode: string) =>
     mode === "voice" ? Mic : mode === "touch" ? Hand : MessageSquareText;
+  const aiFieldsPending = Object.values(fieldMeta).some(
+    (meta) => meta.ai_assisted && !STAFF_SOURCES.has(meta.source),
+  );
+  const ccMeta = fieldMeta["/chief_complaint/text_en"] ?? fieldMeta["/chief_complaint"];
+  const textList = (values: unknown) =>
+    ((values as TextPair[] | undefined) ?? []).map((item) => item.text_en).filter(Boolean);
 
-  return (
-    <div className="cx">
-      {rail}
-      <section className="doctor-consult cx-main">
-        <header className={`cx-hero cx-hero--${urgency}`}>
-          <div className="cx-hero-id">
-            <span className="cx-token">{patient?.token ?? "—"}</span>
-            <div>
-              <h2>
-                {patient && typeof patient.age_years === "number"
-                  ? t("yearsShort", { age: patient.age_years })
-                  : "—"}
-                {" · "}
-                {t(`sex_${patient?.sex ?? "unknown"}`)}
-              </h2>
-              <div className="cx-hero-meta">
-                <span className={`cx-pill cx-pill--urgency-${urgency}`}>
-                  {urgency !== "routine" && <AlertTriangle aria-hidden="true" size={13} />}
-                  {t(`urgency_${urgency}`)}
+  // ---- Overview pieces -------------------------------------------------------------------
+  const redFlagCard = redFlags.length > 0 && (
+    <section className="cx-card cx-card--danger" aria-labelledby={`${baseId}-flags`}>
+      <h4 id={`${baseId}-flags`}>
+        <AlertTriangle aria-hidden="true" size={17} /> {t("redFlagsReview")}
+      </h4>
+      <ul className="cx-flags">
+        {redFlags.map((flag) => (
+          <li key={flag.id}>
+            <span className={`cx-flag-level cx-flag-level--${flag.level}`}>
+              {t(`urgency_${flag.level}`)}
+            </span>
+            <div className="cx-flag-body">
+              <span className="cx-flag-reason">{flag.reason_en ?? flag.evidence}</span>
+              {flag.reason_en && flag.evidence && DANGER_TILE_LABELS[flag.evidence] ? (
+                <span className="cx-flag-evidence">
+                  {t("safetyScreenSelected", { label: DANGER_TILE_LABELS[flag.evidence] })}
                 </span>
-                {patient?.triage && (
-                  <TriageWhy triage={patient.triage} queuedAt={patient.queued_at ?? null} />
-                )}
-                {patient?.department_name && <span>{patient.department_name}</span>}
-                {patient?.language && (
-                  <span>{t("answeredIn", { language: t(`lang_${patient.language}`) })}</span>
-                )}
-                <span>{t("consultVersion", { version: sheet.version })}</span>
-              </div>
+              ) : (
+                flag.reason_en &&
+                flag.evidence &&
+                !flag.evidence.startsWith("Structured intake answers") && (
+                  <span className="cx-flag-evidence" lang={data.language}>
+                    {t("patientWords")}: “{flag.evidence}”
+                  </span>
+                )
+              )}
+              <span className="cx-flag-source">{t(`flagSource_${flag.source}`)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="cx-card-foot no-print">
+        <p>{t("redFlagsExplain")}</p>
+        <button type="button" className="cx-link" onClick={() => openTab("transcript")}>
+          {t("reviewResponses")} <ArrowRight aria-hidden="true" size={14} />
+        </button>
+      </div>
+    </section>
+  );
+  const aiCard = data.ai_summary?.brief_en && (
+    <section className="cx-card cx-card--ai" aria-labelledby={`${baseId}-ai`}>
+      <h4 id={`${baseId}-ai`}>
+        <Sparkles aria-hidden="true" size={17} /> {t("aiBriefTitle")}
+      </h4>
+      <p>{data.ai_summary.brief_en}</p>
+      <div className="cx-card-foot">
+        <small>{t("aiBriefNote")}</small>
+        <span className="cx-verify">
+          <ShieldAlert aria-hidden="true" size={14} />
+          {t("aiNotVerified")}
+        </span>
+        <button
+          type="button"
+          className="cx-link no-print"
+          onClick={() => openTab("transcript")}
+        >
+          {t("compareOriginal")} <ArrowRight aria-hidden="true" size={14} />
+        </button>
+      </div>
+    </section>
+  );
+  const severity = typeof hpi.severity_0_10 === "number" ? hpi.severity_0_10 : null;
+  const complaintRows: [string, ReactNode][] = [
+    [
+      t("chiefComplaint"),
+      <>
+        {data.chief_complaint.text_en || emptyText}
+        <span
+          className={`cx-origin${ccMeta && STAFF_SOURCES.has(ccMeta.source) ? " is-verified" : ""}`}
+        >
+          {ccMeta && STAFF_SOURCES.has(ccMeta.source) ? t("staffVerified") : t("patientReported")}
+        </span>
+      </>,
+    ],
+  ];
+  if (hpi.onset) complaintRows.push([t("onsetDuration"), (hpi.onset as TextPair).text_en]);
+  if (severity !== null)
+    complaintRows.push([
+      t("severityReported"),
+      <span className={`cx-sev${severity >= 7 ? " is-high" : ""}`}>{severity} / 10</span>,
+    ]);
+  if (hpi.location) complaintRows.push([t("site"), (hpi.location as TextPair).text_en]);
+  const associated = textList(hpi.associated_symptoms);
+  if (associated.length) complaintRows.push([t("associatedSymptoms"), associated.join(", ")]);
+  const negatives = textList(hpi.pertinent_negatives);
+  if (negatives.length) complaintRows.push([t("negatives"), negatives.join(", ")]);
+  const complaintCard = (
+    <section className="cx-card" aria-labelledby={`${baseId}-complaint`}>
+      <div className="cx-card-head">
+        <h4 id={`${baseId}-complaint`}>{t("presentingComplaint")}</h4>
+        <button type="button" className="cx-link" onClick={() => openTab("history")}>
+          <Pencil aria-hidden="true" size={13} /> {t("editResponses")}
+        </button>
+      </div>
+      <dl className="cx-kv">
+        {complaintRows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+  const historyPoints: { label: string; text: string }[] = [
+    ...(data.past_history?.conditions ?? []).map((text) => ({ label: t("pastHistory"), text })),
+    ...(data.past_history?.surgeries ?? []).map((text) => ({ label: t("pastSurgery"), text })),
+    ...(data.medications ?? []).map((item) => ({
+      label: t("medications"),
+      text: item.dose ? `${item.name} (${item.dose})` : item.name,
+    })),
+    ...textList(data.allergies).map((text) => ({ label: t("allergies"), text })),
+    ...textList(data.family_history).map((text) => ({ label: t("familyHistory"), text })),
+    ...textList([data.social?.tobacco].filter(Boolean)).map((text) => ({
+      label: t("tobacco"),
+      text,
+    })),
+    ...textList([data.social?.alcohol].filter(Boolean)).map((text) => ({
+      label: t("alcohol"),
+      text,
+    })),
+    ...(data.women_health?.pregnant ? [{ label: t("pregnancy"), text: t("pregnantNow") }] : []),
+  ];
+  const keyHistoryCard = (
+    <section className="cx-card" aria-labelledby={`${baseId}-keyhistory`}>
+      <div className="cx-card-head">
+        <h4 id={`${baseId}-keyhistory`}>{t("keyHistory")}</h4>
+        <button type="button" className="cx-link" onClick={() => openTab("history")}>
+          {t("seeFullHistory")} <ArrowRight aria-hidden="true" size={14} />
+        </button>
+      </div>
+      {historyPoints.length ? (
+        <ul className="cx-points">
+          {historyPoints.slice(0, 5).map((point, index) => (
+            <li key={`${point.label}-${index}`}>
+              <span>{point.label}</span>
+              {point.text}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="cx-none">{t("noPastHistory")}</p>
+      )}
+      {historyPoints.length > 5 && (
+        <p className="cx-more-note">{t("moreHistoryItems", { count: historyPoints.length - 5 })}</p>
+      )}
+    </section>
+  );
+  const stepStates = visitStatus ? WORKFLOW[visitStatus] : undefined;
+  const steps = [
+    { title: t("workflowCall"), hint: t("workflowCallHint") },
+    { title: t("workflowConsult"), hint: t("workflowConsultHint") },
+    { title: t("workflowComplete"), hint: t("workflowCompleteHint") },
+  ];
+  const stepLabel: Record<StepState, string> = {
+    done: t("stepDone"),
+    active: t("stepActive"),
+    next: t("stepNext"),
+    upcoming: t("stepUpcoming"),
+  };
+  const workflowCard = (
+    <section className="cx-card" aria-labelledby={`${baseId}-workflow`}>
+      <h4 id={`${baseId}-workflow`}>{t("workflowTitle")}</h4>
+      <ol className="cx-steps">
+        {steps.map((step, index) => {
+          const state = stepStates?.[index];
+          return (
+            <li key={step.title} className={state ? `is-${state}` : undefined}>
+              <span className="cx-step-num" aria-hidden="true">
+                {state === "done" ? <CheckCircle2 size={16} /> : index + 1}
+              </span>
+              <span className="cx-step-text">
+                <strong>{step.title}</strong>
+                <small>{step.hint}</small>
+              </span>
+              {state && <span className={`cx-step-state cx-step-state--${state}`}>{stepLabel[state]}</span>}
+            </li>
+          );
+        })}
+      </ol>
+      {!stepStates && <p className="cx-none">{t("workflowUnknown")}</p>}
+      <div className="cx-card-actions">
+        <button type="button" className="cx-btn" onClick={() => openTab("transcript")}>
+          <MessageSquareText aria-hidden="true" size={15} /> {t("viewTranscript")}
+        </button>
+        <button type="button" className="cx-btn" onClick={() => openTab("notes")}>
+          <ClipboardList aria-hidden="true" size={15} /> {t("tabNotes")}
+        </button>
+      </div>
+    </section>
+  );
+
+  // ---- Sections --------------------------------------------------------------------------
+  const historyCards = (
+    <>
+      <section className="cx-card">
+        <h4>{t("presentingComplaint")}</h4>
+        <dl>
+          {field(
+            t("chiefComplaint"),
+            data.chief_complaint.text_en,
+            "/chief_complaint/text_en",
+            0,
+            true,
+            data.chief_complaint.text_original,
+            "/chief_complaint",
+          )}
+        </dl>
+      </section>
+      <section className="cx-card">
+        <h4>{t("hpiTitle")}</h4>
+        {presentFields.length ? (
+          <dl>{presentFields}</dl>
+        ) : (
+          <p className="cx-none">{t("noneRecorded")}</p>
+        )}
+      </section>
+      <section className="cx-card">
+        <h4>{t("pastTitle")}</h4>
+        {pastFields.length ? (
+          <dl>{pastFields}</dl>
+        ) : (
+          <p className="cx-none">{t("noneRecorded")}</p>
+        )}
+      </section>
+    </>
+  );
+  const staffEdits = Array.from(
+    new Map(
+      Object.entries(fieldMeta)
+        .filter(([, meta]) => STAFF_SOURCES.has(meta.source))
+        .map(([path, meta]) => {
+          const key = PATH_LABELS.find(([pattern]) => pattern.test(path))?.[1];
+          const label = key ? t(key) : path;
+          return [label, meta.source] as const;
+        }),
+    ),
+  );
+
+  let panel: ReactNode;
+  if (tab === "overview") {
+    panel = (
+      <div className="cx-overview">
+        <div className="cx-col">
+          {redFlagCard}
+          {complaintCard}
+          {keyHistoryCard}
+        </div>
+        <div className="cx-col">
+          {aiCard}
+          {workflowCard}
+        </div>
+      </div>
+    );
+  } else if (tab === "history") {
+    panel = (
+      <article className="cx-sheet">
+        <h3 className="cx-visually-hidden">{t("caseSheetTitle")}</h3>
+        <p className="cx-panel-note">
+          <Info aria-hidden="true" size={15} />
+          {t("historyLegend")}
+        </p>
+        {historyCards}
+        <p className="cx-disclaimer">{data.disclaimer}</p>
+      </article>
+    );
+  } else if (tab === "transcript") {
+    panel = (
+      <section className="cx-transcript" aria-labelledby={`${baseId}-transcript`}>
+        <div className="cx-card-head">
+          <h3 id={`${baseId}-transcript`}>{t("transcriptTitle")}</h3>
+          <button type="button" className="cx-link" onClick={() => openTab("history")}>
+            <Pencil aria-hidden="true" size={13} /> {t("editInHistory")}
+          </button>
+        </div>
+        <p className="cx-panel-note">
+          <Info aria-hidden="true" size={15} />
+          {t("transcriptNote")}
+        </p>
+        {transcript.length === 0 ? (
+          <p className="cx-none">{t("transcriptEmpty")}</p>
+        ) : (
+          <ol>
+            {transcript.map((turn) => {
+              const aiEnglish = data.ai_summary?.answers_en?.[turn.question_id];
+              const english = aiEnglish ?? turn.text_english;
+              const aiQuestion = data.followup_questions?.[turn.question_id];
+              const Icon = ModeIcon(turn.input_mode);
+              return (
+                <li key={turn.turn_index}>
+                  <div className="cx-turn-head">
+                    {aiQuestion ? (
+                      <span className="cx-turn-q">
+                        <span className="cx-ai-chip">
+                          <Sparkles aria-hidden="true" size={11} /> {t("aiFollowup")}
+                        </span>
+                        {aiQuestion}
+                      </span>
+                    ) : (
+                      <span className="cx-turn-q">{questionLabel(turn.question_id)}</span>
+                    )}
+                    <span className="cx-turn-tags">
+                      <span className="cx-mode" title={t(`inputMode_${turn.input_mode}`, turn.input_mode)}>
+                        <Icon aria-hidden="true" size={12} />
+                        {t(`inputMode_${turn.input_mode}`, turn.input_mode)}
+                      </span>
+                      {turn.input_mode === "voice" && typeof turn.stt_confidence === "number" && (
+                        <ConfidenceChip value={turn.stt_confidence} />
+                      )}
+                    </span>
+                  </div>
+                  <p className="cx-turn-answer" lang={data.language}>
+                    {turn.text_original || english || emptyText}
+                  </p>
+                  {turn.text_original && english && turn.text_original !== english && (
+                    <p className="cx-translation">
+                      <span>{aiEnglish ? t("englishAiAssisted") : t("englishTranslation")}:</span>{" "}
+                      {english}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
+    );
+  } else {
+    panel = (
+      <div className="cx-notes">
+        <section className="cx-card cx-card--info" aria-labelledby={`${baseId}-notes`}>
+          <h4 id={`${baseId}-notes`}>
+            <Info aria-hidden="true" size={16} /> {t("notesTitle")}
+          </h4>
+          <p>{t("notesUnsupported")}</p>
+          <div className="cx-card-actions">
+            <button type="button" className="cx-btn" onClick={() => openTab("history")}>
+              <Pencil aria-hidden="true" size={15} /> {t("editResponses")}
+            </button>
+          </div>
+        </section>
+        <section className="cx-card" aria-labelledby={`${baseId}-edits`}>
+          <h4 id={`${baseId}-edits`}>{t("staffEditsTitle")}</h4>
+          {staffEdits.length ? (
+            <ul className="cx-points">
+              {staffEdits.map(([label, source]) => (
+                <li key={label}>
+                  <span>{label}</span>
+                  {t(`source_${source}`)}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="cx-none">{t("staffEditsNone")}</p>
+          )}
+          <p className="cx-audit">
+            <History aria-hidden="true" size={14} />
+            {t("versionAudit", { version: sheet.version })}
+          </p>
+        </section>
+        {corrections.length > 0 && (
+          <section className="cx-card" aria-labelledby={`${baseId}-corrections`}>
+            <h4 id={`${baseId}-corrections`}>{t("patientCorrectionsTitle")}</h4>
+            <ul className="cx-points">
+              {corrections.map((correction) => (
+                <li key={correction}>{correction}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    );
+  }
+
+  function onTabKey(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    const index = TABS.findIndex((item) => item.id === tab);
+    const target =
+      event.key === "ArrowRight"
+        ? TABS[(index + 1) % TABS.length]
+        : event.key === "ArrowLeft"
+          ? TABS[(index - 1 + TABS.length) % TABS.length]
+          : event.key === "Home"
+            ? TABS[0]
+            : event.key === "End"
+              ? TABS[TABS.length - 1]
+              : undefined;
+    if (!target) return;
+    event.preventDefault();
+    openTab(target.id);
+    tabRefs.current[target.id]?.focus();
+  }
+
+  const primary =
+    visitStatus === "queued" ? (
+      <button type="button" className="cx-btn cx-btn--primary" onClick={() => void transition("call")}>
+        <Megaphone aria-hidden="true" size={15} /> {t("callPatient")}
+      </button>
+    ) : visitStatus === "called" || visitStatus === null ? (
+      <button type="button" className="cx-btn cx-btn--primary" onClick={() => void transition("start")}>
+        <Play aria-hidden="true" size={15} /> {t("startConsult")}
+      </button>
+    ) : visitStatus === "in_consult" ? (
+      <button type="button" className="cx-btn cx-btn--primary" onClick={() => void transition("complete")}>
+        <CheckCircle2 aria-hidden="true" size={15} /> {t("finishConsult")}
+      </button>
+    ) : null;
+  const statusLabel =
+    visitStatus === "done"
+      ? t("tileDone")
+      : visitStatus && WORKFLOW[visitStatus]
+        ? t(`queueStatus_${visitStatus}`)
+        : null;
+
+  return shell(
+    <>
+      <header className={`cx-head cx-head--${urgency}`}>
+        <div className="cx-head-id">
+          <span className="cx-token">{patient?.token ?? "—"}</span>
+          <div className="cx-head-text">
+            <h2>
+              {patient && typeof patient.age_years === "number"
+                ? t("yearsShort", { age: patient.age_years })
+                : "—"}
+              {" · "}
+              {t(`sex_${patient?.sex ?? "unknown"}`)}
+            </h2>
+            <div className="cx-head-meta">
+              {patient?.department_name && (
+                <span>
+                  <Stethoscope aria-hidden="true" size={14} />
+                  {patient.department_name}
+                </span>
+              )}
+              {patient?.language && (
+                <span>
+                  <Languages aria-hidden="true" size={14} />
+                  {t("answeredIn", { language: t(`lang_${patient.language}`) })}
+                </span>
+              )}
+              <span>
+                <FileText aria-hidden="true" size={14} />
+                {t("consultVersion", { version: sheet.version })}
+              </span>
+            </div>
+            <div className="cx-head-badges">
+              {statusLabel && (
+                <span className={`cx-pill cx-pill--${visitStatus}`}>{statusLabel}</span>
+              )}
+              <span className={`cx-pill cx-pill--urgency-${urgency}`}>
+                {urgency !== "routine" && <AlertTriangle aria-hidden="true" size={13} />}
+                {t(`urgency_${urgency}`)}
+              </span>
+              {patient?.triage && (
+                <TriageWhy triage={patient.triage} queuedAt={patient.queued_at ?? null} />
+              )}
             </div>
           </div>
-          <div className="cx-actions no-print">
-            {visitStatus === "queued" && (
-              <button
-                type="button"
-                className="cx-btn cx-btn--primary"
-                onClick={() => void transition("call")}
-              >
-                <Megaphone aria-hidden="true" size={15} /> {t("callPatient")}
-              </button>
-            )}
-            {(visitStatus === "called" || visitStatus === null) && (
-              <button
-                type="button"
-                className="cx-btn cx-btn--primary"
-                onClick={() => void transition("start")}
-              >
-                <Play aria-hidden="true" size={15} /> {t("startConsult")}
-              </button>
-            )}
-            {(visitStatus === "in_consult" || visitStatus === null) && (
-              <button
-                type="button"
-                className="cx-btn cx-btn--primary"
-                onClick={() => void transition("complete")}
-              >
-                <CheckCircle2 aria-hidden="true" size={15} /> {t("finishConsult")}
-              </button>
-            )}
-            <button
-              type="button"
-              className="cx-btn"
-              disabled={exportingPdf}
-              onClick={() => void exportPdf()}
-            >
-              <Download aria-hidden="true" size={15} />
+        </div>
+        <div className="cx-actions no-print">
+          <button
+            type="button"
+            className="cx-btn cx-pdf"
+            disabled={exportingPdf}
+            aria-label={exportingPdf ? t("exportingPdf") : t("exportPdf")}
+            title={t("exportPdf")}
+            onClick={() => void exportPdf()}
+          >
+            <Download aria-hidden="true" size={15} />
+            <span className="cx-label-long" aria-hidden="true">
               {exportingPdf ? t("exportingPdf") : t("exportPdf")}
-            </button>
-            <button type="button" className="cx-btn" onClick={() => window.print()}>
-              <Printer aria-hidden="true" size={15} /> {t("printCaseSheet")}
-            </button>
-          </div>
-        </header>
-
-        <div className="cx-strip no-print">
-          {sheet.confirmed_by_patient && confirmedTime ? (
-            <span className="cx-strip-ok">
-              <CheckCircle2 aria-hidden="true" size={15} />
-              <span>{t("confirmedByPatientAt", { time: confirmedTime })}</span>
-              {corrections.length > 0 && (
-                <span className="cx-strip-note">
-                  {t("correctionsRecorded", { corrections: corrections.join(", ") })}
-                </span>
-              )}
             </span>
-          ) : (
-            <span className="cx-strip-warn">{t("patientConfirmationPending")}</span>
-          )}
-          {data.patient_confirmation?.needs_assistance && (
-            <span className="cx-strip-warn">
-              <Hand aria-hidden="true" size={15} /> {t("patientNeedsAssistance")}
-            </span>
-          )}
-          {Object.values(data.field_meta ?? {}).some((meta) => meta.ai_assisted) && (
-            <span className="cx-strip-ai">
-              <Sparkles aria-hidden="true" size={14} /> {t("aiAssistedNote")}
-            </span>
-          )}
-          <span className="cx-shortcuts">{t("shortcuts")}</span>
-        </div>
-        {error && <p className="cx-error" role="alert">{error}</p>}
-
-        <div className="cx-columns">
-          <article className="cx-sheet">
-            <h3 className="cx-visually-hidden">{t("caseSheetTitle")}</h3>
-            {redFlags.length > 0 && (
-              <section className="cx-card cx-card--danger">
-                <h4>
-                  <AlertTriangle aria-hidden="true" size={17} /> {t("redFlags")}
-                </h4>
-                <ul>
-                  {redFlags.map((flag) => (
-                    <li key={flag.id}>
-                      <strong>{t(`urgency_${flag.level}`)}</strong> ·{" "}
-                      {flag.reason_en ?? flag.evidence}
-                      {flag.reason_en && flag.evidence && DANGER_TILE_LABELS[flag.evidence] ? (
-                        <span className="cx-flag-evidence">
-                          Selected on the safety screen: {DANGER_TILE_LABELS[flag.evidence]}
-                        </span>
-                      ) : (
-                        flag.reason_en &&
-                        flag.evidence &&
-                        !flag.evidence.startsWith("Structured intake answers") && (
-                          <span className="cx-flag-evidence" lang={data.language}>
-                            {t("patientWords")}: “{flag.evidence}”
-                          </span>
-                        )
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {data.ai_summary?.brief_en && (
-              <section className="cx-card cx-card--ai">
-                <h4>
-                  <Sparkles aria-hidden="true" size={17} /> {t("aiBriefTitle")}
-                </h4>
-                <p>{data.ai_summary.brief_en}</p>
-                <small>{t("aiBriefNote")}</small>
-              </section>
-            )}
-            <section className="cx-card">
-              <h4>{t("presentingComplaint")}</h4>
-              <dl>
-                {field(
-                  t("chiefComplaint"),
-                  data.chief_complaint.text_en,
-                  "/chief_complaint/text_en",
-                  0,
-                  true,
-                  data.chief_complaint.text_original,
-                  "/chief_complaint",
+            <span className="cx-label-short" aria-hidden="true">PDF</span>
+          </button>
+          {primary}
+          <Popover
+            align="end"
+            triggerClassName="cx-icon-button cx-more"
+            panelClassName="cx-menu"
+            ariaLabel={t("moreActions")}
+            label={<MoreHorizontal aria-hidden="true" size={18} />}
+          >
+            {(closeMenu) => (
+              <>
+                {visitStatus === null && (
+                  <button
+                    type="button"
+                    className="cx-menu-item"
+                    onClick={() => {
+                      closeMenu();
+                      void transition("complete");
+                    }}
+                  >
+                    <CheckCircle2 aria-hidden="true" size={15} /> {t("finishConsult")}
+                  </button>
                 )}
-              </dl>
-            </section>
-            <section className="cx-card">
-              <h4>{t("hpiTitle")}</h4>
-              {presentFields.length ? (
-                <dl>{presentFields}</dl>
-              ) : (
-                <p className="cx-none">{t("noneRecorded")}</p>
-              )}
-            </section>
-            <section className="cx-card">
-              <h4>{t("pastTitle")}</h4>
-              {pastFields.length ? (
-                <dl>{pastFields}</dl>
-              ) : (
-                <p className="cx-none">{t("noneRecorded")}</p>
-              )}
-            </section>
-            <p className="cx-disclaimer">{data.disclaimer}</p>
-          </article>
-
-          <aside className="cx-transcript">
-            <h3>{t("transcriptTitle")}</h3>
-            {transcript.length === 0 ? (
-              <p className="cx-none">{t("transcriptEmpty")}</p>
-            ) : (
-              <ol>
-                {transcript.map((turn) => {
-                  const english =
-                    data.ai_summary?.answers_en?.[turn.question_id] ??
-                    turn.text_english;
-                  const aiQuestion = data.followup_questions?.[turn.question_id];
-                  const Icon = ModeIcon(turn.input_mode);
-                  return (
-                    <li key={turn.turn_index}>
-                      <div className="cx-turn-head">
-                        {aiQuestion ? (
-                          <span className="cx-turn-q">
-                            <span className="cx-ai-chip">
-                              <Sparkles aria-hidden="true" size={11} /> {t("aiFollowup")}
-                            </span>
-                            {aiQuestion}
-                          </span>
-                        ) : (
-                          <span className="cx-turn-q">{questionLabel(turn.question_id)}</span>
-                        )}
-                        <span className="cx-mode" title={t(`inputMode_${turn.input_mode}`, turn.input_mode)}>
-                          <Icon aria-hidden="true" size={12} />
-                          {t(`inputMode_${turn.input_mode}`, turn.input_mode)}
-                        </span>
-                      </div>
-                      <p className="cx-turn-answer" lang={data.language}>
-                        {turn.text_original || english || emptyText}
-                      </p>
-                      {turn.text_original &&
-                        english &&
-                        turn.text_original !== english && (
-                          <p className="cx-translation">{english}</p>
-                        )}
-                    </li>
-                  );
-                })}
-              </ol>
+                <button
+                  type="button"
+                  className="cx-menu-item"
+                  onClick={() => {
+                    closeMenu();
+                    printSheet();
+                  }}
+                >
+                  <Printer aria-hidden="true" size={15} /> {t("printCaseSheet")}
+                </button>
+                <div className="cx-menu-section">
+                  <strong>
+                    <Keyboard aria-hidden="true" size={14} /> {t("keyboardShortcuts")}
+                  </strong>
+                  <dl className="cx-keys">
+                    <div>
+                      <dt><kbd>N</kbd></dt>
+                      <dd>{t("shortcutQueue")}</dd>
+                    </div>
+                    <div>
+                      <dt><kbd>E</kbd></dt>
+                      <dd>{t("shortcutEdit")}</dd>
+                    </div>
+                    <div>
+                      <dt><kbd>P</kbd></dt>
+                      <dd>{t("shortcutPrint")}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </>
             )}
-          </aside>
+          </Popover>
         </div>
-      </section>
+      </header>
+
+      <div className="cx-strip no-print">
+        {sheet.confirmed_by_patient && confirmedTime ? (
+          <span className="cx-strip-ok">
+            <CheckCircle2 aria-hidden="true" size={15} />
+            <span>{t("confirmedByPatientAt", { time: confirmedTime })}</span>
+            {corrections.length > 0 && (
+              <span className="cx-strip-note">
+                {t("correctionsRecorded", { corrections: corrections.join(", ") })}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span className="cx-strip-warn">
+            <Clock3 aria-hidden="true" size={15} /> {t("patientConfirmationPending")}
+          </span>
+        )}
+        {data.patient_confirmation?.needs_assistance && (
+          <span className="cx-strip-warn">
+            <Hand aria-hidden="true" size={15} /> {t("patientNeedsAssistance")}
+          </span>
+        )}
+        {aiFieldsPending ? (
+          <span className="cx-strip-ai">
+            <Sparkles aria-hidden="true" size={14} /> {t("aiAssistedNote")}
+          </span>
+        ) : (
+          data.ai_summary?.brief_en && (
+            <span className="cx-strip-ai">
+              <Sparkles aria-hidden="true" size={14} /> {t("aiSummaryUnverified")}
+            </span>
+          )
+        )}
+      </div>
+      {error && <p className="cx-error" role="alert">{error}</p>}
+
+      {printing ? (
+        <article className="cx-sheet">
+          {redFlagCard}
+          {aiCard}
+          {historyCards}
+          <p className="cx-disclaimer">{data.disclaimer}</p>
+        </article>
+      ) : (
+        <>
+          <div className="cx-tabs no-print" role="tablist" aria-label={t("consultTabs")}>
+            {TABS.map((item) => (
+              <button
+                key={item.id}
+                ref={(node) => {
+                  tabRefs.current[item.id] = node;
+                }}
+                id={`${baseId}-tab-${item.id}`}
+                type="button"
+                role="tab"
+                className="cx-tab"
+                aria-selected={tab === item.id}
+                aria-controls={`${baseId}-panel`}
+                tabIndex={tab === item.id ? 0 : -1}
+                onClick={() => openTab(item.id)}
+                onKeyDown={onTabKey}
+              >
+                {t(item.label)}
+                {item.id === "overview" && redFlags.length > 0 && (
+                  <span className="cx-tab-badge cx-tab-badge--danger">
+                    <AlertTriangle aria-hidden="true" size={11} />
+                    {redFlags.length}
+                    <span className="cx-visually-hidden"> {t("redFlags")}</span>
+                  </span>
+                )}
+                {item.id === "transcript" && transcript.length > 0 && (
+                  <span className="cx-tab-badge">{transcript.length}</span>
+                )}
+                {item.id === "history" && dirty && (
+                  <span className="cx-tab-dot">
+                    <span className="cx-visually-hidden">{t("unsavedEdit")}</span>
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <div
+            className={`cx-panel cx-panel--${tab}`}
+            id={`${baseId}-panel`}
+            role="tabpanel"
+            aria-labelledby={`${baseId}-tab-${tab}`}
+          >
+            {panel}
+          </div>
+        </>
+      )}
+
       {conflict && (
         <div className="consult-dialog-backdrop">
           <section
@@ -790,7 +1374,6 @@ export function DoctorConsultation() {
           </section>
         </div>
       )}
-    </div>
+    </>,
   );
 }
-

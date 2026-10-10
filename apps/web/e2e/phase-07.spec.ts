@@ -175,6 +175,9 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
   await expect(second.getByText("Synthetic headache").first()).toBeVisible();
   await runAxe(first);
 
+  // Editing lives in Patient history; the case sheet opens on the Overview.
+  await first.getByRole("tab", { name: "Patient history" }).click();
+  await runAxe(first);
   await first.getByRole("button", { name: "Edit" }).first().click();
   await first
     .getByRole("textbox", { name: "Chief complaint" })
@@ -182,6 +185,7 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
   await first.getByRole("button", { name: "Save edit" }).click();
   await expect(first.getByText("Synthetic updated headache")).toBeVisible();
 
+  await second.getByRole("tab", { name: "Patient history" }).click();
   await second.getByRole("button", { name: "Edit" }).first().click();
   await second
     .getByRole("textbox", { name: "Chief complaint" })
@@ -196,11 +200,17 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
   await first.getByRole("button", { name: "Download case sheet PDF" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain(visitId);
+  // Printing always produces the whole case sheet, whichever section is open.
+  await first.getByRole("tab", { name: "Overview" }).click();
+  await expect(first.locator(".cx-sheet")).toHaveCount(0);
+  await first.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
   await first.emulateMedia({ media: "print" });
   await expect(first.locator(".cx-sheet")).toBeVisible();
   await expect(first.locator(".cx-transcript")).toBeHidden();
   await expect(first.locator(".cx-actions")).toBeHidden();
   await expect(first.locator(".cx-rail")).toBeHidden();
+  await expect(first.locator(".cx-tabs")).toBeHidden();
+  await expect(first.getByText("Synthetic updated headache")).toBeVisible();
   await saveScreenshot(first, "doctor-consultation-print.png");
 
   await firstContext.close();
