@@ -4,7 +4,30 @@ import { useTranslation } from "react-i18next";
 import { Button, ConnectionIndicator, Toast } from "../components/ui";
 import { apiOrigin } from "../lib/api";
 import { staffAuth, StaffUser } from "../lib/auth";
-import { navigationByRole } from "./staffAccess";
+import { navigationByRole, type StaffPageId } from "./staffAccess";
+import {
+  BarChart3,
+  ClipboardList,
+  HeartPulse,
+  LogOut,
+  Settings,
+  Stethoscope,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+
+const NAV_ICONS: Record<StaffPageId, LucideIcon> = {
+  queue: Users,
+  consultations: Stethoscope,
+  patients: ClipboardList,
+  reports: BarChart3,
+  settings: Settings,
+};
+
+function initials(name: string) {
+  const parts = name.trim().split(/s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
 
 const lastHospitalKey = "osa.staff.hospital";
 type Hospital = { id: string; name: string };
@@ -115,8 +138,13 @@ export function StaffShell() {
       {user ? (
         <aside className="staff-sidebar">
           <a className="staff-brand" href="/staff">
-            {t("appName", { ns: "common" })}
-            <span>OPD Management</span>
+            <span className="staff-brand-mark" aria-hidden="true">
+              <HeartPulse size={20} />
+            </span>
+            <span className="staff-brand-text">
+              {t("appName", { ns: "common" })}
+              <small>OPD Management</small>
+            </span>
           </a>
           <nav aria-label={t("staffNavigation", { ns: "staff" })}>
             {navigationByRole[user.role].map((page) => (
@@ -127,20 +155,31 @@ export function StaffShell() {
                 }}
                 key={page}
               >
-                {t(page, { ns: "staff" })}
+                {(() => {
+                  const Icon = NAV_ICONS[page];
+                  return <Icon aria-hidden="true" size={18} />;
+                })()}
+                <span>{t(page, { ns: "staff" })}</span>
               </NavLink>
             ))}
           </nav>
           <div className="staff-sidebar-footer">
-            <div className="staff-user-meta">
-              <span className="staff-demo-label">{user.role}</span>
-              <span className="staff-user-email" title={user.email}>
-                {user.email}
+            <div className="staff-user">
+              <span className="staff-avatar" aria-hidden="true">
+                {initials(user.name)}
               </span>
+              <div className="staff-user-meta">
+                <span className="staff-demo-label">{user.role}</span>
+                <span className="staff-user-name">{user.name}</span>
+                <span className="staff-user-email" title={user.email}>
+                  {user.email}
+                </span>
+              </div>
             </div>
             <Button
               variant="secondary"
               size="sm"
+              icon={<LogOut aria-hidden="true" size={16} />}
               onClick={() => void signOut()}
             >
               {t("signOut", { ns: "staff" })}

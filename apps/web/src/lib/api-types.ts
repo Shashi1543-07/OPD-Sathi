@@ -253,7 +253,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Analytics Summary */
+        /**
+         * Analytics Summary
+         * @description Today's figures by default; with ``days`` the same window the timeseries uses.
+         */
         get: operations["analytics_summary_analytics_summary_get"];
         put?: never;
         post?: never;
@@ -1367,6 +1370,12 @@ export interface components {
             status?: string | null;
             /** Department Name */
             department_name?: string | null;
+            /** Triage */
+            triage?: {
+                [key: string]: unknown;
+            } | null;
+            /** Queued At */
+            queued_at?: string | null;
         };
         /** RedFlag */
         RedFlag: {
@@ -2001,7 +2010,10 @@ export interface operations {
     };
     analytics_summary_analytics_summary_get: {
         parameters: {
-            query?: never;
+            query?: {
+                days?: number | null;
+                department_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2017,6 +2029,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2059,6 +2080,7 @@ export interface operations {
         parameters: {
             query?: {
                 days?: number;
+                department_id?: string | null;
             };
             header?: never;
             path?: never;

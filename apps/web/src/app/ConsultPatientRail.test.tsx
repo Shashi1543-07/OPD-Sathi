@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -62,6 +62,15 @@ describe("consultation patient rail", () => {
       "/staff/consultations?visit_id=visit-2&status=called",
     );
     expect(active).toHaveTextContent("Needs early attention");
+
+    // On narrow screens the list folds away while a patient is open, and opens on request.
+    const toggle = screen.getByRole("button", { name: "Show list" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "Hide list" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
   });
 
   it("explains when the list cannot load", async () => {

@@ -201,8 +201,9 @@ describe("Phase 7.2 queue board", () => {
 
     renderBoard();
 
-    expect(await screen.findByText("MED-002")).toBeInTheDocument();
-    const queue = screen.getByRole("region", { name: "Queue patients" });
+    // Tokens also appear in the "Next to call" panel, so look inside the queue list.
+    const queue = await screen.findByRole("region", { name: "Queue patients" });
+    expect(await within(queue).findByText("MED-002")).toBeInTheDocument();
     const tokens = within(queue).getAllByText(/^MED-00[12]$/);
     expect(tokens[0]).toHaveTextContent("MED-002");
     expect(tokens[1]).toHaveTextContent("MED-001");
@@ -241,9 +242,13 @@ describe("Phase 7.2 queue board", () => {
       });
 
     renderBoard();
-    await screen.findByText("MED-001");
-    fireEvent.click(screen.getByRole("button", { name: "Pediatrics" }));
-    await screen.findByText("PED-002");
+    const queue = await screen.findByRole("region", { name: "Queue patients" });
+    await within(queue).findByText("MED-001");
+    // Departments are a dropdown now (the old button row was clipped at the right edge).
+    const department = screen.getByRole("combobox", { name: "Department" });
+    const pediatrics = within(department).getByRole("option", { name: "Pediatrics" });
+    fireEvent.change(department, { target: { value: (pediatrics as HTMLOptionElement).value } });
+    await within(await screen.findByRole("region", { name: "Queue patients" })).findByText("PED-002");
     fireEvent.change(screen.getByRole("combobox", { name: "Status" }), {
       target: { value: "called" },
     });

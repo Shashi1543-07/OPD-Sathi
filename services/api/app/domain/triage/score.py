@@ -37,6 +37,14 @@ def _load(path: Path = WEIGHTS_PATH) -> dict[str, Any]:
 
 
 WEIGHTS = _load()
+# Danger-tile flags carry the tile's rule code as evidence; staff read the tile's words.
+_TILE_LABELS = {
+    "DS_CHEST": "Chest discomfort",
+    "DS_BREATH": "Trouble breathing",
+    "DS_BLEED": "Heavy bleeding",
+    "DS_FIT": "Fainting or a seizure",
+    "DS_STROKE": "Sudden weakness or difficulty speaking",
+}
 
 
 @dataclass(frozen=True)
@@ -144,7 +152,8 @@ def assess(
     for index, flag in enumerate(ordered):
         source = "AI second opinion" if flag.source == "llm" else flag.source
         generic = not flag.evidence or flag.evidence.startswith("Structured intake answers")
-        label = flag.reason_en if generic else f"{flag.reason_en} ({flag.evidence})"
+        evidence = _TILE_LABELS.get(flag.evidence, flag.evidence)
+        label = flag.reason_en if generic else f"{flag.reason_en} ({evidence})"
         if flag.source == "llm":
             label = f"AI suggests, nurse to confirm: {label}"
         if index == 0:

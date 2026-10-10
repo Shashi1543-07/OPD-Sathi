@@ -175,6 +175,9 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
   await expect(second.getByText("Synthetic headache").first()).toBeVisible();
   await runAxe(first);
 
+  // Editing lives in Patient history; the case sheet opens on the Overview.
+  await first.getByRole("tab", { name: "Patient history" }).click();
+  await runAxe(first);
   await first.getByRole("button", { name: "Edit" }).first().click();
   await first
     .getByRole("textbox", { name: "Chief complaint" })
@@ -182,6 +185,7 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
   await first.getByRole("button", { name: "Save edit" }).click();
   await expect(first.getByText("Synthetic updated headache")).toBeVisible();
 
+  await second.getByRole("tab", { name: "Patient history" }).click();
   await second.getByRole("button", { name: "Edit" }).first().click();
   await second
     .getByRole("textbox", { name: "Chief complaint" })
@@ -196,11 +200,17 @@ test("doctor edit conflicts merge across two browsers, exports PDF, and prints t
   await first.getByRole("button", { name: "Download case sheet PDF" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain(visitId);
+  // Printing always produces the whole case sheet, whichever section is open.
+  await first.getByRole("tab", { name: "Overview" }).click();
+  await expect(first.locator(".cx-sheet")).toHaveCount(0);
+  await first.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
   await first.emulateMedia({ media: "print" });
   await expect(first.locator(".cx-sheet")).toBeVisible();
   await expect(first.locator(".cx-transcript")).toBeHidden();
   await expect(first.locator(".cx-actions")).toBeHidden();
   await expect(first.locator(".cx-rail")).toBeHidden();
+  await expect(first.locator(".cx-tabs")).toBeHidden();
+  await expect(first.getByText("Synthetic updated headache")).toBeVisible();
   await saveScreenshot(first, "doctor-consultation-print.png");
 
   await firstContext.close();
@@ -289,7 +299,7 @@ test("administrator creates a kiosk and dismisses its one-time activation code",
   await runAxe(page);
   await page.getByRole("tab", { name: "Kiosks" }).click();
   await page.getByLabel("Kiosk label").fill("Synthetic reception kiosk");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Register kiosk" }).click();
   await expect(page.getByText("synthetic-one-time-activation")).toBeVisible();
   await saveScreenshot(page, "admin-kiosk-one-time-code.png");
   await page.getByRole("button", { name: "I copied the code" }).click();
@@ -353,7 +363,7 @@ test("doctor and nurse routes stay inside their role access map", async ({
     );
     await page.goto("/staff/settings");
     await expect(page).toHaveURL(/\/staff\/queue$/);
-    await expect(page.getByRole("heading", { name: "Queue" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /^Queue/ })).toBeVisible();
     await expect(page.getByRole("tablist")).toHaveCount(0);
     await page.close();
   }

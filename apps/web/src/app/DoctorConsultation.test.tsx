@@ -7,13 +7,18 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nextProvider } from "react-i18next";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "../i18n";
 import { staffAuth } from "../lib/auth";
+import type { ConsultQueue } from "./consultQueue";
 import { DoctorConsultation } from "./DoctorConsultation";
 
-vi.mock("./ConsultPatientRail", () => ({ ConsultPatientRail: () => null }));
+const queueState: { current: ConsultQueue } = {
+  current: { items: [], state: "loading", now: 0, reload: () => undefined },
+};
+vi.mock("./ConsultPatientRail", () => ({ ConsultPatientRailView: () => null }));
+vi.mock("./consultQueue", () => ({ useConsultQueue: () => queueState.current }));
 
 const sheet = {
   schema_version: "1.0",
@@ -48,30 +53,61 @@ const sheet = {
 };
 
 function renderConsult(path = "/staff/consultations?visit_id=visit-1") {
+  const router = createMemoryRouter(
+    [
+      { path: "/staff/consultations", element: <DoctorConsultation /> },
+      { path: "/staff/queue", element: <p>Queue page</p> },
+    ],
+    { initialEntries: [path] },
+  );
   return render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/staff/consultations" element={<DoctorConsultation />} />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </I18nextProvider>,
   );
 }
 
+const sheetResponse = (version: number, caseSheet: object = sheet) =>
+  new Response(
+    JSON.stringify({
+      visit_id: "visit-1",
+      version,
+      case_sheet: caseSheet,
+      confirmed_by_patient: true,
+      confirmed_at: "2026-10-06T04:30:00Z",
+    }),
+    { status: 200, headers: { ETag: `"${version}"` } },
+  );
+const transcriptResponse = (turns: object[] = []) =>
+  new Response(JSON.stringify({ visit_id: "visit-1", turns }), { status: 200 });
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  queueState.current = { items: [], state: "loading", now: 0, reload: () => undefined };
 });
 
 describe("Phase 7.4 doctor consultation", () => {
   it("shows an empty state when no queue visit is selected", async () => {
     renderConsult("/staff/consultations");
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Pick a patient from the list on the left to open their case sheet.",
+    expect(
+      await screen.findByRole("heading", { name: "Select a patient to begin" }),
+    ).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Pick a patient from Today's patients to open their case sheet.",
     );
     expect(screen.getByRole("link", { name: "Back to queue" })).toBeVisible();
+  });
+
+  it("says when nobody is waiting and offers a refresh", async () => {
+    const reload = vi.fn();
+    queueState.current = { items: [], state: "ready", now: 0, reload };
+    renderConsult("/staff/consultations");
+
+    expect(await screen.findByRole("heading", { name: "No patients waiting" })).toBeVisible();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Refresh list" }));
+    expect(reload).toHaveBeenCalledOnce();
   });
 
   it("announces loading and provides retry after a case sheet read fails", async () => {
@@ -82,11 +118,7 @@ describe("Phase 7.4 doctor consultation", () => {
           failSheetRequest = resolve;
         });
       }
-      return Promise.resolve(
-        new Response(JSON.stringify({ visit_id: "visit-1", turns: [] }), {
-          status: 200,
-        }),
-      );
+      return Promise.resolve(transcriptResponse());
     });
 
     renderConsult();
@@ -100,68 +132,55 @@ describe("Phase 7.4 doctor consultation", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
   });
 
-  it("loads the case sheet and audited transcript and sends versioned edits", async () => {
+  it("opens on a focused overview and keeps the full record in the other sections", async () => {
     const request = vi.spyOn(staffAuth, "request");
     request
+      .mockResolvedValueOnce(sheetResponse(3))
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            visit_id: "visit-1",
-            version: 3,
-            case_sheet: sheet,
-            confirmed_by_patient: true,
-            confirmed_at: "2026-10-06T04:30:00Z",
-          }),
-          { status: 200, headers: { ETag: '"3"' } },
-        ),
+        transcriptResponse([
+          {
+            turn_index: 1,
+            question_id: "chief_complaint",
+            input_mode: "text",
+            text_original: "Synthetic headache since two days, worse in the evening",
+            text_english: null,
+            stt_confidence: null,
+          },
+        ]),
       )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            visit_id: "visit-1",
-            turns: [
-              {
-                turn_index: 1,
-                question_id: "chief_complaint",
-                input_mode: "text",
-                text_original: "Synthetic headache",
-                text_english: null,
-                stt_confidence: null,
-              },
-            ],
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            visit_id: "visit-1",
-            version: 4,
-            case_sheet: sheet,
-          }),
-          { status: 200, headers: { ETag: '"4"' } },
-        ),
-      );
+      .mockResolvedValueOnce(sheetResponse(4));
 
     renderConsult();
-    expect((await screen.findAllByText("Synthetic headache")).length).toBe(2);
+    expect(await screen.findByText("Synthetic headache")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/^Confirmed by patient at/)).toBeVisible();
+    expect(screen.getByText("Patient corrections: duration")).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Interview transcript" }),
-    ).toBeInTheDocument();
+      screen.getByText(
+        "Some history fields were organized with AI assistance and need staff review.",
+      ),
+    ).toBeVisible();
+    // The interview and editing controls are not on the overview.
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByText(/worse in the evening/)).toBeNull();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: /Interview transcript/ }));
+    expect(screen.getByRole("heading", { name: "Interview transcript" })).toBeVisible();
+    expect(
+      screen.getByText("Synthetic headache since two days, worse in the evening"),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "Patient history" }));
     expect(screen.getByText("AI-assisted")).toBeVisible();
     expect(screen.getByText("Patient text")).toBeVisible();
     expect(screen.getByText("90%")).toBeVisible();
-    expect(screen.getByText(/^Confirmed by patient at/)).toBeVisible();
-    expect(screen.getByText("Patient corrections: duration")).toBeVisible();
     const editButtons = await screen.findAllByRole("button", { name: "Edit" });
-    await userEvent.setup().click(editButtons[0]);
+    await user.click(editButtons[0]);
     fireEvent.change(screen.getByRole("textbox", { name: "Chief complaint" }), {
       target: { value: "Synthetic severe headache" },
     });
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: "Save edit" }));
+    await user.click(screen.getByRole("button", { name: "Save edit" }));
 
     await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
     expect(request.mock.calls[2][0]).toBe("/visits/visit-1/case-sheet");
@@ -177,17 +196,81 @@ describe("Phase 7.4 doctor consultation", () => {
     );
   });
 
+  it("puts red flags first, as reported information to verify", async () => {
+    vi.spyOn(staffAuth, "request")
+      .mockResolvedValueOnce(
+        sheetResponse(1, {
+          ...sheet,
+          red_flags: [
+            {
+              id: "RF_HAEMOPTYSIS",
+              level: "urgent",
+              source: "rule",
+              evidence: "blood in phlegm",
+              reason_en: "Blood in phlegm reported",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(transcriptResponse());
+
+    renderConsult();
+    const flags = await screen.findByRole("region", { name: "Red flags — review required" });
+    expect(flags).toHaveTextContent("Blood in phlegm reported");
+    expect(flags).toHaveTextContent("Patient said: “blood in phlegm”");
+    expect(flags).toHaveTextContent("From a safety rule");
+    expect(flags).toHaveTextContent("this is not a diagnosis");
+    expect(screen.getByRole("tab", { name: /Overview/ })).toHaveTextContent("1");
+  });
+
+  it("moves between sections with the arrow keys", async () => {
+    vi.spyOn(staffAuth, "request")
+      .mockResolvedValueOnce(sheetResponse(1))
+      .mockResolvedValueOnce(transcriptResponse());
+
+    renderConsult();
+    const overview = await screen.findByRole("tab", { name: "Overview" });
+    overview.focus();
+    fireEvent.keyDown(overview, { key: "ArrowRight" });
+    const history = screen.getByRole("tab", { name: "Patient history" });
+    expect(history).toHaveAttribute("aria-selected", "true");
+    expect(history).toHaveFocus();
+    fireEvent.keyDown(history, { key: "End" });
+    expect(screen.getByRole("tab", { name: "Clinical notes" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByText(/are not stored in OPD Saathi yet/)).toBeVisible();
+  });
+
+  it("asks before an unsaved edit is lost by leaving the page", async () => {
+    vi.spyOn(staffAuth, "request")
+      .mockResolvedValueOnce(sheetResponse(1))
+      .mockResolvedValueOnce(transcriptResponse());
+
+    renderConsult();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: "Patient history" }));
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.change(screen.getByRole("textbox", { name: "Chief complaint" }), {
+      target: { value: "Half-typed correction" },
+    });
+
+    fireEvent.keyDown(window, { key: "n" });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Discard your unsaved edit?");
+    await user.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByRole("textbox", { name: "Chief complaint" })).toHaveValue(
+      "Half-typed correction",
+    );
+
+    fireEvent.keyDown(window, { key: "n" });
+    await user.click(await screen.findByRole("button", { name: "Discard and leave" }));
+    expect(await screen.findByText("Queue page")).toBeVisible();
+  });
+
   it("offers a reload and applies a draft against the latest version after a conflict", async () => {
     const request = vi.spyOn(staffAuth, "request");
-    const sheetResponse = (version: number) =>
-      new Response(
-        JSON.stringify({ visit_id: "visit-1", version, case_sheet: sheet }),
-        { status: 200, headers: { ETag: `"${version}"` } },
-      );
-    const transcriptResponse = () =>
-      new Response(JSON.stringify({ visit_id: "visit-1", turns: [] }), {
-        status: 200,
-      });
     request
       .mockResolvedValueOnce(sheetResponse(3))
       .mockResolvedValueOnce(transcriptResponse())
@@ -197,20 +280,15 @@ describe("Phase 7.4 doctor consultation", () => {
       .mockResolvedValueOnce(sheetResponse(5));
 
     renderConsult();
-    await screen.findByText("Synthetic headache");
-    await userEvent
-      .setup()
-      .click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: "Patient history" }));
+    await user.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
     fireEvent.change(screen.getByRole("textbox", { name: "Chief complaint" }), {
       target: { value: "Updated synthetic headache" },
     });
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: "Save edit" }));
+    await user.click(screen.getByRole("button", { name: "Save edit" }));
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: "Apply my edit to latest" }));
+    await user.click(screen.getByRole("button", { name: "Apply my edit to latest" }));
 
     await waitFor(() => expect(request).toHaveBeenCalledTimes(6));
     expect(request.mock.calls[5][1]?.headers).toMatchObject({
@@ -224,21 +302,8 @@ describe("Phase 7.4 doctor consultation", () => {
   it("downloads the audited PDF through the authenticated API", async () => {
     const request = vi.spyOn(staffAuth, "request");
     request
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            visit_id: "visit-1",
-            version: 1,
-            case_sheet: sheet,
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ visit_id: "visit-1", turns: [] }), {
-          status: 200,
-        }),
-      )
+      .mockResolvedValueOnce(sheetResponse(1))
+      .mockResolvedValueOnce(transcriptResponse())
       .mockResolvedValueOnce(
         new Response(new Blob(["synthetic pdf"]), {
           status: 200,

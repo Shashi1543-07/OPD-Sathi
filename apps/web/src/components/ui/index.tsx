@@ -693,3 +693,5 @@ export function VoiceOrb({
     </button>
   );
 }
+
+export { Popover } from "./Popover";
