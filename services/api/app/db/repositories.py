@@ -869,10 +869,24 @@ class IntakeRepository:
         )
         return bool(result)
 
+    async def touch_kiosk(self, *, hospital_id: UUID, kiosk_id: UUID) -> bool:
+        """Note that an active kiosk is online. Writes at most once a minute per kiosk."""
+        if not await self.kiosk_is_active(hospital_id=hospital_id, kiosk_id=kiosk_id):
+            return False
+        await self.connection.execute(
+            text(
+                "UPDATE kiosks SET last_seen_at = now() WHERE hospital_id = :hospital_id "
+                "AND id = :kiosk_id AND (last_seen_at IS NULL "
+                "OR last_seen_at < now() - interval '50 seconds')"
+            ),
+            {"hospital_id": hospital_id, "kiosk_id": kiosk_id},
+        )
+        return True
+
     async def create_session(
         self, *, hospital_id: UUID, language: str, kiosk_id: UUID
     ) -> tuple[UUID, UUID]:
-        if not await self.kiosk_is_active(hospital_id=hospital_id, kiosk_id=kiosk_id):
+        if not await self.touch_kiosk(hospital_id=hospital_id, kiosk_id=kiosk_id):
             raise LookupError("kiosk is inactive")
         department_id = await self.connection.scalar(
             text(

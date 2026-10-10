@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -46,21 +46,16 @@ type TrendItem = { service_date: string; patient_count: number };
 type Trend = { days: number; items: TrendItem[] };
 type Department = { id: string; name_en: string; name_hi: string; name_mr: string };
 
-const BASELINE_KEY = "opd-analytics-baseline-minutes";
+type ReportSettings = {
+  minutes_saved_per_visit: number;
+  is_default: boolean;
+  updated_at: string | null;
+  updated_by_name: string | null;
+};
+
 const DEFAULT_BASELINE = 3;
 const MAX_BASELINE = 60;
 const RANGES = [1, 7, 30, 90] as const;
-
-function loadBaseline(): number {
-  try {
-    const stored = window.localStorage.getItem(BASELINE_KEY);
-    if (stored === null) return DEFAULT_BASELINE;
-    const value = Number(stored);
-    return Number.isFinite(value) && value >= 0 && value <= MAX_BASELINE ? value : DEFAULT_BASELINE;
-  } catch {
-    return DEFAULT_BASELINE;
-  }
-}
 
 function minutes(seconds: number | null | undefined): number | null {
   return seconds == null ? null : seconds / 60;
@@ -152,8 +147,18 @@ export function AnalyticsDashboard() {
   const language = i18n.resolvedLanguage?.split("-")[0] ?? "en";
   const [days, setDays] = useState<number>(30);
   const [departmentId, setDepartmentId] = useState("");
-  const [baseline, setBaseline] = useState(loadBaseline);
+  const queryClient = useQueryClient();
   const [configOpen, setConfigOpen] = useState(false);
+  // One estimate for the whole hospital, kept on the server and changed only by admins.
+  const reportSettings = useQuery({
+    queryKey: ["analytics-settings"],
+    queryFn: async () => {
+      const response = await staffAuth.request("/analytics/settings");
+      if (!response.ok) throw new Error("Report settings unavailable");
+      return (await response.json()) as ReportSettings;
+    },
+  });
+  const baseline = reportSettings.data?.minutes_saved_per_visit ?? null;
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(false);
   const query = new URLSearchParams({ days: String(days) });
@@ -234,7 +239,7 @@ export function AnalyticsDashboard() {
 
   const fixed = (value: number | null, digits: number) =>
     value === null ? null : value.toLocaleString(i18n.language, { maximumFractionDigits: digits });
-  const timeSaved = summary ? summary.patients * baseline : null;
+  const timeSaved = summary && baseline !== null ? summary.patients * baseline : null;
   const timeSavedText =
     timeSaved === null
       ? { value: null, unit: undefined }
@@ -242,13 +247,14 @@ export function AnalyticsDashboard() {
         ? { value: fixed(timeSaved / 60, 1), unit: t("hoursUnit") }
         : { value: fixed(timeSaved, 1), unit: t("minutesUnit") };
 
-  function saveBaseline(value: number) {
-    setBaseline(value);
-    try {
-      window.localStorage.setItem(BASELINE_KEY, String(value));
-    } catch {
-      /* Keep the current-session value. */
-    }
+  async function saveBaseline(value: number) {
+    const response = await staffAuth.request("/analytics/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ minutes_saved_per_visit: value }),
+    });
+    if (!response.ok) throw new Error("Report settings not saved");
+    queryClient.setQueryData(["analytics-settings"], (await response.json()) as ReportSettings);
   }
 
   async function exportCsv() {
@@ -398,7 +404,8 @@ export function AnalyticsDashboard() {
                 value={fixed(summary.doctor_edit_rate_percent, 1)}
                 unit="%"
                 detail={t("analyticsDoctorEditDetail")}
-                emptyDetail={t("analyticsNoVisitsEmpty")}
+                emptyDetail={t("analyticsNoSheetsEmpty")}
+                help={t("analyticsDoctorEditHelp")}
               />
               <Kpi
                 icon={<FileText size={20} />}
@@ -419,11 +426,15 @@ export function AnalyticsDashboard() {
                   minutes: fixed(baseline, 1),
                   count: summary.patients,
                 })}
+                emptyDetail={
+                  reportSettings.isError ? t("analyticsSettingsError") : t("analyticsLoading")
+                }
                 help={t("analyticsTimeSavedHelp")}
                 action={
                   <button
                     type="button"
                     className="rp-configure"
+                    disabled={!reportSettings.data}
                     onClick={() => setConfigOpen(true)}
                   >
                     <Settings2 aria-hidden="true" size={14} />
@@ -567,12 +578,12 @@ export function AnalyticsDashboard() {
         </div>
       </footer>
 
-      {configOpen && (
+      {configOpen && reportSettings.data && (
         <BaselineDialog
-          value={baseline}
+          settings={reportSettings.data}
           onCancel={() => setConfigOpen(false)}
-          onSave={(value) => {
-            saveBaseline(value);
+          onSave={async (value) => {
+            await saveBaseline(value);
             setConfigOpen(false);
           }}
         />
@@ -582,17 +593,19 @@ export function AnalyticsDashboard() {
 }
 
 function BaselineDialog({
-  value,
+  settings,
   onCancel,
   onSave,
 }: {
-  value: number;
+  settings: ReportSettings;
   onCancel: () => void;
-  onSave: (value: number) => void;
+  onSave: (value: number) => Promise<void>;
 }) {
-  const { t } = useTranslation("staff");
+  const { t, i18n } = useTranslation("staff");
   const id = useId();
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(String(settings.minutes_saved_per_visit));
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const number = Number(draft);
   const valid = draft.trim() !== "" && Number.isFinite(number) && number >= 0 && number <= MAX_BASELINE;
@@ -616,7 +629,13 @@ function BaselineDialog({
         aria-labelledby={`${id}-title`}
         onSubmit={(event) => {
           event.preventDefault();
-          if (valid) onSave(number);
+          if (!valid || saving) return;
+          setSaving(true);
+          setFailed(false);
+          onSave(number).catch(() => {
+            setFailed(true);
+            setSaving(false);
+          });
         }}
       >
         <h3 id={`${id}-title`}>{t("configureTimeSaved")}</h3>
@@ -643,13 +662,32 @@ function BaselineDialog({
             ? t("baselineHint", { max: MAX_BASELINE, fallback: DEFAULT_BASELINE })
             : t("baselineInvalid", { max: MAX_BASELINE })}
         </p>
-        <p className="rp-hint">{t("baselineStorage")}</p>
+        <p className="rp-hint">
+          {t("baselineStorage")}
+          {!settings.is_default && settings.updated_at && (
+            <>
+              {" "}
+              {t("baselineUpdated", {
+                name: settings.updated_by_name ?? t("adminRole"),
+                when: new Intl.DateTimeFormat(i18n.language, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                }).format(new Date(settings.updated_at)),
+              })}
+            </>
+          )}
+        </p>
+        {failed && (
+          <p className="rp-hint rp-hint--error" role="alert">
+            {t("baselineSaveError")}
+          </p>
+        )}
         <div className="rp-dialog-actions">
           <button type="button" onClick={onCancel}>
             {t("cancelEdit")}
           </button>
-          <button type="submit" className="is-primary" disabled={!valid}>
-            {t("saveBaseline")}
+          <button type="submit" className="is-primary" disabled={!valid || saving}>
+            {saving ? t("savingAdmin") : t("saveBaseline")}
           </button>
         </div>
       </form>

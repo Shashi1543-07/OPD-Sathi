@@ -52,6 +52,15 @@ const TAB_ICON: Record<Resource, typeof Users> = {
   departments: Network,
 };
 const NO_FILTERS: Filters = { search: "", role: "", status: "" };
+/** A kiosk that has not reported for this long is treated as offline (it pings each minute). */
+const ONLINE_WINDOW_MS = 3 * 60_000;
+type Connection = "online" | "offline" | "unseen" | "off";
+function connectionOf(kiosk: Kiosk, now: number): Connection {
+  if (!kiosk.is_active) return "off";
+  if (!kiosk.last_seen_at) return "unseen";
+  return now - Date.parse(kiosk.last_seen_at) <= ONLINE_WINDOW_MS ? "online" : "offline";
+}
+
 /** The API pages 100 records at a time; hospital lists are small, so read them whole (up to 2,000). */
 const MAX_PAGES = 20;
 const cap = (value: string) => `${value[0].toUpperCase()}${value.slice(1)}`;
@@ -157,6 +166,17 @@ export function AdminConsole() {
     };
   }, [load, resource]);
 
+  // Kiosks report in about once a minute; keep their connection state current while watched.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (resource !== "kiosks") return;
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+      void load("kiosks");
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [load, resource]);
+
   async function create(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -260,6 +280,15 @@ export function AdminConsole() {
   }[resource];
   const filtersActive = Boolean(needle || filter.role || filter.status);
   const dateTime = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" });
+  const relative = new Intl.RelativeTimeFormat(i18n.language, { numeric: "auto" });
+  const ago = (iso: string) => {
+    const minutes = Math.round((Date.parse(iso) - now) / 60_000);
+    if (minutes > -60) return relative.format(minutes, "minute");
+    const hours = Math.round(minutes / 60);
+    return hours > -24 ? relative.format(hours, "hour") : relative.format(Math.round(hours / 24), "day");
+  };
+  const activeKiosks = kiosks.filter((kiosk) => kiosk.is_active);
+  const onlineKiosks = activeKiosks.filter((kiosk) => connectionOf(kiosk, now) === "online");
   const dateOnly = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" });
   const roleLabel = (role: string) => t(`${role}Role`, { defaultValue: cap(role) });
   const departmentLabel = (department: Department | undefined) => department?.name_en ?? t("noDepartment");
@@ -353,7 +382,7 @@ export function AdminConsole() {
       <tr>
         <th scope="col">{t("kioskLabel")}</th>
         <th scope="col">{t("kioskAdded")}</th>
-        <th scope="col">{t("kioskLastCheckIn")}</th>
+        <th scope="col">{t("connectionColumn")}</th>
         <th scope="col">{t("statusColumn")}</th>
         <th scope="col" className="adm-col-action">{t("actionsColumn")}</th>
       </tr>
@@ -374,12 +403,20 @@ export function AdminConsole() {
         <td data-label={t("kioskAdded")}>
           {item.created_at ? dateOnly.format(new Date(item.created_at)) : "—"}
         </td>
-        <td data-label={t("kioskLastCheckIn")}>
-          {item.last_seen_at ? (
-            dateTime.format(new Date(item.last_seen_at))
-          ) : (
-            <span className="adm-muted">{t("kioskNeverSeen")}</span>
-          )}
+        <td data-label={t("connectionColumn")}>
+          {(() => {
+            const state = connectionOf(item, now);
+            return (
+              <span className="adm-connection">
+                <span className={`adm-conn adm-conn--${state}`}>{t(`kioskConn_${state}`)}</span>
+                {item.last_seen_at && state !== "online" && (
+                  <span className="adm-muted" title={dateTime.format(new Date(item.last_seen_at))}>
+                    {t("kioskLastSeenAt", { when: ago(item.last_seen_at) })}
+                  </span>
+                )}
+              </span>
+            );
+          })()}
         </td>
         <td data-label={t("statusColumn")}>{statusPill(item.is_active)}</td>
         <td className="adm-col-action">{toggleButton(item, item.label)}</td>
@@ -428,7 +465,9 @@ export function AdminConsole() {
   const listTitle = { users: t("staffAccounts"), kiosks: t("kioskList"), departments: t("departmentList") }[resource];
   const listSubtitle = {
     users: t("staffAccountsHint"),
-    kiosks: t("kioskListHint"),
+    kiosks: loaded.kiosks
+      ? t("kioskOnlineSummary", { online: onlineKiosks.length, count: activeKiosks.length })
+      : t("kioskListHint"),
     departments: t("departmentListHint"),
   }[resource];
   const formHint = {

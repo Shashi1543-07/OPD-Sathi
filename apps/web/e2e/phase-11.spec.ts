@@ -20,6 +20,9 @@ test("admin analytics shows scoped trends, a configurable baseline, and CSV expo
     },
   } }));
   await page.route("**/admin/departments?limit=100", (route) => route.fulfill({ json: { items: [], next_cursor: null } }));
+  await page.route("**/analytics/settings", (route) => route.fulfill({ json: {
+    minutes_saved_per_visit: 3, is_default: true, updated_at: null, updated_by_name: null,
+  } }));
   await page.route(/\/analytics\/summary\?days=30$/, (route) => route.fulfill({ json: {
     patients: 12,
     average_wait_seconds: 240,

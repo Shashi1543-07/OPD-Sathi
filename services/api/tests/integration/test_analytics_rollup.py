@@ -163,7 +163,8 @@ async def test_daily_analytics_rollup_refresh_and_tenant_filter() -> None:
                             "SELECT patient_count, wait_seconds_total, wait_sample_count, "
                             "consult_seconds_total, consult_sample_count, urgent_count, "
                             "interview_seconds_total, interview_sample_count, confirmed_count, "
-                            "confirmed_without_edits_count, doctor_edited_count, language_mix "
+                            "confirmed_without_edits_count, case_sheet_count, doctor_edited_count, "
+                            "language_mix "
                             "FROM osa_analytics.analytics_daily_department_tenant "
                             "WHERE hospital_id = :hospital_id "
                             "AND department_id = :department_id AND service_date = :service_date"
@@ -189,6 +190,7 @@ async def test_daily_analytics_rollup_refresh_and_tenant_filter() -> None:
             assert int(row["confirmed_count"]) == 2
             assert int(row["confirmed_without_edits_count"]) == 1
             assert int(row["doctor_edited_count"]) == 1
+            assert int(row["case_sheet_count"]) == 2
             assert row["language_mix"] == {"hi": 2}
         async with app_engine.begin() as connection:
             await set_hospital_scope(connection, other_hospital_id)

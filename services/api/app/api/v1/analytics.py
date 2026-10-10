@@ -11,6 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
 from app.core.audit import audit
@@ -27,7 +28,8 @@ _ROLLUP_DAY_SQL = (
     "a.patient_count, a.wait_seconds_total, a.wait_sample_count, "
     "a.consult_seconds_total, a.consult_sample_count, a.urgent_count, "
     "a.interview_seconds_total, a.interview_sample_count, a.confirmed_count, "
-    "a.confirmed_without_edits_count, a.doctor_edited_count, a.language_mix "
+    "a.confirmed_without_edits_count, a.case_sheet_count, a.doctor_edited_count, "
+    "a.language_mix "
     "FROM osa_analytics.analytics_daily_department_tenant a JOIN departments d "
     "ON d.hospital_id = a.hospital_id AND d.id = a.department_id "
     "WHERE a.hospital_id = :hospital_id AND a.service_date = :service_date"
@@ -37,7 +39,8 @@ _ROLLUP_RANGE_SQL = (
     "a.patient_count, a.wait_seconds_total, a.wait_sample_count, "
     "a.consult_seconds_total, a.consult_sample_count, a.urgent_count, "
     "a.interview_seconds_total, a.interview_sample_count, a.confirmed_count, "
-    "a.confirmed_without_edits_count, a.doctor_edited_count, a.language_mix "
+    "a.confirmed_without_edits_count, a.case_sheet_count, a.doctor_edited_count, "
+    "a.language_mix "
     "FROM osa_analytics.analytics_daily_department_tenant a JOIN departments d "
     "ON d.hospital_id = a.hospital_id AND d.id = a.department_id "
     "WHERE a.hospital_id = :hospital_id "
@@ -46,6 +49,16 @@ _ROLLUP_RANGE_SQL = (
     "OR a.department_id = CAST(:department_id AS uuid)) "
     "ORDER BY a.service_date, d.name_en"
 )
+
+
+# The assumed minutes of history-taking one kiosk interview saves, until an admin sets it.
+DEFAULT_MINUTES_SAVED = 3.0
+
+
+class ReportSettingsPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    minutes_saved_per_visit: float = Field(ge=0, le=60)
 
 
 def _mean(total: float, count: int) -> float | None:
@@ -76,6 +89,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "interview_sample_count",
             "confirmed_count",
             "confirmed_without_edits_count",
+            "case_sheet_count",
             "doctor_edited_count",
         ):
             totals[key] += float(row[key] or 0)
@@ -117,6 +131,8 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     patients = int(totals["patient_count"])
     confirmed = int(totals["confirmed_count"])
+    # Only visits that produced a case sheet can have one edited by a doctor.
+    case_sheets = int(totals["case_sheet_count"])
     return {
         "patients": patients,
         "average_wait_seconds": _mean(
@@ -135,8 +151,8 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         )
         if confirmed
         else None,
-        "doctor_edit_rate_percent": round(100 * totals["doctor_edited_count"] / patients, 1)
-        if patients
+        "doctor_edit_rate_percent": round(100 * totals["doctor_edited_count"] / case_sheets, 1)
+        if case_sheets
         else None,
         "department_load": sorted(department_load, key=lambda item: item["patients"], reverse=True),
     }
@@ -280,6 +296,7 @@ async def analytics_export(
                 "confirmed_without_edits_count",
                 "confirmed_count",
                 "doctor_edited_count",
+                "case_sheet_count",
                 "language_mix",
             ]
         )
@@ -310,6 +327,7 @@ async def analytics_export(
                         row["confirmed_without_edits_count"],
                         row["confirmed_count"],
                         row["doctor_edited_count"],
+                        row["case_sheet_count"],
                         row["language_mix"],
                     ]
                 )
@@ -322,3 +340,81 @@ async def analytics_export(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="opd-analytics.csv"'},
     )
+
+
+async def _report_settings(connection: Any, hospital_id: UUID) -> dict[str, Any]:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT s.minutes_saved_per_visit, s.updated_at, u.name AS updated_by_name "
+                    "FROM hospital_report_settings s LEFT JOIN users u "
+                    "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
+                    "WHERE s.hospital_id = :hospital_id"
+                ),
+                {"hospital_id": hospital_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return {
+            "minutes_saved_per_visit": DEFAULT_MINUTES_SAVED,
+            "is_default": True,
+            "updated_at": None,
+            "updated_by_name": None,
+        }
+    return {
+        "minutes_saved_per_visit": float(row["minutes_saved_per_visit"]),
+        "is_default": False,
+        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+        "updated_by_name": row["updated_by_name"],
+    }
+
+
+@router.get("/settings")
+async def get_report_settings(request: Request, principal: AdminPrincipal) -> dict[str, Any]:
+    """The hospital-wide assumptions behind derived report figures (time saved)."""
+    hospital_id = UUID(principal["hospital_id"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        return await _report_settings(connection, hospital_id)
+
+
+@router.patch("/settings")
+async def patch_report_settings(
+    payload: ReportSettingsPatch, request: Request, principal: AdminPrincipal
+) -> dict[str, Any]:
+    hospital_id, actor_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
+    minutes = round(payload.minutes_saved_per_visit, 1)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        before = await _report_settings(connection, hospital_id)
+        await connection.execute(
+            text(
+                "INSERT INTO hospital_report_settings (hospital_id, minutes_saved_per_visit, "
+                "updated_by) VALUES (:hospital_id, :minutes, :actor_id) "
+                "ON CONFLICT (hospital_id) DO UPDATE SET "
+                "minutes_saved_per_visit = EXCLUDED.minutes_saved_per_visit, "
+                "updated_by = EXCLUDED.updated_by, updated_at = now()"
+            ),
+            {"hospital_id": hospital_id, "minutes": minutes, "actor_id": actor_id},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="analytics.settings.updated",
+            resource_type="hospital_report_settings",
+            resource_id=hospital_id,
+            meta={
+                "minutes_saved_per_visit": {
+                    "before": before["minutes_saved_per_visit"],
+                    "after": minutes,
+                }
+            },
+        )
+        return await _report_settings(connection, hospital_id)

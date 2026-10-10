@@ -1,15 +1,16 @@
 """Staff authentication, refresh-cookie rotation, and kiosk activation."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import text
 
 from app.config import Settings
 from app.core.audit import audit
+from app.core.auth import require_kiosk
 from app.core.errors import ApiProblemError
 from app.core.ratelimit import check_rate_limit
 from app.core.security import (
@@ -20,6 +21,7 @@ from app.core.security import (
     issue_access_token,
     verify_password,
 )
+from app.db.repositories import IntakeRepository
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
 
 router = APIRouter()
@@ -551,6 +553,24 @@ async def logout(request: Request, response: Response) -> Response:
     return response
 
 
+@router.post("/kiosks/heartbeat")
+async def kiosk_heartbeat(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_kiosk())],
+) -> dict[str, bool]:
+    """Called by an open kiosk about once a minute so administrators can see it is online."""
+    try:
+        hospital_id, kiosk_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _error(401, "UNAUTHENTICATED", "Sign-in required", "The session is invalid.") from exc
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        active = await IntakeRepository(connection, request.app.state.settings).touch_kiosk(
+            hospital_id=hospital_id, kiosk_id=kiosk_id
+        )
+    return {"active": active}
+
+
 @router.post("/kiosks/activate")
 async def activate_kiosk(
     payload: KioskActivationPayload,
@@ -607,8 +627,8 @@ async def activate_kiosk(
             if locked_kiosk is not None:
                 await connection.execute(
                     text(
-                        "UPDATE kiosks SET activation_code_hash = NULL, secret_hash = :secret_hash "
-                        "WHERE id = :id"
+                        "UPDATE kiosks SET activation_code_hash = NULL, "
+                        "secret_hash = :secret_hash, last_seen_at = now() WHERE id = :id"
                     ),
                     {"secret_hash": digest_secret(device_secret), "id": kiosk["id"]},
                 )

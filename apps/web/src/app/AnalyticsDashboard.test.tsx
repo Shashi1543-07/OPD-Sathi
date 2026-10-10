@@ -35,8 +35,31 @@ const summary = {
   end_day: "2026-10-07",
 };
 
-function mockApi() {
-  return vi.spyOn(staffAuth, "request").mockImplementation(async (path) => {
+const settings = {
+  minutes_saved_per_visit: 3,
+  is_default: true,
+  updated_at: null,
+  updated_by_name: null,
+};
+
+function mockApi({ saveFails = false } = {}) {
+  return vi.spyOn(staffAuth, "request").mockImplementation(async (path, init) => {
+    if (path === "/analytics/settings") {
+      if (init?.method === "PATCH") {
+        if (saveFails) return new Response("{}", { status: 503 });
+        const body = JSON.parse(String(init.body)) as { minutes_saved_per_visit: number };
+        return new Response(
+          JSON.stringify({
+            ...body,
+            is_default: false,
+            updated_at: "2026-10-10T04:00:00Z",
+            updated_by_name: "Demo Administrator",
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify(settings), { status: 200 });
+    }
     if (path.startsWith("/admin/departments")) {
       return new Response(
         JSON.stringify({
@@ -126,17 +149,18 @@ describe("Phase 11 analytics dashboard", () => {
     );
   });
 
-  it("configures the time-saved estimate in a dialog, accepting only valid values", async () => {
-    mockApi();
+  it("saves the time-saved estimate for the whole hospital, accepting only valid values", async () => {
+    const request = mockApi();
     renderDashboard();
     const user = userEvent.setup();
     const timeSaved = () => screen.getByText("Estimated time saved", { selector: "h3" }).closest("article")!;
     await screen.findByText("General Medicine", { selector: "th" });
-    expect(timeSaved()).toHaveTextContent("36 min");
+    await waitFor(() => expect(timeSaved()).toHaveTextContent("36 min"));
     expect(timeSaved()).toHaveTextContent("3 min × 12 visits");
 
     await user.click(screen.getByRole("button", { name: "Configure metric" }));
     const dialog = screen.getByRole("dialog", { name: "Estimated time saved" });
+    expect(dialog).toHaveTextContent("every administrator sees the same estimate");
     const input = within(dialog).getByLabelText("Minutes saved per visit");
     await user.clear(input);
     await user.type(input, "90");
@@ -146,8 +170,25 @@ describe("Phase 11 analytics dashboard", () => {
     await user.clear(input);
     await user.type(input, "4");
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(request).toHaveBeenCalledWith(
+      "/analytics/settings",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ minutes_saved_per_visit: 4 }) }),
+    );
     expect(timeSaved()).toHaveTextContent("48 min");
-    expect(window.localStorage.getItem("opd-analytics-baseline-minutes")).toBe("4");
+    expect(window.localStorage.getItem("opd-analytics-baseline-minutes")).toBeNull();
+  });
+
+  it("keeps the dialog open and says so when saving fails", async () => {
+    mockApi({ saveFails: true });
+    renderDashboard();
+    const user = userEvent.setup();
+    await screen.findByText("General Medicine", { selector: "th" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Configure metric" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "Configure metric" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("could not be saved");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

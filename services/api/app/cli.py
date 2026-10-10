@@ -696,6 +696,45 @@ async def _clear_demo_workflow() -> None:
     print(f"Removed the sample workflow visits. Rows removed: {deleted_visits.rowcount}.")
 
 
+async def _demo_history(command: str, days: int = 30) -> None:
+    """Seed or remove the believable month of finished OPD days, or clear seed-bulk rows."""
+    from app.demo_history import clear_bulk, clear_history, refresh_reports, seed_history
+
+    settings = get_settings()
+    hospital_id = stable_uuid7("opd-saathi:demo-nagpur-government")
+    engine = create_async_engine(settings.migrations_database_url)
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            if command == "seed":
+                filled, created = await seed_history(
+                    connection, settings, hospital_id=hospital_id, days=days
+                )
+                message = (
+                    f"Demo history: added {created} visits over {filled} new day(s) "
+                    f"(last {days} days; days already filled were left as they are)."
+                )
+            elif command == "clear":
+                removed = await clear_history(connection, hospital_id=hospital_id)
+                message = f"Removed {removed} demo-history visits and their sample patients."
+            else:
+                visits, patients = await clear_bulk(connection, hospital_id=hospital_id)
+                message = (
+                    f"Removed {visits} seed-bulk load-test visits and {patients} patients "
+                    "left without any visit."
+                )
+        async with engine.begin() as connection:
+            refreshed = await refresh_reports(connection)
+    finally:
+        await engine.dispose()
+    print(message)
+    print(
+        "Reports refreshed."
+        if refreshed
+        else "Reports will show the change within 5 minutes (the worker refreshes them)."
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -718,6 +757,15 @@ def main() -> None:
     demo_kiosk.add_argument("--web-url", default=os.getenv("WEB_ORIGIN", "http://localhost:5173"))
     bulk = commands.add_parser("seed-bulk", help="Insert deterministic synthetic visits")
     bulk.add_argument("--visits", type=int, default=100_000)
+    history = commands.add_parser(
+        "seed-demo-history",
+        help="Fill the last N days with believable finished OPD days for the demo hospital",
+    )
+    history.add_argument("--days", type=int, default=30, choices=range(1, 121), metavar="1-120")
+    commands.add_parser("clear-demo-history", help="Remove only the seeded demo-history visits")
+    commands.add_parser(
+        "clear-bulk", help="Remove seed-bulk load-test visits from the demo hospital"
+    )
     args = parser.parse_args()
     if args.command == "queue-rebuild":
         import redis.asyncio as redis
@@ -758,6 +806,15 @@ def main() -> None:
         return
     if args.command == "seed-bulk":
         asyncio.run(_seed_bulk(visits=args.visits))
+        return
+    if args.command == "seed-demo-history":
+        asyncio.run(_demo_history("seed", days=args.days))
+        return
+    if args.command == "clear-demo-history":
+        asyncio.run(_demo_history("clear"))
+        return
+    if args.command == "clear-bulk":
+        asyncio.run(_demo_history("bulk"))
         return
     if args.command == "create-admin":
         hospital_name = args.hospital_name

@@ -71,7 +71,7 @@ After applying migrations, run `python -m app.cli create-admin`. The operator pr
 
 ### Synthetic demo data
 
-Set `PROVIDER_MODE=demo-safe` for local scripted speech and mock language/TTS adapters, then use `make demo-seed` to provision the fictional Nagpur hospital. Follow [docs/DEMO.md](docs/DEMO.md) to run the three-minute demo and offline check. `make seed-bulk` creates 100,000 synthetic visits for performance work; do not use it against real data. Never use real patient information in this demo.
+Set `PROVIDER_MODE=demo-safe` for local scripted speech and mock language/TTS adapters, then use `make demo-seed` to provision the fictional Nagpur hospital. Follow [docs/DEMO.md](docs/DEMO.md) to run the three-minute demo and offline check. `make demo-history` fills the last 30 days with believable finished OPD days (arrivals, waits, consultations, case sheets) so Reports look like a real hospital; `make clear-demo-history` removes them. `make seed-bulk` creates 100,000 bare synthetic visits for performance work only: it makes Reports meaningless, so remove them afterwards with `make clear-bulk`, and never use it against real data. Never use real patient information in this demo.
 
 ## Safety and data
 
