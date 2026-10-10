@@ -1,27 +1,27 @@
 {"id": "RF-test-en-must-0001", "language": "en", "text": "", "facts": {"tile_ids": ["DS_CHEST"]}, "expected": ["RF_DS_TILE"], "split": "test", "must_catch": true, "kind": "must"}
 {"id": "RF-test-en-must-0002", "language": "en", "text": "fever", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0003", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0004", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0005", "language": "en", "text": "hives with breathing trouble", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0006", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0007", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0008", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0009", "language": "en", "text": "fever and fits", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0010", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0011", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0012", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0013", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0014", "language": "en", "text": "road accident", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0015", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0016", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0017", "language": "en", "text": "", "facts": {"tile_ids": ["DS_CHEST"]}, "expected": ["RF_DS_TILE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0018", "language": "en", "text": "fever", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0019", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0020", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0021", "language": "en", "text": "hives with breathing trouble", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0022", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0023", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-en-must-0024", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0003", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0004", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0005", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0006", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0007", "language": "en", "text": "hives with breathing trouble", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0008", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0009", "language": "en", "text": "road accident", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0010", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0011", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0012", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0013", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0014", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0015", "language": "en", "text": "fever and fits", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0016", "language": "en", "text": "", "facts": {"tile_ids": ["DS_CHEST"]}, "expected": ["RF_DS_TILE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0017", "language": "en", "text": "fever", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0018", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0019", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0020", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0021", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0022", "language": "en", "text": "hives with breathing trouble", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0023", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-en-must-0024", "language": "en", "text": "road accident", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "test", "must_catch": true, "kind": "must"}
 {"id": "RF-test-en-negation-0025", "language": "en", "text": "no chest pain", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "negation"}
 {"id": "RF-test-en-negation-0026", "language": "en", "text": "chest pain but no sweating", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": false, "kind": "negation"}
 {"id": "RF-test-en-negation-0027", "language": "en", "text": "no seizure", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "negation"}
@@ -56,26 +56,26 @@
 {"id": "RF-test-en-benign-0056", "language": "en", "text": "routine check", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "benign"}
 {"id": "RF-test-en-positive-0057", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": false, "kind": "positive"}
 {"id": "RF-test-en-positive-0058", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": false, "kind": "positive"}
-{"id": "RF-test-en-positive-0059", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "test", "must_catch": false, "kind": "positive"}
-{"id": "RF-test-en-positive-0060", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": false, "kind": "positive"}
+{"id": "RF-test-en-positive-0059", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "test", "must_catch": false, "kind": "positive"}
+{"id": "RF-test-en-positive-0060", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": false, "kind": "positive"}
 {"id": "RF-test-hi-must-0201", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
 {"id": "RF-test-hi-must-0202", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0203", "language": "hi", "text": "सीने में दर्द और पसीना", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0204", "language": "hi", "text": "बुखार और खाना नहीं खा रहा", "facts": {"age": 3}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0205", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0206", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0207", "language": "hi", "text": "जहर पी लिया", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0208", "language": "hi", "text": "एक तरफ कमजोरी", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0209", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0210", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0211", "language": "hi", "text": "दौरा", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0212", "language": "hi", "text": "", "facts": {"tile_ids": ["DS_BREATH"]}, "expected": ["RF_DS_TILE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0213", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0214", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0215", "language": "hi", "text": "खून की उल्टी", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0216", "language": "hi", "text": "चेहरे की सूजन और सांस फूलना", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0217", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hi-must-0218", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0203", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0204", "language": "hi", "text": "दौरा", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0205", "language": "hi", "text": "सीने में दर्द और पसीना", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0206", "language": "hi", "text": "बुखार और खाना नहीं खा रहा", "facts": {"age": 3}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0207", "language": "hi", "text": "", "facts": {"tile_ids": ["DS_BREATH"]}, "expected": ["RF_DS_TILE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0208", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0209", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0210", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0211", "language": "hi", "text": "जहर पी लिया", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0212", "language": "hi", "text": "खून की उल्टी", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0213", "language": "hi", "text": "चेहरे की सूजन और सांस फूलना", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0214", "language": "hi", "text": "एक तरफ कमजोरी", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0215", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0216", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0217", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hi-must-0218", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
 {"id": "RF-test-hi-negation-0219", "language": "hi", "text": "सीने में दर्द नहीं", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "negation"}
 {"id": "RF-test-hi-negation-0220", "language": "hi", "text": "सीने में दर्द लेकिन पसीना नहीं", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": false, "kind": "negation"}
 {"id": "RF-test-hi-negation-0221", "language": "hi", "text": "दौरा नहीं", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "negation"}
@@ -102,19 +102,19 @@
 {"id": "RF-test-hi-benign-0242", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "benign"}
 {"id": "RF-test-hi-positive-0243", "language": "hi", "text": "एक तरफ कमजोरी", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": false, "kind": "positive"}
 {"id": "RF-test-hi-positive-0244", "language": "hi", "text": "दौरा", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": false, "kind": "positive"}
-{"id": "RF-test-hi-positive-0245", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "test", "must_catch": false, "kind": "positive"}
+{"id": "RF-test-hi-positive-0245", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "test", "must_catch": false, "kind": "positive"}
 {"id": "RF-test-mr-must-0351", "language": "mr", "text": "योनीतून रक्तस्राव", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "test", "must_catch": true, "kind": "must"}
 {"id": "RF-test-mr-must-0352", "language": "mr", "text": "विंचू चावला", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0353", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0354", "language": "mr", "text": "रस्ते अपघात", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0355", "language": "mr", "text": "छातीत दुखणे", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0356", "language": "mr", "text": "झटका", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0357", "language": "mr", "text": "", "facts": {"tile_ids": ["DS_STROKE"]}, "expected": ["RF_DS_TILE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0358", "language": "mr", "text": "ताप", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0359", "language": "mr", "text": "तीव्र वेदना", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0360", "language": "mr", "text": "शौचात रक्त", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0361", "language": "mr", "text": "घशाला सूज आणि श्वासाचा त्रास", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-mr-must-0362", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0353", "language": "mr", "text": "शौचात रक्त", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0354", "language": "mr", "text": "घशाला सूज आणि श्वासाचा त्रास", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0355", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0356", "language": "mr", "text": "रस्ते अपघात", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0357", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0358", "language": "mr", "text": "स्वतःला इजा", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0359", "language": "mr", "text": "छातीत दुखणे", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0360", "language": "mr", "text": "झटका", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0361", "language": "mr", "text": "छातीत दुखणे आणि घाम", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-mr-must-0362", "language": "mr", "text": "ताप आणि खूप सुस्त", "facts": {"age": 2}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "test", "must_catch": true, "kind": "must"}
 {"id": "RF-test-mr-negation-0363", "language": "mr", "text": "छातीत दुखत नाही", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "negation"}
 {"id": "RF-test-mr-negation-0364", "language": "mr", "text": "छातीत दुखणे पण घाम नाही", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": false, "kind": "negation"}
 {"id": "RF-test-mr-negation-0365", "language": "mr", "text": "झटका नाही", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "negation"}
@@ -134,11 +134,11 @@
 {"id": "RF-test-mr-positive-0379", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": false, "kind": "positive"}
 {"id": "RF-test-mr-positive-0380", "language": "mr", "text": "झटका", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": false, "kind": "positive"}
 {"id": "RF-test-hinglish-must-0451", "language": "hinglish", "text": "daura", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hinglish-must-0452", "language": "hinglish", "text": "", "facts": {"tile_ids": ["DS_POISON"]}, "expected": ["RF_DS_TILE"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hinglish-must-0453", "language": "hinglish", "text": "bukhar", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hinglish-must-0454", "language": "hinglish", "text": "bahut tez dard", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hinglish-must-0455", "language": "hinglish", "text": "bahut khoon behna", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "test", "must_catch": true, "kind": "must"}
-{"id": "RF-test-hinglish-must-0456", "language": "hinglish", "text": "gale me sujan aur saans ki dikkat", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hinglish-must-0452", "language": "hinglish", "text": "seene mein dard aur pasina", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hinglish-must-0453", "language": "hinglish", "text": "bukhar aur daura", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hinglish-must-0454", "language": "hinglish", "text": "", "facts": {"tile_ids": ["DS_POISON"]}, "expected": ["RF_DS_TILE"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hinglish-must-0455", "language": "hinglish", "text": "bukhar", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
+{"id": "RF-test-hinglish-must-0456", "language": "hinglish", "text": "104 fever", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "test", "must_catch": true, "kind": "must"}
 {"id": "RF-test-hinglish-negation-0457", "language": "hinglish", "text": "chest pain nahi", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "negation"}
 {"id": "RF-test-hinglish-negation-0458", "language": "hinglish", "text": "chest pain but pasina nahi", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "test", "must_catch": false, "kind": "negation"}
 {"id": "RF-test-hinglish-negation-0459", "language": "hinglish", "text": "daura nahi", "facts": {}, "expected": [], "split": "test", "must_catch": false, "kind": "negation"}
@@ -150,351 +150,351 @@
 {"id": "RF-test-hinglish-positive-0465", "language": "hinglish", "text": "chehra tedha", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "test", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0061", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0062", "language": "en", "text": "chest pain but no sweating", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0063", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0064", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0063", "language": "en", "text": "fever", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0064", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0065", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0066", "language": "en", "text": "no chest pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0067", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0068", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0067", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0068", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0069", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0070", "language": "en", "text": "without breathlessness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0071", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0072", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0071", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0072", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0073", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0074", "language": "en", "text": "no fever", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0075", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0076", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0075", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0076", "language": "en", "text": "", "facts": {"tile_ids": ["DS_CHEST"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0077", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0078", "language": "en", "text": "no seizure", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0079", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0080", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0079", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0080", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0081", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0082", "language": "en", "text": "chest pain but no sweating", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-en-positive-0083", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-positive-0084", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0085", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0086", "language": "en", "text": "no chest pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0087", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0088", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0087", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0088", "language": "en", "text": "hives with breathing trouble", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0089", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0090", "language": "en", "text": "without breathlessness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0091", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0092", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0091", "language": "en", "text": "", "facts": {"tile_ids": ["DS_CHEST"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0092", "language": "en", "text": "road accident", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0093", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0094", "language": "en", "text": "no fever", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0095", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0096", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0095", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0096", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0097", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0098", "language": "en", "text": "no seizure", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0099", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0100", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0099", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0100", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0101", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0102", "language": "en", "text": "chest pain but no sweating", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0103", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0104", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0103", "language": "en", "text": "hives with breathing trouble", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0104", "language": "en", "text": "fever and fits", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0105", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0106", "language": "en", "text": "no chest pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0107", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0108", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0107", "language": "en", "text": "road accident", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0108", "language": "en", "text": "fever", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0109", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0110", "language": "en", "text": "without breathlessness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0111", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0112", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0111", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0112", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0113", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0114", "language": "en", "text": "no fever", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0115", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0116", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0115", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0116", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0117", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0118", "language": "en", "text": "no seizure", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0119", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0120", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0119", "language": "en", "text": "fever and fits", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0120", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0121", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0122", "language": "en", "text": "chest pain but no sweating", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0123", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0124", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0123", "language": "en", "text": "fever", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0124", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0125", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0126", "language": "en", "text": "no chest pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-en-positive-0127", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0128", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0128", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0129", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0130", "language": "en", "text": "without breathlessness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0131", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0132", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0131", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0132", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0133", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0134", "language": "en", "text": "no fever", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0135", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0136", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0135", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0136", "language": "en", "text": "", "facts": {"tile_ids": ["DS_CHEST"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0137", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0138", "language": "en", "text": "no seizure", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0139", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0140", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0139", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0140", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0141", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0142", "language": "en", "text": "chest pain but no sweating", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0143", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0144", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0143", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0144", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0145", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0146", "language": "en", "text": "no chest pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0147", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0148", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0147", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0148", "language": "en", "text": "hives with breathing trouble", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0149", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0150", "language": "en", "text": "without breathlessness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0151", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0152", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0151", "language": "en", "text": "", "facts": {"tile_ids": ["DS_CHEST"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0152", "language": "en", "text": "road accident", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0153", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0154", "language": "en", "text": "no fever", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0155", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0156", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0155", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0156", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0157", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0158", "language": "en", "text": "no seizure", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0159", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0160", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0159", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0160", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0161", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0162", "language": "en", "text": "chest pain but no sweating", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0163", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0164", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0163", "language": "en", "text": "hives with breathing trouble", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0164", "language": "en", "text": "fever and fits", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0165", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0166", "language": "en", "text": "no chest pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0167", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0168", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0167", "language": "en", "text": "road accident", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0168", "language": "en", "text": "fever", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0169", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0170", "language": "en", "text": "without breathlessness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-en-positive-0171", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0172", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0172", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0173", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0174", "language": "en", "text": "no fever", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0175", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0176", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0175", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0176", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0177", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0178", "language": "en", "text": "no seizure", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0179", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0180", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0179", "language": "en", "text": "fever and fits", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0180", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0181", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0182", "language": "en", "text": "chest pain but no sweating", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0183", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0184", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0183", "language": "en", "text": "fever", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0184", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0185", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0186", "language": "en", "text": "no chest pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0187", "language": "en", "text": "I want to die", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0188", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0187", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0188", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0189", "language": "en", "text": "old knee stiffness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0190", "language": "en", "text": "without breathlessness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0191", "language": "en", "text": "vaginal bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0191", "language": "en", "text": "heavy bleeding", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-positive-0192", "language": "en", "text": "chest pain and sweating", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0193", "language": "en", "text": "mild tiredness", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0194", "language": "en", "text": "no fever", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0195", "language": "en", "text": "chest pain", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0196", "language": "en", "text": "snake bite", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0195", "language": "en", "text": "face drooping", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0196", "language": "en", "text": "", "facts": {"tile_ids": ["DS_CHEST"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-en-benign-0197", "language": "en", "text": "mild back ache", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-en-negation-0198", "language": "en", "text": "no seizure", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-en-positive-0199", "language": "en", "text": "severe pain", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-en-positive-0200", "language": "en", "text": "seizure", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0199", "language": "en", "text": "cannot breathe", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-en-positive-0200", "language": "en", "text": "fever 104", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0246", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0247", "language": "hi", "text": "सीने में दर्द लेकिन पसीना नहीं", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0248", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0249", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0248", "language": "hi", "text": "बुखार और खाना नहीं खा रहा", "facts": {"age": 3}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0249", "language": "hi", "text": "एक तरफ कमजोरी", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0250", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0251", "language": "hi", "text": "सीने में दर्द नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0252", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0253", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0252", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0253", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0254", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0255", "language": "hi", "text": "सांस में तकलीफ नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0256", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0257", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0256", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0257", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0258", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0259", "language": "hi", "text": "बुखार नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0260", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0261", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0260", "language": "hi", "text": "खून की उल्टी", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0261", "language": "hi", "text": "सीने में दर्द और पसीना", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0262", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0263", "language": "hi", "text": "दौरा नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0264", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0265", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0264", "language": "hi", "text": "एक तरफ कमजोरी", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0265", "language": "hi", "text": "", "facts": {"tile_ids": ["DS_BREATH"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0266", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0267", "language": "hi", "text": "सीने में दर्द लेकिन पसीना नहीं", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-hi-positive-0268", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0269", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0269", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0270", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0271", "language": "hi", "text": "सीने में दर्द नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0272", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0273", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0272", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0273", "language": "hi", "text": "जहर पी लिया", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0274", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0275", "language": "hi", "text": "सांस में तकलीफ नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0276", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0277", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0276", "language": "hi", "text": "सीने में दर्द और पसीना", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0277", "language": "hi", "text": "चेहरे की सूजन और सांस फूलना", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0278", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0279", "language": "hi", "text": "बुखार नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0280", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0281", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0280", "language": "hi", "text": "", "facts": {"tile_ids": ["DS_BREATH"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0281", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0282", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0283", "language": "hi", "text": "दौरा नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0284", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0285", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0284", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0285", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0286", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0287", "language": "hi", "text": "सीने में दर्द लेकिन पसीना नहीं", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0288", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0289", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0288", "language": "hi", "text": "जहर पी लिया", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0289", "language": "hi", "text": "दौरा", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0290", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0291", "language": "hi", "text": "सीने में दर्द नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0292", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0293", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0292", "language": "hi", "text": "चेहरे की सूजन और सांस फूलना", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0293", "language": "hi", "text": "बुखार और खाना नहीं खा रहा", "facts": {"age": 3}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0294", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0295", "language": "hi", "text": "सांस में तकलीफ नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0296", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0297", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0296", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0297", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0298", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0299", "language": "hi", "text": "बुखार नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0300", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0301", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0300", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0301", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0302", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0303", "language": "hi", "text": "दौरा नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0304", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0305", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0304", "language": "hi", "text": "दौरा", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0305", "language": "hi", "text": "खून की उल्टी", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0306", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0307", "language": "hi", "text": "सीने में दर्द लेकिन पसीना नहीं", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0308", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0309", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0308", "language": "hi", "text": "बुखार और खाना नहीं खा रहा", "facts": {"age": 3}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0309", "language": "hi", "text": "एक तरफ कमजोरी", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0310", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0311", "language": "hi", "text": "सीने में दर्द नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-hi-positive-0312", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0313", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0313", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0314", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0315", "language": "hi", "text": "सांस में तकलीफ नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0316", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0317", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0316", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0317", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0318", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0319", "language": "hi", "text": "बुखार नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0320", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0321", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0320", "language": "hi", "text": "खून की उल्टी", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0321", "language": "hi", "text": "सीने में दर्द और पसीना", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0322", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0323", "language": "hi", "text": "दौरा नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0324", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0325", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0324", "language": "hi", "text": "एक तरफ कमजोरी", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0325", "language": "hi", "text": "", "facts": {"tile_ids": ["DS_BREATH"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0326", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0327", "language": "hi", "text": "सीने में दर्द लेकिन पसीना नहीं", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0328", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0329", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0328", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0329", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0330", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0331", "language": "hi", "text": "सीने में दर्द नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0332", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0333", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0332", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0333", "language": "hi", "text": "जहर पी लिया", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0334", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0335", "language": "hi", "text": "सांस में तकलीफ नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0336", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0337", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0336", "language": "hi", "text": "सीने में दर्द और पसीना", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0337", "language": "hi", "text": "चेहरे की सूजन और सांस फूलना", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0338", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0339", "language": "hi", "text": "बुखार नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0340", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0341", "language": "hi", "text": "पेट में तेज दर्द", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0340", "language": "hi", "text": "", "facts": {"tile_ids": ["DS_BREATH"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0341", "language": "hi", "text": "ऊंचाई से गिरा", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0342", "language": "hi", "text": "थोड़ी थकान", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0343", "language": "hi", "text": "दौरा नहीं", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0344", "language": "hi", "text": "बुखार", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0345", "language": "hi", "text": "सीने में दर्द", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0344", "language": "hi", "text": "१०४ बुखार", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0345", "language": "hi", "text": "खुद को नुकसान", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0346", "language": "hi", "text": "हल्का पीठ दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hi-negation-0347", "language": "hi", "text": "सीने में दर्द लेकिन पसीना नहीं", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hi-positive-0348", "language": "hi", "text": "सांस नहीं ले पा रहा", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hi-positive-0349", "language": "hi", "text": "तेज दर्द", "facts": {"severity": 9}, "expected": ["RF_SEVERE_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0348", "language": "hi", "text": "जहर पी लिया", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hi-positive-0349", "language": "hi", "text": "दौरा", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hi-benign-0350", "language": "hi", "text": "पुराना घुटने का दर्द", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-benign-0381", "language": "mr", "text": "थोडा थकवा", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0382", "language": "mr", "text": "छातीत दुखणे पण घाम नाही", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0383", "language": "mr", "text": "ताप आणि खूप सुस्त", "facts": {"age": 2}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0384", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0383", "language": "mr", "text": "झटका", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0384", "language": "mr", "text": "शौचात रक्त", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0385", "language": "mr", "text": "हलकी पाठदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0386", "language": "mr", "text": "छातीत दुखत नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0387", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0388", "language": "mr", "text": "१०४ ताप", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0387", "language": "mr", "text": "ताप आणि खूप सुस्त", "facts": {"age": 2}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0388", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0389", "language": "mr", "text": "जुनाट गुडघेदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0390", "language": "mr", "text": "श्वासाचा त्रास नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0391", "language": "mr", "text": "", "facts": {"tile_ids": ["DS_STROKE"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0392", "language": "mr", "text": "रस्ते अपघात", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0391", "language": "mr", "text": "ताप", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0392", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0393", "language": "mr", "text": "थोडा थकवा", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0394", "language": "mr", "text": "ताप नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0395", "language": "mr", "text": "घशाला सूज आणि श्वासाचा त्रास", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0396", "language": "mr", "text": "ताप", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0395", "language": "mr", "text": "योनीतून रक्तस्राव", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0396", "language": "mr", "text": "छातीत दुखणे", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0397", "language": "mr", "text": "हलकी पाठदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0398", "language": "mr", "text": "झटका नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0399", "language": "mr", "text": "ताप आणि खूप सुस्त", "facts": {"age": 2}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0400", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0399", "language": "mr", "text": "शौचात रक्त", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0400", "language": "mr", "text": "छातीत दुखणे आणि घाम", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0401", "language": "mr", "text": "जुनाट गुडघेदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0402", "language": "mr", "text": "छातीत दुखणे पण घाम नाही", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-mr-positive-0403", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0404", "language": "mr", "text": "१०४ ताप", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0404", "language": "mr", "text": "", "facts": {"tile_ids": ["DS_STROKE"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0405", "language": "mr", "text": "थोडा थकवा", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0406", "language": "mr", "text": "छातीत दुखत नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0407", "language": "mr", "text": "", "facts": {"tile_ids": ["DS_STROKE"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0408", "language": "mr", "text": "रस्ते अपघात", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0407", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0408", "language": "mr", "text": "१०४ ताप", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0409", "language": "mr", "text": "हलकी पाठदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0410", "language": "mr", "text": "श्वासाचा त्रास नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0411", "language": "mr", "text": "घशाला सूज आणि श्वासाचा त्रास", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0412", "language": "mr", "text": "ताप", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0411", "language": "mr", "text": "छातीत दुखणे", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0412", "language": "mr", "text": "विंचू चावला", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0413", "language": "mr", "text": "जुनाट गुडघेदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0414", "language": "mr", "text": "ताप नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0415", "language": "mr", "text": "ताप आणि खूप सुस्त", "facts": {"age": 2}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0416", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0415", "language": "mr", "text": "छातीत दुखणे आणि घाम", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0416", "language": "mr", "text": "घशाला सूज आणि श्वासाचा त्रास", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0417", "language": "mr", "text": "थोडा थकवा", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0418", "language": "mr", "text": "झटका नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0419", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0420", "language": "mr", "text": "१०४ ताप", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0419", "language": "mr", "text": "", "facts": {"tile_ids": ["DS_STROKE"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0420", "language": "mr", "text": "रस्ते अपघात", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0421", "language": "mr", "text": "हलकी पाठदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0422", "language": "mr", "text": "छातीत दुखणे पण घाम नाही", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0423", "language": "mr", "text": "", "facts": {"tile_ids": ["DS_STROKE"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0424", "language": "mr", "text": "रस्ते अपघात", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0423", "language": "mr", "text": "१०४ ताप", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0424", "language": "mr", "text": "स्वतःला इजा", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0425", "language": "mr", "text": "जुनाट गुडघेदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0426", "language": "mr", "text": "छातीत दुखत नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0427", "language": "mr", "text": "घशाला सूज आणि श्वासाचा त्रास", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0428", "language": "mr", "text": "ताप", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0427", "language": "mr", "text": "विंचू चावला", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0428", "language": "mr", "text": "झटका", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0429", "language": "mr", "text": "थोडा थकवा", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0430", "language": "mr", "text": "श्वासाचा त्रास नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0431", "language": "mr", "text": "ताप आणि खूप सुस्त", "facts": {"age": 2}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0432", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0431", "language": "mr", "text": "घशाला सूज आणि श्वासाचा त्रास", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0432", "language": "mr", "text": "ताप आणि खूप सुस्त", "facts": {"age": 2}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0433", "language": "mr", "text": "हलकी पाठदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0434", "language": "mr", "text": "ताप नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0435", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0436", "language": "mr", "text": "१०४ ताप", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0435", "language": "mr", "text": "रस्ते अपघात", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0436", "language": "mr", "text": "ताप", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0437", "language": "mr", "text": "जुनाट गुडघेदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0438", "language": "mr", "text": "झटका नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0439", "language": "mr", "text": "", "facts": {"tile_ids": ["DS_STROKE"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0440", "language": "mr", "text": "रस्ते अपघात", "facts": {}, "expected": ["RF_TRAUMA_MAJOR"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0439", "language": "mr", "text": "स्वतःला इजा", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0440", "language": "mr", "text": "योनीतून रक्तस्राव", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0441", "language": "mr", "text": "थोडा थकवा", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0442", "language": "mr", "text": "छातीत दुखणे पण घाम नाही", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-mr-positive-0443", "language": "mr", "text": "घशाला सूज आणि श्वासाचा त्रास", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0444", "language": "mr", "text": "ताप", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0443", "language": "mr", "text": "झटका", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0444", "language": "mr", "text": "शौचात रक्त", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0445", "language": "mr", "text": "हलकी पाठदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0446", "language": "mr", "text": "छातीत दुखत नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-mr-positive-0447", "language": "mr", "text": "ताप आणि खूप सुस्त", "facts": {"age": 2}, "expected": ["RF_CHILD_FEVER_ASSOC"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-mr-positive-0448", "language": "mr", "text": "श्वास घेता येत नाही", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-mr-positive-0448", "language": "mr", "text": "चेहरा वाकडा", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-mr-benign-0449", "language": "mr", "text": "जुनाट गुडघेदुखी", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-mr-negation-0450", "language": "mr", "text": "श्वासाचा त्रास नाही", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-hinglish-benign-0466", "language": "hinglish", "text": "thodi thakan", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0467", "language": "hinglish", "text": "chest pain but pasina nahi", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hinglish-positive-0468", "language": "hinglish", "text": "daura", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hinglish-positive-0469", "language": "hinglish", "text": "chehra tedha", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0468", "language": "hinglish", "text": "khud ko nuksan", "facts": {}, "expected": ["RF_SELF_HARM"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0469", "language": "hinglish", "text": "pregnancy me bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hinglish-benign-0470", "language": "hinglish", "text": "halka back pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0471", "language": "hinglish", "text": "chest pain nahi", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hinglish-positive-0472", "language": "hinglish", "text": "bahut khoon behna", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hinglish-positive-0473", "language": "hinglish", "text": "", "facts": {"tile_ids": ["DS_POISON"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0472", "language": "hinglish", "text": "daura", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0473", "language": "hinglish", "text": "bahut khoon behna", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hinglish-benign-0474", "language": "hinglish", "text": "purana knee pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0475", "language": "hinglish", "text": "saans ki dikkat nahi", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hinglish-positive-0476", "language": "hinglish", "text": "seene mein dard aur pasina", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hinglish-positive-0477", "language": "hinglish", "text": "gale me sujan aur saans ki dikkat", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0476", "language": "hinglish", "text": "bukhar aur daura", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0477", "language": "hinglish", "text": "chehra tedha", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hinglish-benign-0478", "language": "hinglish", "text": "thodi thakan", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0479", "language": "hinglish", "text": "bukhar nahi", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hinglish-positive-0480", "language": "hinglish", "text": "zeher pi liya", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hinglish-positive-0481", "language": "hinglish", "text": "bukhar aur daura", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0480", "language": "hinglish", "text": "bukhar", "facts": {"age": 0}, "expected": ["RF_CHILD_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0481", "language": "hinglish", "text": "saans nahi aa rahi", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hinglish-benign-0482", "language": "hinglish", "text": "halka back pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0483", "language": "hinglish", "text": "daura nahi", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hinglish-positive-0484", "language": "hinglish", "text": "daura", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hinglish-positive-0485", "language": "hinglish", "text": "chehra tedha", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0484", "language": "hinglish", "text": "pregnancy me bleeding", "facts": {"pregnant": true}, "expected": ["RF_PREGNANCY_DANGER"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0485", "language": "hinglish", "text": "chest me dard", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hinglish-benign-0486", "language": "hinglish", "text": "purana knee pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0487", "language": "hinglish", "text": "chest pain but pasina nahi", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "negation"}
 {"id": "RF-dev-hinglish-positive-0488", "language": "hinglish", "text": "bahut khoon behna", "facts": {}, "expected": ["RF_BLEEDING_HEAVY"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hinglish-positive-0489", "language": "hinglish", "text": "", "facts": {"tile_ids": ["DS_POISON"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0489", "language": "hinglish", "text": "seene mein dard aur pasina", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hinglish-benign-0490", "language": "hinglish", "text": "thodi thakan", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0491", "language": "hinglish", "text": "chest pain nahi", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hinglish-positive-0492", "language": "hinglish", "text": "seene mein dard aur pasina", "facts": {}, "expected": ["RF_CHEST_PAIN_ASSOC", "RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hinglish-positive-0493", "language": "hinglish", "text": "gale me sujan aur saans ki dikkat", "facts": {}, "expected": ["RF_ALLERGY_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0492", "language": "hinglish", "text": "chehra tedha", "facts": {}, "expected": ["RF_STROKE_SIGNS"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0493", "language": "hinglish", "text": "", "facts": {"tile_ids": ["DS_POISON"]}, "expected": ["RF_DS_TILE"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hinglish-benign-0494", "language": "hinglish", "text": "halka back pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0495", "language": "hinglish", "text": "saans ki dikkat nahi", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hinglish-positive-0496", "language": "hinglish", "text": "zeher pi liya", "facts": {}, "expected": ["RF_POISON_BITE"], "split": "dev", "must_catch": false, "kind": "positive"}
-{"id": "RF-dev-hinglish-positive-0497", "language": "hinglish", "text": "bukhar aur daura", "facts": {"age": 4}, "expected": ["RF_CHILD_FEVER_ASSOC", "RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0496", "language": "hinglish", "text": "saans nahi aa rahi", "facts": {}, "expected": ["RF_BREATH_SEVERE"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0497", "language": "hinglish", "text": "104 fever", "facts": {}, "expected": ["RF_HIGH_FEVER"], "split": "dev", "must_catch": false, "kind": "positive"}
 {"id": "RF-dev-hinglish-benign-0498", "language": "hinglish", "text": "purana knee pain", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "benign"}
 {"id": "RF-dev-hinglish-negation-0499", "language": "hinglish", "text": "bukhar nahi", "facts": {}, "expected": [], "split": "dev", "must_catch": false, "kind": "negation"}
-{"id": "RF-dev-hinglish-positive-0500", "language": "hinglish", "text": "daura", "facts": {}, "expected": ["RF_SEIZURE_FAINT"], "split": "dev", "must_catch": false, "kind": "positive"}
+{"id": "RF-dev-hinglish-positive-0500", "language": "hinglish", "text": "chest me dard", "facts": {}, "expected": ["RF_CHEST_PAIN"], "split": "dev", "must_catch": false, "kind": "positive"}

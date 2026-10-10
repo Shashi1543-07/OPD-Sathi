@@ -20,7 +20,6 @@ RULES = [
     "RF_TRAUMA_MAJOR",
     "RF_ALLERGY_SEVERE",
     "RF_POISON_BITE",
-    "RF_SEVERE_PAIN",
     "RF_HIGH_FEVER",
 ]
 COUNTS = {"en": 200, "hi": 150, "mr": 100, "hinglish": 50}
@@ -121,12 +120,6 @@ POSITIVE: dict[str, dict[str, tuple[str, dict[str, Any], list[str]]]] = {
         "hi": ("जहर पी लिया", {}, ["RF_POISON_BITE"]),
         "mr": ("विंचू चावला", {}, ["RF_POISON_BITE"]),
         "hinglish": ("zeher pi liya", {}, ["RF_POISON_BITE"]),
-    },
-    "RF_SEVERE_PAIN": {
-        "en": ("severe pain", {"severity": 9}, ["RF_SEVERE_PAIN"]),
-        "hi": ("तेज दर्द", {"severity": 9}, ["RF_SEVERE_PAIN"]),
-        "mr": ("तीव्र वेदना", {"severity": 9}, ["RF_SEVERE_PAIN"]),
-        "hinglish": ("bahut tez dard", {"severity": 9}, ["RF_SEVERE_PAIN"]),
     },
     "RF_HIGH_FEVER": {
         "en": ("fever 104", {}, ["RF_HIGH_FEVER"]),

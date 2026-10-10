@@ -10,6 +10,7 @@ import {
   OfflineBanner,
 } from "../components/ui";
 import { AudioPrompt } from "../components/ui/AudioPrompt";
+import { apiOrigin } from "../lib/api";
 import { intake } from "../lib/intake";
 import { useKioskPrefs } from "../lib/kioskPrefs";
 import { stopSpeaking } from "../lib/voice";
@@ -61,7 +62,7 @@ export function KioskShell() {
       }
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL ?? "http://localhost:8000"}/healthz`,
+          `${apiOrigin}/healthz`,
           {
             cache: "no-store",
             signal: AbortSignal.timeout(4_000),

@@ -454,6 +454,29 @@ export interface paths {
         patch: operations["correct_interview_answer_intake_sessions__visit_id__interview_answers_patch"];
         trace?: never;
     };
+    "/intake/sessions/{visit_id}/interview/back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Go Back One Question
+         * @description Undo the last answer and ask that question again, with the old answer filled in.
+         *
+         *     Answers after it are not affected; going back to the main problem re-plans the
+         *     symptom questions once it is answered again.
+         */
+        post: operations["go_back_one_question_intake_sessions__visit_id__interview_back_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/readback-audio": {
         parameters: {
             query?: never;
@@ -2398,6 +2421,39 @@ export interface operations {
                 "application/json": components["schemas"]["AnswerPayload"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    go_back_one_question_intake_sessions__visit_id__interview_back_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

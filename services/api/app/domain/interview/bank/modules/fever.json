@@ -34,7 +34,10 @@
             "en": "Comes and goes",
             "hi": "आता-जाता रहता है",
             "mr": "येतो आणि जातो"
-          }
+          },
+          "excludes": [
+            "continuous"
+          ]
         },
         {
           "id": "night",
@@ -42,7 +45,10 @@
             "en": "Mostly at night",
             "hi": "ज़्यादातर रात में",
             "mr": "बहुतेक रात्री"
-          }
+          },
+          "excludes": [
+            "continuous"
+          ]
         },
         {
           "id": "continuous",
@@ -50,7 +56,11 @@
             "en": "All the time",
             "hi": "लगातार रहता है",
             "mr": "सतत असतो"
-          }
+          },
+          "excludes": [
+            "comes_goes",
+            "night"
+          ]
         }
       ],
       "multi": true
@@ -72,7 +82,10 @@
             "en": "Body ache",
             "hi": "बदन दर्द",
             "mr": "अंगदुखी"
-          }
+          },
+          "hide_with_modules": [
+            "pain"
+          ]
         },
         {
           "id": "headache",
@@ -80,7 +93,10 @@
             "en": "Headache",
             "hi": "सिरदर्द",
             "mr": "डोकेदुखी"
-          }
+          },
+          "hide_with_modules": [
+            "pain"
+          ]
         },
         {
           "id": "cold",
@@ -96,7 +112,10 @@
             "en": "Rash on skin",
             "hi": "त्वचा पर दाने",
             "mr": "त्वचेवर पुरळ"
-          }
+          },
+          "hide_with_modules": [
+            "skin"
+          ]
         },
         {
           "id": "burning_urine",
@@ -104,7 +123,10 @@
             "en": "Burning urine",
             "hi": "पेशाब में जलन",
             "mr": "लघवीत जळजळ"
-          }
+          },
+          "hide_with_modules": [
+            "urinary"
+          ]
         },
         {
           "id": "vomiting",
@@ -112,7 +134,10 @@
             "en": "Vomiting",
             "hi": "उल्टी",
             "mr": "उलट्या"
-          }
+          },
+          "hide_with_modules": [
+            "digestive"
+          ]
         },
         {
           "id": "none",

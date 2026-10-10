@@ -1,3 +1,5 @@
+import { apiOrigin } from "./api";
+
 export type StaffRole = "admin" | "doctor" | "nurse";
 
 export type StaffUser = {
@@ -17,7 +19,6 @@ type AuthResponse = {
 
 type Problem = { code?: string; detail?: string };
 
-const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const STAFF_GET_CACHE_MS = 8_000;
 const getResponseCache = new Map<
   string,

@@ -1,4 +1,15 @@
+/** Staff-only explanation of a patient's place: score, every point's reason, AI check. */
+export type Triage = {
+  score: number;
+  level: "routine" | "priority" | "urgent";
+  head_start_min: number | null;
+  components: { points: number; label: string; kind: string; source?: string }[];
+  ai_review?: { verdict: "agree" | "more_urgent" | "less_urgent"; reason_en: string } | null;
+  override?: { level: string; reason: string; by_role?: string } | null;
+};
+
 export type QueueItem = {
+  triage?: Triage | null;
   visit_id: string;
   department_id: string;
   token: string;

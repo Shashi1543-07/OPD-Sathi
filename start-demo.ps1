@@ -73,6 +73,23 @@ $env:WEB_PORT = "$WebPort"
 $env:WEB_ORIGIN = "http://localhost:5173,http://127.0.0.1:5173,$webUrl,http://127.0.0.1:$WebPort"
 $env:PROVIDER_MODE = "standard"
 
+# Patients scan the token QR code with their phone, which cannot open "localhost". Use this
+# PC's Wi-Fi/LAN address for the QR link and let phones on the same network reach the app.
+$phoneUrl = Get-EnvValue $envLines "PUBLIC_WEB_URL"
+if (-not $phoneUrl -and (Get-Command Get-NetIPConfiguration -ErrorAction SilentlyContinue)) {
+  $lan = Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+    Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq "Up" } |
+    ForEach-Object { $_.IPv4Address.IPAddress } |
+    Where-Object { $_ -and $_ -notlike "169.254.*" } |
+    Select-Object -First 1
+  if ($lan) { $phoneUrl = "http://${lan}:$WebPort" }
+}
+if ($phoneUrl) {
+  $env:PUBLIC_WEB_URL = $phoneUrl
+  $env:WEB_BIND = "0.0.0.0"
+  $env:WEB_ORIGIN = "$($env:WEB_ORIGIN),$phoneUrl"
+}
+
 $build = @()
 if (-not $NoBuild) { $build = @("--build") }
 
@@ -105,6 +122,11 @@ Write-Host "    Admin:   $adminEmail  /  $adminPassword"
 Write-Host "    Doctor:  doctor01@demo.opdsathi.test  /  $staffPassword   (General Medicine)"
 Write-Host "    Nurse:   nurse01@demo.opdsathi.test   /  $staffPassword   (General Medicine)"
 Write-Host "  API docs:          http://localhost:8000/docs"
+if ($phoneUrl) {
+  Write-Host "  Token QR codes open on phones via $phoneUrl (phone must be on the same Wi-Fi)." -ForegroundColor Green
+} else {
+  Write-Host "  No Wi-Fi/LAN address found: token QR codes will only open on this PC." -ForegroundColor Yellow
+}
 Write-Host ""
 if ($gemini) { Write-Host "  AI: Gemini key found - AI summaries, translation and photo reading are ON." -ForegroundColor Green }
 else { Write-Host "  AI: no GEMINI_API_KEY in .env - running with rules + browser voice only." -ForegroundColor Yellow }

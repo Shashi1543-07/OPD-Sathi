@@ -549,11 +549,15 @@ async def test_interview_answer_route_validates_records_and_advances_idempotentl
 async def test_answer_correction_route_updates_summary_and_rejects_unasked_question(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from app.domain.interview.engine import apply_answer, start
+    from app.domain.interview.engine import apply_answer, next_question, start
 
     hospital_id, visit_id = uuid4(), uuid4()
     state_key = intake._session_key(hospital_id, visit_id)
-    interview = apply_answer(start("en"), "chief_concern", "headache")
+    interview = apply_answer(
+        start("en", sex="male", age=30), "chief_concern", "headache since morning"
+    )
+    while (question := next_question(interview)) is not None:
+        interview = apply_answer(interview, question.id, None, skip=True)
     redis = MemoryRedis(
         {
             state_key: {
@@ -618,6 +622,96 @@ async def test_answer_correction_route_updates_summary_and_rejects_unasked_quest
             principal,
         )
     assert unavailable.value.status == 422
+
+    # A different main problem on the review screen asks its own questions before confirming.
+    statuses: list[str] = []
+
+    class Intake:
+        def __init__(self, *_args: object) -> None:
+            pass
+
+        async def set_visit_status(self, **kwargs: object) -> None:
+            statuses.append(str(kwargs["status"]))
+
+    monkeypatch.setattr(intake, "IntakeRepository", Intake)
+    reopened = await intake.correct_interview_answer(
+        visit_id,
+        intake.AnswerPayload(question_id="chief_concern", answer="Skin rash or itching"),
+        request,
+        principal,
+    )
+    assert reopened["complete"] is False
+    assert reopened["question"]["id"] == "skin"
+    assert statuses == ["registering"]
+    persisted = json.loads(redis.values[state_key])
+    assert persisted["phase"] == "interview"
+    assert "pain" not in persisted["interview"]["queued"]
+
+
+def test_earlier_steps_stay_open_until_the_first_answer() -> None:
+    from app.domain.interview.engine import apply_answer, start
+
+    fresh = start("en", sex="male", age=30)
+    assert intake._interview_not_started(
+        {"phase": "interview", "interview": fresh.model_dump(mode="json")}
+    )
+    answered = apply_answer(fresh, "chief_concern", "Fever")
+    assert not intake._interview_not_started(
+        {"phase": "interview", "interview": answered.model_dump(mode="json")}
+    )
+    assert not intake._interview_not_started({"phase": "summary", "interview": {}})
+
+
+@pytest.mark.asyncio
+async def test_back_undoes_one_answer_and_refills_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.domain.interview.engine import apply_answer, start
+
+    hospital_id, visit_id = uuid4(), uuid4()
+    state_key = intake._session_key(hospital_id, visit_id)
+    interview = apply_answer(start("hi", sex="female", age=28), "chief_concern", "बुखार")
+    interview = apply_answer(interview, "duration", "आज से")
+    followup_key = intake._followup_key(hospital_id, visit_id)
+    redis = MemoryRedis(
+        {
+            state_key: {
+                "phase": "interview",
+                "interview": interview.model_dump(mode="json"),
+                "followups_requested": True,
+                "turns": 2,
+            },
+            followup_key: {"basis": "old", "questions": []},
+        }
+    )
+
+    async def authorized(*_args: object, **_kwargs: object) -> tuple[object, object]:
+        return hospital_id, {}
+
+    async def scope(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(intake, "_authorized_visit", authorized)
+    monkeypatch.setattr(intake, "set_hospital_scope", scope)
+    request = request_for(FakeConnection(), redis)
+    principal = {"hospital_id": str(hospital_id), "sub": str(visit_id), "role": "patient"}
+
+    result = await intake.go_back_one_question(visit_id, request, principal)
+    assert result["question"]["id"] == "duration"
+    assert result["draft"] == "आज से"
+    persisted = json.loads(redis.values[state_key])
+    assert persisted["interview"]["asked"] == ["chief_concern"]
+    # The AI draft was based on the undone answer, so it is requested again later.
+    assert "followups_requested" not in persisted and followup_key not in redis.values
+
+    result = await intake.go_back_one_question(visit_id, request, principal)
+    assert result["question"]["id"] == "chief_concern" and result["draft"] == "बुखार"
+    assert json.loads(redis.values[state_key])["interview"]["queued"] == [
+        "chief_concern",
+        "duration",
+        "severity",
+    ]
+    with pytest.raises(ApiProblemError) as nothing_left:
+        await intake.go_back_one_question(visit_id, request, principal)
+    assert nothing_left.value.status == 409
 
 
 @pytest.mark.asyncio

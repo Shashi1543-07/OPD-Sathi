@@ -36,6 +36,11 @@ _HOSPITAL_TZ = ZoneInfo("Asia/Kolkata")
 router = APIRouter(tags=["queue"])
 STAFF_ROLES = ("nurse", "doctor", "admin")
 RED_FLAG_REASONS = {rule.id: rule.reason_en for rule in RULES}
+# Alerts that do not come from a red-flag rule.
+_SPECIAL_ALERTS = {
+    "PATIENT_HELP": "Patient asked for help at the kiosk",
+    "AI_TRIAGE_REVIEW": "AI review suggests this patient may be more urgent. Please check.",
+}
 
 
 class TransitionPayload(BaseModel):
@@ -105,6 +110,7 @@ def _queue_score(row: dict[str, Any], settings: Any) -> int:
         urgent_bonus_min=settings.urgent_bonus_min,
         priority_bonus_min=settings.priority_bonus_min,
         vulnerable_bonus_min=settings.vulnerable_bonus_min,
+        acuity_score=row.get("acuity_score"),
     )
 
 
@@ -128,6 +134,22 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         )
         doctors, samples = await repository.queue_estimate_inputs(
             hospital_id=visit["hospital_id"], department_id=visit["department_id"]
+        )
+        # Where to go and in which language to show it on the patient's phone.
+        place = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT d.name_en, d.name_hi, d.name_mr, h.name AS hospital, v.language "
+                        "FROM visits v JOIN departments d ON d.hospital_id = v.hospital_id "
+                        "AND d.id = v.department_id JOIN hospitals h ON h.id = v.hospital_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                    ),
+                    {"hospital_id": visit["hospital_id"], "visit_id": visit["visit_id"]},
+                )
+            )
+            .mappings()
+            .first()
         )
     try:
         read_model = QueueRedis(
@@ -173,6 +195,13 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         "position": position if state == "waiting" else None,
         "eta_min": eta.eta_min if state == "waiting" else 0,
         "eta_max": eta.eta_max if state == "waiting" else 0,
+        "department": (
+            {lang: place[f"name_{lang}"] or place["name_en"] for lang in ("en", "hi", "mr")}
+            if place
+            else None
+        ),
+        "hospital": place["hospital"] if place else None,
+        "language": place["language"] if place else "en",
         "updated_at": datetime.now(UTC).isoformat(),
     }
 
@@ -331,6 +360,8 @@ async def staff_queue(
                     "queued_at": row["queued_at"].isoformat() if row["queued_at"] else None,
                     "routing": (row.get("case_sheet_data") or {}).get("routing"),
                     "needs_assistance": row.get("needs_assistance") is True,
+                    # Staff only: the score and every line that made it up.
+                    "triage": row.get("acuity"),
                 }
             )
     offset = (
@@ -404,6 +435,9 @@ async def staff_patients(
                         "AND d.id = v.department_id LEFT JOIN case_sheets cs "
                         "ON cs.hospital_id = v.hospital_id AND cs.visit_id = v.id "
                         "WHERE v.hospital_id = :hospital_id AND d.is_active = true "
+                        # A kiosk session ended before a token was issued (the patient quit,
+                        # declined consent or walked away) was never a registration.
+                        "AND NOT (v.status = 'cancelled' AND v.token_label IS NULL) "
                         "AND (CAST(:department_id AS uuid) IS NULL "
                         "OR v.department_id = CAST(:department_id AS uuid)) "
                         "AND (CAST(:since AS timestamptz) IS NULL "
@@ -723,15 +757,22 @@ async def open_alerts(
         result = await connection.execute(
             text(
                 "SELECT e.id, e.visit_id, e.rule_id, e.level, e.evidence, e.created_at, "
-                "v.department_id, v.token_label, e.acknowledged_at "
+                "e.source, v.department_id, v.token_label, e.acknowledged_at "
                 "FROM red_flag_events e JOIN visits v ON v.hospital_id = e.hospital_id "
                 "AND v.id = e.visit_id WHERE e.hospital_id = :hospital_id "
-                "AND (e.source = 'rule' OR e.rule_id IN ('RF_DS_TILE', 'PATIENT_HELP')) "
+                # An AI "urgent" is a suggestion a nurse must see and confirm.
+                "AND (e.source = 'rule' OR (e.source = 'llm' AND e.level = 'urgent') "
+                "OR e.rule_id IN ('RF_DS_TILE', 'PATIENT_HELP', "
+                "'AI_TRIAGE_REVIEW')) "
                 "AND ((:acknowledged = true AND e.acknowledged_at IS NOT NULL) OR "
                 "(:acknowledged = false AND e.acknowledged_at IS NULL)) "
-                # Open alerts only matter while the patient is still in the building.
+                # Open alerts only matter while the patient is still in the building. An
+                # urgent one stays until staff acknowledge it, even if the kiosk session
+                # ended (a patient with a danger sign may have walked away from the screen).
                 "AND (:acknowledged = true OR v.status IN ('registering', "
-                "'awaiting_confirmation', 'queued', 'called', 'in_consult')) "
+                "'awaiting_confirmation', 'queued', 'called', 'in_consult') "
+                "OR (v.status = 'cancelled' AND v.token_label IS NULL AND e.level = 'urgent' "
+                "AND e.created_at > now() - interval '2 hours')) "
                 "AND (CAST(:department_id AS uuid) IS NULL OR "
                 "v.department_id = CAST(:department_id AS uuid)) "
                 "ORDER BY e.created_at DESC LIMIT 100"
@@ -751,9 +792,13 @@ async def open_alerts(
                     for key, value in row.items()
                     if key not in {"created_at", "acknowledged_at"}
                 },
-                "reason_en": "Patient asked for help at the kiosk"
-                if row["rule_id"] == "PATIENT_HELP"
-                else RED_FLAG_REASONS.get(row["rule_id"], "A danger-sign help tile was selected."),
+                "reason_en": (
+                    "AI suggests (please confirm): " if row.get("source") == "llm" else ""
+                )
+                + _SPECIAL_ALERTS.get(
+                    row["rule_id"],
+                    RED_FLAG_REASONS.get(row["rule_id"], "A danger-sign help tile was selected."),
+                ),
                 "created_at": row["created_at"].isoformat(),
                 "acknowledged_at": row["acknowledged_at"].isoformat()
                 if row["acknowledged_at"]
@@ -843,12 +888,24 @@ async def _perform_override_visit(
             (
                 await connection.execute(
                     text(
-                        "UPDATE visits SET urgency = coalesce(:urgency, urgency) "
+                        # A staff decision is part of the explanation staff see later.
+                        "UPDATE visits SET urgency = coalesce(:urgency, urgency), "
+                        "acuity = CASE WHEN CAST(:urgency AS text) IS NULL THEN acuity "
+                        "ELSE coalesce(acuity, '{}'::jsonb) || jsonb_build_object('override', "
+                        "jsonb_build_object('level', CAST(:urgency AS text), "
+                        "'reason', CAST(:reason AS text), 'by_role', CAST(:role AS text), "
+                        "'at', now())) END "
                         "WHERE hospital_id = :hospital_id "
                         "AND id = :visit_id AND status = 'queued' RETURNING id, department_id, "
-                        "urgency, age_years, pregnant, token_label, queued_at"
+                        "urgency, age_years, pregnant, token_label, queued_at, acuity_score"
                     ),
-                    {"urgency": payload.urgency, "hospital_id": hospital_id, "visit_id": visit_id},
+                    {
+                        "urgency": payload.urgency,
+                        "reason": payload.reason,
+                        "role": principal["role"],
+                        "hospital_id": hospital_id,
+                        "visit_id": visit_id,
+                    },
                 )
             )
             .mappings()
@@ -897,6 +954,7 @@ async def _perform_override_visit(
         urgent_bonus_min=request.app.state.settings.urgent_bonus_min,
         priority_bonus_min=request.app.state.settings.priority_bonus_min,
         vulnerable_bonus_min=request.app.state.settings.vulnerable_bonus_min,
+        acuity_score=row["acuity_score"],
     )
     try:
         await QueueRedis(
@@ -1048,7 +1106,9 @@ async def staff_queue_socket(
                                 "AND (CAST(:department_id AS uuid) IS NULL OR "
                                 "v.department_id = CAST(:department_id AS uuid)) "
                                 "AND (e.source = 'rule' OR "
-                                "e.rule_id IN ('RF_DS_TILE', 'PATIENT_HELP')) "
+                                "(e.source = 'llm' AND e.level = 'urgent') OR "
+                                "e.rule_id IN ('RF_DS_TILE', 'PATIENT_HELP', "
+                                "'AI_TRIAGE_REVIEW')) "
                                 "AND e.acknowledged_at IS NULL "
                                 "AND e.created_at <= now() - interval '60 seconds' "
                                 "ORDER BY e.created_at LIMIT 100"

@@ -7,7 +7,14 @@ from typing import Any
 from app.ai.output_guard import UnsafeLLMOutputError, validate_safe_output
 from app.ai.prompts.builders import build_redflag_prompt
 from app.ai.providers.llm.base import LLMProvider
-from app.domain.redflags.engine import RULES, RedFlag, RuleModel, maximum_urgency
+from app.domain.redflags.engine import (
+    RULES,
+    PatientFacts,
+    RedFlag,
+    RuleModel,
+    conditions_match,
+    maximum_urgency,
+)
 
 # Runs once at confirmation, in parallel with department routing.
 MAX_REDFLAG_SECONDS = 5.0
@@ -63,8 +70,19 @@ async def second_opinion_flags(
     session_id: str,
     rules: Sequence[RuleModel] = RULES,
     timeout: float = MAX_REDFLAG_SECONDS,
+    facts: PatientFacts | None = None,
 ) -> list[RedFlag]:
-    """Return only quoted, configured rule flags; any failure returns no extra flags."""
+    """Return only quoted, configured rule flags; any failure returns no extra flags.
+
+    Only rules the patient's words can show are offered, and only those whose conditions
+    fit this patient: the model once claimed "patient selected a danger-sign tile" from
+    "breathless on walking", which made a routine patient urgent.
+    """
+    rules = [
+        rule
+        for rule in rules
+        if rule.all_groups and (facts is None or conditions_match(rule.conditions, facts))
+    ]
     if not transcript.strip() or not rules:
         return []
     by_id = {rule.id: rule for rule in rules}

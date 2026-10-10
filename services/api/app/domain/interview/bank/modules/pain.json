@@ -18,6 +18,11 @@
             "en": "Head",
             "hi": "सिर",
             "mr": "डोके"
+          },
+          "hide_with_answers": {
+            "chief_concern": [
+              "headache"
+            ]
           }
         },
         {
@@ -66,7 +71,10 @@
             "en": "Stomach",
             "hi": "पेट",
             "mr": "पोट"
-          }
+          },
+          "hide_with_modules": [
+            "digestive"
+          ]
         },
         {
           "id": "throat",
@@ -77,7 +85,11 @@
           }
         }
       ],
-      "multi": true
+      "multi": true,
+      "skip_if_only_concerns": [
+        "stomach_pain",
+        "headache"
+      ]
     },
     {
       "id": "pain_character",
@@ -96,7 +108,10 @@
             "en": "All the time",
             "hi": "लगातार",
             "mr": "सतत"
-          }
+          },
+          "excludes": [
+            "comes_goes"
+          ]
         },
         {
           "id": "comes_goes",
@@ -104,7 +119,10 @@
             "en": "Comes and goes",
             "hi": "आता-जाता है",
             "mr": "येते आणि जाते"
-          }
+          },
+          "excludes": [
+            "constant"
+          ]
         },
         {
           "id": "sharp",

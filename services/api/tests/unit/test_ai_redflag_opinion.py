@@ -51,7 +51,7 @@ def test_schema_limits_model_output_to_configured_rules_and_quotes() -> None:
 
 @pytest.mark.asyncio
 async def test_adds_only_configured_flags_with_exact_quote_and_neutral_visibility() -> None:
-    rule = next(rule for rule in RULES if rule.level == "urgent")
+    rule = next(rule for rule in RULES if rule.level == "urgent" and rule.all_groups)
     provider = FixtureProvider({"flags": [{"rule_id": rule.id, "evidence": "severe chest pain"}]})
     flags = await second_opinion_flags(
         provider,
@@ -66,6 +66,31 @@ async def test_adds_only_configured_flags_with_exact_quote_and_neutral_visibilit
     assert flags[0].visible_to_patient is False
     assert flags[0].evidence == "severe chest pain"
     assert provider.timeout < MAX_REDFLAG_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_the_model_cannot_claim_a_tile_or_a_rule_that_does_not_fit_the_patient() -> None:
+    from app.domain.redflags.engine import PatientFacts
+
+    provider = FixtureProvider(
+        {
+            "flags": [
+                # Seen live: "breathless on walking" reported as a danger tile.
+                {"rule_id": "RF_DS_TILE", "evidence": "Breathless on walking"},
+                {"rule_id": "RF_PREGNANCY_DANGER", "evidence": "Breathless on walking"},
+            ]
+        }
+    )
+    flags = await second_opinion_flags(
+        provider,
+        transcript="Difficulty breathing, Breathless on walking",
+        language="en",
+        session_id="synthetic-session",
+        facts=PatientFacts(age=70, sex="male", pregnant=None),
+    )
+    assert flags == []
+    offered = set(provider.schema["properties"]["flags"]["items"]["properties"]["rule_id"]["enum"])
+    assert "RF_DS_TILE" not in offered and "RF_PREGNANCY_DANGER" not in offered
 
 
 @pytest.mark.asyncio

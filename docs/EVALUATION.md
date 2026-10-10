@@ -8,7 +8,7 @@
 {
   "dev": {
     "scripts": 350,
-    "tp": 205,
+    "tp": 209,
     "fp": 0,
     "fn": 0,
     "tn": 158,
@@ -24,35 +24,35 @@
     },
     "per_rule": {
       "RF_ALLERGY_SEVERE": {
-        "tp": 6,
+        "tp": 9,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_BLEEDING_HEAVY": {
-        "tp": 10,
+        "tp": 13,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_BREATH_SEVERE": {
-        "tp": 12,
+        "tp": 14,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_CHEST_PAIN": {
-        "tp": 46,
+        "tp": 44,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_CHEST_PAIN_ASSOC": {
-        "tp": 11,
+        "tp": 12,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
@@ -66,70 +66,63 @@
         "precision": 1.0
       },
       "RF_CHILD_FEVER_ASSOC": {
-        "tp": 7,
-        "fp": 0,
-        "fn": 0,
-        "recall": 1.0,
-        "precision": 1.0
-      },
-      "RF_DS_TILE": {
-        "tp": 6,
-        "fp": 0,
-        "fn": 0,
-        "recall": 1.0,
-        "precision": 1.0
-      },
-      "RF_HIGH_FEVER": {
-        "tp": 10,
-        "fp": 0,
-        "fn": 0,
-        "recall": 1.0,
-        "precision": 1.0
-      },
-      "RF_POISON_BITE": {
         "tp": 11,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
+      "RF_DS_TILE": {
+        "tp": 12,
+        "fp": 0,
+        "fn": 0,
+        "recall": 1.0,
+        "precision": 1.0
+      },
+      "RF_HIGH_FEVER": {
+        "tp": 12,
+        "fp": 0,
+        "fn": 0,
+        "recall": 1.0,
+        "precision": 1.0
+      },
+      "RF_POISON_BITE": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "recall": 1.0,
+        "precision": 1.0
+      },
       "RF_PREGNANCY_DANGER": {
-        "tp": 15,
+        "tp": 12,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_SEIZURE_FAINT": {
-        "tp": 14,
-        "fp": 0,
-        "fn": 0,
-        "recall": 1.0,
-        "precision": 1.0
-      },
-      "RF_SELF_HARM": {
-        "tp": 14,
-        "fp": 0,
-        "fn": 0,
-        "recall": 1.0,
-        "precision": 1.0
-      },
-      "RF_SEVERE_PAIN": {
         "tp": 16,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
+      "RF_SELF_HARM": {
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "recall": 1.0,
+        "precision": 1.0
+      },
       "RF_STROKE_SIGNS": {
-        "tp": 6,
+        "tp": 14,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_TRAUMA_MAJOR": {
-        "tp": 10,
+        "tp": 9,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
@@ -139,7 +132,7 @@
   },
   "test": {
     "scripts": 150,
-    "tp": 84,
+    "tp": 86,
     "fp": 0,
     "fn": 0,
     "tn": 70,
@@ -155,84 +148,84 @@
     },
     "per_rule": {
       "RF_ALLERGY_SEVERE": {
-        "tp": 5,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_BLEEDING_HEAVY": {
-        "tp": 5,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_BREATH_SEVERE": {
-        "tp": 6,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_CHEST_PAIN": {
-        "tp": 16,
+        "tp": 18,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_CHEST_PAIN_ASSOC": {
-        "tp": 3,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_CHILD_FEVER": {
-        "tp": 5,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_CHILD_FEVER_ASSOC": {
-        "tp": 2,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_DS_TILE": {
-        "tp": 5,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_HIGH_FEVER": {
-        "tp": 2,
+        "tp": 6,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_POISON_BITE": {
-        "tp": 3,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_PREGNANCY_DANGER": {
-        "tp": 3,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_SEIZURE_FAINT": {
-        "tp": 8,
+        "tp": 9,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
@@ -245,22 +238,15 @@
         "recall": 1.0,
         "precision": 1.0
       },
-      "RF_SEVERE_PAIN": {
-        "tp": 7,
-        "fp": 0,
-        "fn": 0,
-        "recall": 1.0,
-        "precision": 1.0
-      },
       "RF_STROKE_SIGNS": {
-        "tp": 7,
+        "tp": 9,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,
         "precision": 1.0
       },
       "RF_TRAUMA_MAJOR": {
-        "tp": 3,
+        "tp": 4,
         "fp": 0,
         "fn": 0,
         "recall": 1.0,

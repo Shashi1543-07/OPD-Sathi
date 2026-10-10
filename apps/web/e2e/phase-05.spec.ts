@@ -13,6 +13,9 @@ test("patient status page shows live queue position and a safe ETA range", async
     position: 4,
     eta_min: 5,
     eta_max: 10,
+    department: { en: "General Medicine", hi: "सामान्य चिकित्सा", mr: "सामान्य औषधोपचार" },
+    hospital: "Demo Government Hospital, Nagpur",
+    language: "en",
     updated_at: "2026-10-06T05:00:00Z",
   };
   await page.route(/\/status\/status-test-token$/, (route) =>
@@ -28,7 +31,11 @@ test("patient status page shows live queue position and a safe ETA range", async
   await page.goto("/s/status-test-token");
   await expect(page.getByText("GEN-007")).toBeVisible();
   await expect(page.getByText("5–10 min")).toBeVisible();
-  await expect(page.getByText("3", { exact: true })).toBeVisible();
+  await expect(
+    page.locator(".status-figure", { hasText: "People ahead" }).getByText("3", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("General Medicine")).toBeVisible();
+  await expect(page.getByText("Demo Government Hospital, Nagpur")).toBeVisible();
   await expect(page.getByText(/urgent/i)).toHaveCount(0);
   const screenshotDirectory = resolve(
     process.cwd(),
@@ -43,6 +50,36 @@ test("patient status page shows live queue position and a safe ETA range", async
     path: resolve(screenshotDirectory, "patient-status-en.png"),
     fullPage: true,
   });
+});
+
+test("a called patient sees where to go, in the language they used at the kiosk", async ({
+  page,
+}) => {
+  const payload = {
+    state: "called",
+    token: "GEN-008",
+    position: null,
+    eta_min: 0,
+    eta_max: 0,
+    department: { en: "General Medicine", hi: "सामान्य चिकित्सा", mr: "सामान्य औषधोपचार" },
+    hospital: null,
+    language: "hi",
+  };
+  await page.route(/\/status\/called-test-token$/, (route) => route.fulfill({ json: payload }));
+  await page.route(/\/status\/called-test-token\/stream$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `event: status\ndata: ${JSON.stringify(payload)}\n\n`,
+    }),
+  );
+  await page.goto("/s/called-test-token");
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("आपकी बारी आ गई!");
+  await expect(alert).toContainText("सामान्य चिकित्सा");
+  // The patient can switch language themselves.
+  await page.getByRole("button", { name: "English" }).click();
+  await expect(alert).toContainText("Please go to General Medicine now.");
 });
 
 test("staff can call a waiting patient from the queue board", async ({

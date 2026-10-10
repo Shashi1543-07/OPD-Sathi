@@ -43,14 +43,6 @@
             "hi": "जानवर या कुत्ते का काटना",
             "mr": "प्राणी किंवा कुत्रा चावला"
           }
-        },
-        {
-          "id": "no_injury",
-          "label": {
-            "en": "No injury - started on its own",
-            "hi": "चोट नहीं - अपने आप शुरू हुआ",
-            "mr": "दुखापत नाही - आपोआप सुरू झाले"
-          }
         }
       ],
       "multi": false
@@ -61,49 +53,72 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "What can you not do normally now?",
-        "hi": "अब आप सामान्य रूप से क्या नहीं कर पा रहे?",
-        "mr": "आता तुम्हाला काय नेहमीसारखे करता येत नाही?"
+        "en": "Since it happened, do you have any of these?",
+        "hi": "तब से क्या इनमें से कुछ है?",
+        "mr": "तेव्हापासून यापैकी काही आहे का?"
       },
       "options": [
         {
           "id": "walk",
           "label": {
-            "en": "Walking",
-            "hi": "चलना",
-            "mr": "चालणे"
+            "en": "Cannot walk properly",
+            "hi": "ठीक से चल नहीं पा रहे",
+            "mr": "नीट चालता येत नाही"
+          },
+          "hide_with_answers": {
+            "mobility": [
+              "bite"
+            ]
           }
         },
         {
           "id": "lift",
           "label": {
-            "en": "Lifting the arm",
-            "hi": "हाथ उठाना",
-            "mr": "हात उचलणे"
+            "en": "Cannot lift the arm",
+            "hi": "हाथ नहीं उठा पा रहे",
+            "mr": "हात उचलता येत नाही"
+          },
+          "hide_with_answers": {
+            "mobility": [
+              "bite"
+            ]
           }
         },
         {
           "id": "bend",
           "label": {
-            "en": "Bending",
-            "hi": "झुकना",
-            "mr": "वाकणे"
+            "en": "Cannot bend",
+            "hi": "झुक नहीं पा रहे",
+            "mr": "वाकता येत नाही"
+          },
+          "hide_with_answers": {
+            "mobility": [
+              "bite"
+            ]
           }
         },
         {
           "id": "swelling",
           "label": {
-            "en": "There is swelling",
-            "hi": "सूजन है",
-            "mr": "सूज आहे"
+            "en": "Swelling",
+            "hi": "सूजन",
+            "mr": "सूज"
+          }
+        },
+        {
+          "id": "wound",
+          "label": {
+            "en": "Bleeding or open wound",
+            "hi": "खून बहना या खुला घाव",
+            "mr": "रक्त येणे किंवा उघडी जखम"
           }
         },
         {
           "id": "normal",
           "label": {
-            "en": "I can move normally",
-            "hi": "मैं सामान्य रूप से चल-फिर सकता हूँ",
-            "mr": "मी नेहमीसारखी हालचाल करू शकतो"
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
           },
           "none": true
         }

@@ -11,7 +11,15 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.case_sheet import CaseSheet
-from app.domain.interview.bank import QUESTIONS, TRIGGERS, Language, Question
+from app.domain.interview.bank import (
+    QUESTIONS,
+    TRIGGERS,
+    AnswerOption,
+    Applicability,
+    Language,
+    Question,
+    Sex,
+)
 
 # Core 3 + up to 2 symptom modules (4) + up to 3 AI follow-ups + 5 history questions.
 MAX_QUESTIONS = 15
@@ -36,6 +44,9 @@ class InterviewState(BaseModel):
     # Questions written for this patient by the language model (validated, trilingual).
     extra_questions: dict[str, Question] = Field(default_factory=dict)
     ai_followups: Literal["none", "merged", "skipped"] = "none"
+    # Used only to leave out questions and options that cannot apply (e.g. pregnancy).
+    sex: Sex | None = None
+    age: int | None = None
 
 
 def question_for(state: InterviewState, question_id: str) -> Question:
@@ -46,9 +57,84 @@ def question_for(state: InterviewState, question_id: str) -> Question:
     return question
 
 
-def start(language: Language, *, red_flag_ids: tuple[str, ...] = ()) -> InterviewState:
+def start(
+    language: Language,
+    *,
+    red_flag_ids: tuple[str, ...] = (),
+    sex: Sex | None = None,
+    age: int | None = None,
+) -> InterviewState:
     """Start a new interview in a supported patient language."""
-    return InterviewState(language=language, red_flag_ids=list(red_flag_ids))
+    return InterviewState(language=language, red_flag_ids=list(red_flag_ids), sex=sex, age=age)
+
+
+def _option_ids(question: Question, answer: str | int | None) -> set[str]:
+    if not isinstance(answer, str):
+        return set()
+    return {option.id for _, option in question.answer_parts(answer) if option is not None}
+
+
+def _modules(state: InterviewState) -> set[str]:
+    return {question_for(state, question_id).module for question_id in state.queued}
+
+
+def _applies(item: Applicability, state: InterviewState, modules: set[str]) -> bool:
+    if item.only_sexes and (state.sex or "unknown") not in item.only_sexes:
+        return False
+    if state.age is not None:
+        if item.min_age is not None and state.age < item.min_age:
+            return False
+        if item.max_age is not None and state.age > item.max_age:
+            return False
+    if set(item.hide_with_modules) & modules:
+        return False
+    for question_id, option_ids in item.hide_with_answers.items():
+        question = QUESTIONS.get(question_id)
+        if question and _option_ids(question, state.answers.get(question_id)) & set(option_ids):
+            return False
+    return True
+
+
+def visible_question(state: InterviewState, question: Question) -> Question | None:
+    """The question as this patient sees it, or ``None`` when it does not apply to them."""
+    modules = _modules(state)
+    if not _applies(question, state, modules):
+        return None
+    if question.skip_if_only_concerns:
+        parts = QUESTIONS["chief_concern"].answer_parts(str(state.answers.get("chief_concern", "")))
+        tapped = {option.id for _, option in parts if option is not None}
+        typed = any(option is None for _, option in parts)
+        if tapped and not typed and tapped <= set(question.skip_if_only_concerns):
+            return None
+    options: list[AnswerOption] = [o for o in question.options if _applies(o, state, modules)]
+    if any(not option.none for option in question.options) and all(o.none for o in options):
+        return None  # Every real choice is already covered elsewhere.
+    if len(options) == len(question.options):
+        return question
+    shown = {option.id for option in options}
+    return question.model_copy(
+        update={
+            "options": [
+                option.model_copy(update={"excludes": [i for i in option.excludes if i in shown]})
+                for option in options
+            ]
+        }
+    )
+
+
+def pending(state: InterviewState) -> list[str]:
+    """Question IDs still to ask, leaving out those that do not apply to this patient."""
+    return [
+        question_id
+        for question_id in state.queued
+        if question_id not in state.asked
+        and visible_question(state, question_for(state, question_id)) is not None
+    ]
+
+
+def question_total(state: InterviewState) -> int:
+    """Answered plus remaining questions, within the hard cap."""
+    return min(MAX_QUESTIONS, len(state.asked) + len(pending(state)))
 
 
 def next_question(state: InterviewState) -> Question | None:
@@ -56,8 +142,11 @@ def next_question(state: InterviewState) -> Question | None:
     if len(state.asked) >= MAX_QUESTIONS:
         return None
     for question_id in state.queued:
-        if question_id not in state.asked:
-            return question_for(state, question_id)
+        if question_id in state.asked:
+            continue
+        question = visible_question(state, question_for(state, question_id))
+        if question is not None:
+            return question
     return None
 
 
@@ -72,8 +161,7 @@ def add_followups(state: InterviewState, questions: list[Question]) -> Interview
         return state
     extra = {question.id: question for question in questions[:AI_FOLLOWUP_LIMIT]}
     extra = {key: value for key, value in extra.items() if key not in state.queued}
-    remaining = [item for item in state.queued if item not in state.asked]
-    room = MAX_QUESTIONS - len(state.asked) - len(remaining)
+    room = MAX_QUESTIONS - len(state.asked) - len(pending(state))
     selected = list(extra)[: max(room, 0)]
     if not selected:
         return state.model_copy(update={"ai_followups": "skipped"})
@@ -106,13 +194,26 @@ def skip_followups(state: InterviewState) -> InterviewState:
 def _trigger_modules(complaint: str) -> list[str]:
     normalized = unicodedata.normalize("NFKC", complaint).casefold()
     keywords = TRIGGERS["keywords"]
-    selected = [
-        module
-        for module, terms in keywords.items()
-        if any(term.casefold() in normalized for term in terms)
-    ]
+    ignored = TRIGGERS.get("ignore_phrases", {})
+    selected = []
+    for module, terms in keywords.items():
+        text = normalized
+        for phrase in ignored.get(module, []):
+            text = text.replace(phrase.casefold(), " ")
+        if any(term.casefold() in text for term in terms):
+            selected.append(module)
     maximum = int(TRIGGERS["max_triggered_modules"])
     return selected[:maximum]
+
+
+def _planned_queue(complaint: str) -> list[str]:
+    """Core questions, then the symptom modules for this complaint, then history."""
+    modules = list(dict.fromkeys([*_trigger_modules(complaint), *ALWAYS_MODULES]))
+    return [
+        *CORE_ORDER,
+        *(question.id for module in modules for question in QUESTIONS.values()
+          if question.module == module),
+    ]
 
 
 def _validate_answer(question: Question, answer: str | int) -> str | int:
@@ -158,16 +259,9 @@ def apply_answer(
         answers[question_id] = value
     queued = list(state.queued)
     if question_id == "chief_concern" and isinstance(value, str):
-        included = {question_for(state, item).module for item in queued}
-        modules = list(dict.fromkeys([*_trigger_modules(value), *ALWAYS_MODULES]))
-        for module in modules:
-            if module not in included:
-                queued.extend(
-                    bank_question.id
-                    for bank_question in QUESTIONS.values()
-                    if bank_question.module == module
-                )
-                included.add(module)
+        planned = _planned_queue(value)
+        # Keep anything already slotted in (AI follow-ups) after the planned questions.
+        queued = [*planned, *(item for item in queued if item not in planned)]
     asked = [*state.asked, question_id]
     if len(asked) > MAX_QUESTIONS:
         raise InterviewValidationError("the interview question limit was exceeded")
@@ -216,6 +310,16 @@ def _denial(question: Question, language: Language) -> dict[str, Any] | None:
     return _pair(none_labels[0] if none_labels else text_en, text_en, 0.9)
 
 
+def pregnancy_answer(state: InterviewState) -> bool | None:
+    """True or False when the patient answered the pregnancy question yes or no."""
+    chosen = _option_ids(QUESTIONS["pregnancy"], state.answers.get("pregnancy"))
+    if "yes" in chosen:
+        return True
+    if chosen == {"no"}:
+        return False
+    return None
+
+
 def build_case_sheet(state: InterviewState) -> dict[str, Any]:
     """Build and validate a neutral draft case sheet from patient-stated answers.
 
@@ -236,11 +340,18 @@ def build_case_sheet(state: InterviewState) -> dict[str, Any]:
     allergies: list[dict[str, Any]] = []
     past_conditions: list[str] = []
     family_history: list[dict[str, Any]] = []
-    pregnant: bool | None = None
+    pregnant = pregnancy_answer(state)
+    if state.answers.get("pregnancy") and pregnant is None:
+        past_conditions.append("Not sure whether pregnant")
     for question_id, value in state.answers.items():
-        if question_id in {*CORE_ORDER, "chief_concern"} or not isinstance(value, str) or not value:
+        if question_id in {*CORE_ORDER, "chief_concern", "pregnancy"}:
+            continue
+        if not isinstance(value, str) or not value:
             continue
         question = QUESTIONS.get(question_id) or state.extra_questions.get(question_id)
+        if question is not None:
+            # A denial lists only the options this patient was actually shown.
+            question = visible_question(state, question) or question
         if question is not None and question.is_negative(value):
             denial = _denial(question, state.language)
             if denial is not None and question_id not in {"general_context", "medications"}:
@@ -303,8 +414,8 @@ def build_case_sheet(state: InterviewState) -> dict[str, Any]:
             "/chief_complaint": {"source": "patient_text", "confidence": 0.5, "confirmed": False}
         },
     }
-    if pregnant:
-        data["women_health"] = {"pregnant": True}
+    if pregnant is not None:
+        data["women_health"] = {"pregnant": pregnant}
     followups = {
         question_id: question.prompt["en"]
         for question_id, question in state.extra_questions.items()
@@ -318,7 +429,11 @@ def build_case_sheet(state: InterviewState) -> dict[str, Any]:
 def correct_answer(
     state: InterviewState, question_id: str, answer: str | int | None
 ) -> InterviewState:
-    """Replace an already answered value without changing the interview order."""
+    """Replace an already answered value.
+
+    Changing the main problem re-plans the symptom questions: answers to questions that no
+    longer fit the new problem are dropped, and questions it newly needs become pending.
+    """
     if question_id not in state.asked or question_id not in state.answers:
         raise InterviewValidationError("only an answered question can be changed")
     question = question_for(state, question_id)
@@ -326,16 +441,38 @@ def correct_answer(
         raise InterviewValidationError("an answer is required")
     value = _validate_answer(question, answer)
     answers = {**state.answers, question_id: value}
-    queued = list(state.queued)
-    if question_id == "chief_concern" and isinstance(value, str):
-        included = {question_for(state, item).module for item in queued}
-        modules = list(dict.fromkeys([*_trigger_modules(value), *ALWAYS_MODULES]))
-        for module in modules:
-            if module not in included:
-                queued.extend(
-                    bank_question.id
-                    for bank_question in QUESTIONS.values()
-                    if bank_question.module == module
-                )
-                included.add(module)
-    return state.model_copy(update={"queued": queued, "answers": answers})
+    if question_id != "chief_concern" or not isinstance(value, str):
+        return state.model_copy(update={"answers": answers})
+    planned = _planned_queue(value)
+    if planned == _planned_queue(str(state.answers[question_id])):
+        return state.model_copy(update={"answers": answers})
+    # AI follow-ups were written for the old problem, so they go too.
+    kept = set(planned)
+    return state.model_copy(
+        update={
+            "queued": planned,
+            "asked": [item for item in state.asked if item in kept],
+            "answers": {key: item for key, item in answers.items() if key in kept},
+            "extra_questions": {},
+            "ai_followups": "skipped" if state.ai_followups != "none" else "none",
+        }
+    )
+
+
+def go_back(state: InterviewState) -> tuple[InterviewState, str | int | None]:
+    """Undo the last answer so the patient can answer that question again.
+
+    Returns the new state and the undone answer (to show pre-filled). Going back to the
+    main problem forgets the symptom questions planned from it, including AI follow-ups.
+    """
+    if not state.asked:
+        raise InterviewValidationError("there is no earlier question")
+    last = state.asked[-1]
+    previous = state.answers.get(last)
+    update: dict[str, Any] = {
+        "asked": state.asked[:-1],
+        "answers": {key: value for key, value in state.answers.items() if key != last},
+    }
+    if last == "chief_concern":
+        update |= {"queued": list(CORE_ORDER), "extra_questions": {}, "ai_followups": "none"}
+    return state.model_copy(update=update), previous

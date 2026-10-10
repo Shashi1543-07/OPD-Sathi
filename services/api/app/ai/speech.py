@@ -15,7 +15,7 @@ import structlog
 
 from app.ai.providers.llm.gemini import GeminiProvider
 from app.ai.providers.stt.sarvam import SarvamSTT
-from app.ai.providers.tts.base import AudioClip
+from app.ai.providers.tts.base import AudioClip, pad_with_silence
 from app.ai.providers.tts.sarvam import SarvamTTS
 from app.config import Settings
 
@@ -120,7 +120,8 @@ class SpeechService:
             digest = hashlib.sha256(
                 f"{self.tts_mode}|{self._tts_voice}|{language}|{text}".encode()
             ).hexdigest()
-            cache_key = f"osa:tts:v1:{digest}"
+            # v2: clips now carry lead/tail silence; v1 entries were clipped on playback.
+            cache_key = f"osa:tts:v2:{digest}"
             try:
                 cached = await cache.get(cache_key)
                 if isinstance(cached, str) and ":" in cached:
@@ -129,6 +130,8 @@ class SpeechService:
             except Exception:  # The cache is best-effort; speak without it.
                 _LOGGER.debug("tts_cache_read_failed")
         clip = await self._synthesize_uncached(text[:2400], language)
+        if clip.media_type == "audio/wav":
+            clip = AudioClip(pad_with_silence(clip.content), clip.media_type)
         if cache is not None and cache_key is not None:
             try:
                 await cache.set(

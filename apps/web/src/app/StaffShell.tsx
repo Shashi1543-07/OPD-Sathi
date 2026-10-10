@@ -2,10 +2,10 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button, ConnectionIndicator, Toast } from "../components/ui";
+import { apiOrigin } from "../lib/api";
 import { staffAuth, StaffUser } from "../lib/auth";
 import { navigationByRole } from "./staffAccess";
 
-const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const lastHospitalKey = "osa.staff.hospital";
 type Hospital = { id: string; name: string };
 

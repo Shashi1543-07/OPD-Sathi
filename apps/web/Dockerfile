@@ -4,8 +4,9 @@ WORKDIR /app
 COPY apps/web/package.json apps/web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY apps/web ./
-# The browser calls the API directly; override when the API is not on localhost:8000.
-ARG VITE_API_URL=http://localhost:8000
+# The browser calls the API through this container's nginx (/api -> api:8000), so the
+# kiosk, staff screens and patients' phones all use one address.
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 RUN npx vite build
 

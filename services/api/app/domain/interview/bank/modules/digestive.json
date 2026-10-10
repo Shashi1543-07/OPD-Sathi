@@ -7,9 +7,9 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Which stomach problems do you have?",
-        "hi": "पेट की कौन-सी परेशानी है?",
-        "mr": "पोटाचा कोणता त्रास आहे?"
+        "en": "Do you have any of these stomach problems?",
+        "hi": "क्या पेट की इनमें से कोई परेशानी है?",
+        "mr": "पोटाचा यापैकी कोणता त्रास आहे का?"
       },
       "options": [
         {
@@ -59,6 +59,15 @@
             "hi": "मल में खून या काला मल",
             "mr": "शौचात रक्त किंवा काळी शौच"
           }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true
         }
       ],
       "multi": true
@@ -69,9 +78,9 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "Where in the stomach do you feel it?",
-        "hi": "पेट में कहाँ महसूस होता है?",
-        "mr": "पोटात कुठे जाणवते?"
+        "en": "Do you have stomach pain? If yes, where?",
+        "hi": "क्या पेट में दर्द है? हो तो कहाँ?",
+        "mr": "पोटात दुखते का? असल्यास कुठे?"
       },
       "options": [
         {
@@ -117,11 +126,16 @@
         {
           "id": "no_pain",
           "label": {
-            "en": "No pain",
-            "hi": "दर्द नहीं है",
-            "mr": "दुखत नाही"
+            "en": "No stomach pain",
+            "hi": "पेट में दर्द नहीं",
+            "mr": "पोटात दुखत नाही"
           },
-          "none": true
+          "none": true,
+          "hide_with_answers": {
+            "chief_concern": [
+              "stomach_pain"
+            ]
+          }
         }
       ],
       "multi": true

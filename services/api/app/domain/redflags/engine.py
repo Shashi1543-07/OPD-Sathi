@@ -140,6 +140,11 @@ def _conditions_match(conditions: dict[str, Any], facts: PatientFacts) -> bool:
     return True
 
 
+def conditions_match(conditions: dict[str, Any], facts: PatientFacts) -> bool:
+    """Whether a rule's structured conditions (age, sex, pregnancy, tiles) fit a patient."""
+    return _conditions_match(conditions, facts)
+
+
 def evaluate(
     text: str,
     *,

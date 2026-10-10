@@ -42,7 +42,10 @@
             "en": "TB",
             "hi": "टीबी",
             "mr": "टीबी"
-          }
+          },
+          "hide_with_modules": [
+            "respiratory"
+          ]
         },
         {
           "id": "cancer",

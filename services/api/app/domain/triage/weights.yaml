@@ -1,0 +1,80 @@
+# Triage score weights. DRAFT: every number here needs review by a clinician before use.
+#
+# The score (0-100) decides how much of a head start a patient gets in the queue. It is
+# never shown to patients; staff see every line that made it up. The patient's own 0-10
+# rating is counted lightly, so typing "10" can never move anyone far.
+review_status: draft_needs_clinician_review
+version: 1
+
+levels:
+  priority: 30 # score at or above this is "priority"
+  urgent: 70 # an urgent red flag is always "urgent", whatever the score
+
+# Queue order = arrival time minus a head start. Routine patients keep their place in
+# arrival order; a routine patient can only be overtaken by someone who arrived less than
+# max_minutes after them. Urgent patients go to the front.
+head_start:
+  minutes_per_point: 0.6
+  max_minutes: 45
+
+red_flags:
+  urgent_points: 70 # danger tile, red-flag rule, or AI second opinion with a quote
+  priority_points: 30
+  additional_points: 5 # each further flag
+  max_additional: 15
+
+# A tapped answer that means the same as a red-flag rule raises that rule in every
+# language (the text rules matched some languages' labels but not others).
+option_flags:
+  digestive.blood_stool: RF_BLEEDING_HEAVY
+  fever.high: RF_HIGH_FEVER
+  mobility.road: RF_TRAUMA_MAJOR
+
+# Objective warning signs from tapped answers (question.option; language independent).
+signals:
+  chief_concern.breathing: { points: 12, en: Difficulty breathing is the main problem }
+  chief_concern.injury: { points: 6, en: Injury or fall }
+  respiratory.blood: { points: 25, en: Blood in phlegm }
+  respiratory.breathless: { points: 10, en: Breathless on walking }
+  respiratory.wheeze: { points: 6, en: Wheezing }
+  respiratory_history.tb_contact: { points: 5, en: Someone at home has TB }
+  respiratory_history.weight_loss: { points: 5, en: Losing weight }
+  digestive.vomiting: { points: 4, en: Vomiting }
+  digestive.loose: { points: 4, en: Loose motions }
+  digestive_site.lower_right: { points: 8, en: Pain in the lower right abdomen }
+  urinary.blood: { points: 12, en: Blood in urine }
+  urinary.less: { points: 10, en: Passing very little urine }
+  urinary_associated.flank: { points: 6, en: Pain in the side of the back }
+  urinary_associated.swelling: { points: 8, en: Swelling of feet or face }
+  fever.chills: { points: 4, en: Fever with shivering }
+  fever_associated.rash: { points: 6, en: Fever with a rash }
+  pain_character.spreading: { points: 5, en: Pain spreading to another place }
+  mobility.bite: { points: 12, en: Animal or dog bite }
+  mobility_effect.walk: { points: 8, en: Cannot walk properly since the injury }
+  mobility_effect.wound: { points: 10, en: Bleeding or open wound }
+  mobility_effect.swelling: { points: 4, en: Swelling after the injury }
+  skin.wound: { points: 6, en: Wound not healing }
+  sleep_energy.dizzy: { points: 5, en: Dizziness }
+  sleep_energy.weight_loss: { points: 4, en: Losing weight }
+  sleep_energy.sweats: { points: 3, en: Sweating at night }
+  past_history.heart: { points: 6, en: Known heart disease }
+  past_history.diabetes: { points: 3, en: Known diabetes }
+# All tapped warning signs together; tapping everything cannot make a patient urgent.
+signals_max: 25
+
+vulnerability:
+  - { en: Infant under 1 year, max_age: 0, points: 20 }
+  - { en: Child aged 1 to 4, min_age: 1, max_age: 4, points: 10 }
+  - { en: Aged 75 or over, min_age: 75, points: 12 }
+  - { en: Aged 65 to 74, min_age: 65, max_age: 74, points: 8 }
+  - { en: Pregnant, pregnant: true, points: 12 }
+
+onset:
+  today: { points: 6, en: Started today }
+  1_3_days: { points: 3, en: Started 1 to 3 days ago }
+
+# The patient's own rating. It is self-reported and easy to exaggerate, so at most 4 of
+# 100 points, and none for a problem that has lasted more than a month.
+self_rating:
+  points: { 7: 1, 8: 2, 9: 3, 10: 4 }
+  ignore_if_onset: [months]

@@ -47,6 +47,11 @@
   "scaleNone": "No problem",
   "scaleWorst": "Worst",
   "back": "Back",
+  "quit": "Stop and exit",
+  "quitTitle": "Stop registration?",
+  "quitBody": "Your answers will not be sent to the doctor and you will not get a token.",
+  "quitYes": "Yes, stop",
+  "quitNo": "No, continue",
   "skip": "Skip",
   "next": "Next",
   "saveChange": "Save change",
@@ -60,6 +65,7 @@
   "department": "Go to",
   "position": "Your place in the queue",
   "ahead": "{{count}} people ahead of you",
+  "ahead_one": "1 person ahead of you",
   "aheadNone": "You are next",
   "waitAbout": "About {{minutes}} minutes",
   "waitHint": "Please sit in the waiting area. Your token number will be called.",
@@ -83,5 +89,6 @@
   "scanning": "Reading your prescription…",
   "scanFound": "We found these medicines. Please check and edit if needed.",
   "scanNone": "We could not read any medicine names. Please say or type them.",
-  "scanFailed": "Could not read the photo. Please say or type the medicine names."
+  "scanFailed": "Could not read the photo. Please say or type the medicine names.",
+  "dangerHelpNow": "Get help now (stop the questions)"
 }

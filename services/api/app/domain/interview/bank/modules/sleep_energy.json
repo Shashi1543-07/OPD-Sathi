@@ -26,7 +26,10 @@
             "en": "Losing weight",
             "hi": "वज़न कम होना",
             "mr": "वजन कमी होणे"
-          }
+          },
+          "hide_with_modules": [
+            "respiratory"
+          ]
         },
         {
           "id": "sleep",
