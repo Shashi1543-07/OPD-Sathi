@@ -160,9 +160,18 @@ class _Provider:
 async def test_summarize_interview_falls_back_quietly() -> None:
     answers = [{"question_id": "chief_concern", "question_en": "Main problem?", "answer": "x"}]
     ok = _Provider(_summary())
-    assert await summarize_interview(
-        ok, language="hi", age=34, sex="female", answers=answers, danger_signs=[], session_id="s"
-    ) == _summary()
+    assert (
+        await summarize_interview(
+            ok,
+            language="hi",
+            age=34,
+            sex="female",
+            answers=answers,
+            danger_signs=[],
+            session_id="s",
+        )
+        == _summary()
+    )
     assert ok.calls[0]["guard"] is guard_doctor_summary
     assert "UNTRUSTED_DATA_JSON" in ok.calls[0]["prompt"]
     for failing in (

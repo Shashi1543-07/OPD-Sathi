@@ -27,7 +27,8 @@ _ROLLUP_DAY_SQL = (
     "a.patient_count, a.wait_seconds_total, a.wait_sample_count, "
     "a.consult_seconds_total, a.consult_sample_count, a.urgent_count, "
     "a.interview_seconds_total, a.interview_sample_count, a.confirmed_count, "
-    "a.confirmed_without_edits_count, a.doctor_edited_count, a.language_mix "
+    "a.confirmed_without_edits_count, a.case_sheet_count, a.doctor_edited_count, "
+    "a.language_mix "
     "FROM osa_analytics.analytics_daily_department_tenant a JOIN departments d "
     "ON d.hospital_id = a.hospital_id AND d.id = a.department_id "
     "WHERE a.hospital_id = :hospital_id AND a.service_date = :service_date"
@@ -37,7 +38,8 @@ _ROLLUP_RANGE_SQL = (
     "a.patient_count, a.wait_seconds_total, a.wait_sample_count, "
     "a.consult_seconds_total, a.consult_sample_count, a.urgent_count, "
     "a.interview_seconds_total, a.interview_sample_count, a.confirmed_count, "
-    "a.confirmed_without_edits_count, a.doctor_edited_count, a.language_mix "
+    "a.confirmed_without_edits_count, a.case_sheet_count, a.doctor_edited_count, "
+    "a.language_mix "
     "FROM osa_analytics.analytics_daily_department_tenant a JOIN departments d "
     "ON d.hospital_id = a.hospital_id AND d.id = a.department_id "
     "WHERE a.hospital_id = :hospital_id "
@@ -76,6 +78,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "interview_sample_count",
             "confirmed_count",
             "confirmed_without_edits_count",
+            "case_sheet_count",
             "doctor_edited_count",
         ):
             totals[key] += float(row[key] or 0)
@@ -117,6 +120,8 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     patients = int(totals["patient_count"])
     confirmed = int(totals["confirmed_count"])
+    # Only visits that produced a case sheet can have one edited by a doctor.
+    case_sheets = int(totals["case_sheet_count"])
     return {
         "patients": patients,
         "average_wait_seconds": _mean(
@@ -135,8 +140,8 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         )
         if confirmed
         else None,
-        "doctor_edit_rate_percent": round(100 * totals["doctor_edited_count"] / patients, 1)
-        if patients
+        "doctor_edit_rate_percent": round(100 * totals["doctor_edited_count"] / case_sheets, 1)
+        if case_sheets
         else None,
         "department_load": sorted(department_load, key=lambda item: item["patients"], reverse=True),
     }
@@ -280,6 +285,7 @@ async def analytics_export(
                 "confirmed_without_edits_count",
                 "confirmed_count",
                 "doctor_edited_count",
+                "case_sheet_count",
                 "language_mix",
             ]
         )
@@ -310,6 +316,7 @@ async def analytics_export(
                         row["confirmed_without_edits_count"],
                         row["confirmed_count"],
                         row["doctor_edited_count"],
+                        row["case_sheet_count"],
                         row["language_mix"],
                     ]
                 )

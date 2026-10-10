@@ -377,7 +377,7 @@
   "analyticsUrgentDetail": "जल्द ध्यान चाहिए चिह्नित विज़िट",
   "analyticsConfirmedDetail": "मरीज़ द्वारा पुष्टि की गई केस शीट जिन्हें डॉक्टर ने नहीं बदला",
   "analyticsConfirmedEmpty": "इस अवधि में किसी मरीज़ ने केस शीट की पुष्टि नहीं की।",
-  "analyticsDoctorEditDetail": "विज़िट जिनकी केस शीट डॉक्टर ने बदली",
+  "analyticsDoctorEditDetail": "केस शीट में से जिन्हें डॉक्टर ने सुधारा",
   "analyticsNoVisitsEmpty": "इस अवधि में कोई विज़िट नहीं।",
   "analyticsInterviewDetail": "कियोस्क के पहले से आख़िरी जवाब तक",
   "analyticsInterviewEmpty": "इस अवधि में कोई कियोस्क साक्षात्कार नहीं।",
@@ -450,5 +450,7 @@
   "kioskConn_off": "बंद किया गया",
   "kioskLastSeenAt": "आख़िरी बार {{when}} दिखा",
   "kioskOnlineSummary_one": "{{count}} सक्रिय कियोस्क में से {{online}} अभी ऑनलाइन",
-  "kioskOnlineSummary_other": "{{count}} सक्रिय कियोस्क में से {{online}} अभी ऑनलाइन"
+  "kioskOnlineSummary_other": "{{count}} सक्रिय कियोस्क में से {{online}} अभी ऑनलाइन",
+  "analyticsNoSheetsEmpty": "इस अवधि में कोई केस शीट नहीं बनी।",
+  "analyticsDoctorEditHelp": "बदली गई केस शीट को उन विज़िट से भाग दिया जाता है जिनकी केस शीट बनी। इतिहास लेने से पहले छोड़े गए चेक-इन नहीं गिने जाते।"
 }

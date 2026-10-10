@@ -398,7 +398,8 @@ export function AnalyticsDashboard() {
                 value={fixed(summary.doctor_edit_rate_percent, 1)}
                 unit="%"
                 detail={t("analyticsDoctorEditDetail")}
-                emptyDetail={t("analyticsNoVisitsEmpty")}
+                emptyDetail={t("analyticsNoSheetsEmpty")}
+                help={t("analyticsDoctorEditHelp")}
               />
               <Kpi
                 icon={<FileText size={20} />}

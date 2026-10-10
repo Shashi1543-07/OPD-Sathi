@@ -31,6 +31,7 @@ def rollup(
     without_edits: int,
     doctor_edited: int,
     languages: dict[str, int],
+    case_sheets: int | None = None,
 ) -> dict[str, object]:
     return {
         "service_date": date(2026, 10, 6),
@@ -49,6 +50,7 @@ def rollup(
         "confirmed_count": confirmed,
         "confirmed_without_edits_count": without_edits,
         "doctor_edited_count": doctor_edited,
+        "case_sheet_count": patients if case_sheets is None else case_sheets,
         "language_mix": languages,
     }
 
@@ -364,3 +366,12 @@ async def test_csv_export_follows_the_department_filter(monkeypatch) -> None:
     assert params["department_id"] == DEPARTMENT_ID  # type: ignore[index]
     assert (params["end_day"] - params["start_day"]).days == 6  # type: ignore[index]
     assert body.count("\n") == 2
+
+
+def test_doctor_edit_rate_counts_only_visits_that_have_a_case_sheet() -> None:
+    # 10 check-ins, 4 of which never produced a case sheet; doctors edited 3 of the 6 sheets.
+    summary = analytics.summarize([_quiet_row(patients=10, case_sheets=6, doctor_edited=3)])
+    assert summary["doctor_edit_rate_percent"] == 50.0
+    # No case sheets at all means there is nothing to measure, not a rate of zero.
+    empty = analytics.summarize([_quiet_row(patients=3, case_sheets=0)])
+    assert empty["doctor_edit_rate_percent"] is None

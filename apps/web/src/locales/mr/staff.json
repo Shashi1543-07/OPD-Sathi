@@ -377,7 +377,7 @@
   "analyticsUrgentDetail": "लवकर लक्ष आवश्यक म्हणून चिन्हांकित भेटी",
   "analyticsConfirmedDetail": "रुग्णाने खात्री केलेल्या केस शीट ज्या डॉक्टरांनी बदलल्या नाहीत",
   "analyticsConfirmedEmpty": "या कालावधीत कोणत्याही रुग्णाने केस शीटची खात्री केली नाही.",
-  "analyticsDoctorEditDetail": "भेटी ज्यांची केस शीट डॉक्टरांनी बदलली",
+  "analyticsDoctorEditDetail": "डॉक्टरांनी दुरुस्त केलेल्या केस शीटचा वाटा",
   "analyticsNoVisitsEmpty": "या कालावधीत भेटी नाहीत.",
   "analyticsInterviewDetail": "कियोस्कवरील पहिल्या ते शेवटच्या उत्तरापर्यंत",
   "analyticsInterviewEmpty": "या कालावधीत कियोस्क मुलाखत नाही.",
@@ -450,5 +450,7 @@
   "kioskConn_off": "बंद केले",
   "kioskLastSeenAt": "शेवटचे {{when}} दिसले",
   "kioskOnlineSummary_one": "{{count}} सक्रिय कियोस्कपैकी {{online}} आता ऑनलाइन",
-  "kioskOnlineSummary_other": "{{count}} सक्रिय कियोस्कपैकी {{online}} आता ऑनलाइन"
+  "kioskOnlineSummary_other": "{{count}} सक्रिय कियोस्कपैकी {{online}} आता ऑनलाइन",
+  "analyticsNoSheetsEmpty": "या कालावधीत एकही केस शीट तयार झाली नाही.",
+  "analyticsDoctorEditHelp": "बदललेल्या केस शीटला केस शीट तयार झालेल्या भेटींनी भागले जाते. इतिहास घेण्यापूर्वी सोडलेले चेक-इन मोजले जात नाहीत."
 }

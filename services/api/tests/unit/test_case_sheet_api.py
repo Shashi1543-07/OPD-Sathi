@@ -160,8 +160,8 @@ def test_case_sheet_pdf_contains_english_and_devanagari_text() -> None:
     }
     try:
         pdf = render_case_sheet_pdf(
-                sheet,
-                queue_number="GM-042",
+            sheet,
+            queue_number="GM-042",
             attention_reasons=["Synthetic attention reason"],
         )
     except OSError as error:
