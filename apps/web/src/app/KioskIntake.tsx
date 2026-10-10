@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { QRCodeSVG } from "qrcode.react";
@@ -10,10 +10,12 @@ import {
   Keyboard,
   Languages,
   Loader2,
+  LogOut,
   Mic,
   Square,
   Volume2,
 } from "lucide-react";
+import { ConfirmDialog } from "../components/ui";
 import {
   intake,
   IntakeRequestError,
@@ -102,14 +104,18 @@ function LanguageSwitch({
   value,
   disabled,
   onChange,
+  leading,
 }: {
   value: Language;
   disabled: boolean;
   onChange: (language: Language) => void;
+  /** Shown at the start of the row, e.g. the "Stop and exit" button. */
+  leading?: ReactNode;
 }) {
   const { t } = useTranslation("kiosk");
   return (
     <div className="intake-lang" role="group" aria-label={t("chooseLanguage")}>
+      {leading}
       <Languages aria-hidden="true" size={20} />
       {LANGUAGES.map(({ code, label }) => (
         <button
@@ -276,11 +282,17 @@ function AnswerPanel({
     setChips((current) => {
       if (current.includes(id)) return current.filter((item) => item !== id);
       if (!question.multi || option?.none) return [id];
-      // Picking a real symptom clears an earlier "none of these".
-      const withoutNone = current.filter(
-        (item) => !options.find((candidate) => candidate.id === item)?.none,
-      );
-      return [...withoutNone, id];
+      // Picking a real symptom clears an earlier "none of these" and any choice that
+      // contradicts it (e.g. "All the time" and "Comes and goes").
+      const kept = current.filter((item) => {
+        const other = options.find((candidate) => candidate.id === item);
+        return (
+          !other?.none &&
+          !option?.excludes?.includes(item) &&
+          !other?.excludes?.includes(id)
+        );
+      });
+      return [...kept, id];
     });
   };
 
@@ -471,7 +483,12 @@ function AnswerPanel({
       )}
       <div className="intake-actions">
         {canGoBack && (
-          <button type="button" className="intake-btn intake-btn--ghost" onClick={onBack}>
+          <button
+            type="button"
+            className="intake-btn intake-btn--ghost"
+            disabled={busy || listening || voice === "processing"}
+            onClick={onBack}
+          >
             <ChevronLeft aria-hidden="true" size={22} />
             {t("back")}
           </button>
@@ -533,6 +550,11 @@ export function KioskIntake() {
   const [progress, setProgress] = useState<{ current: number; total: number }>();
   const [answered, setAnswered] = useState<Answered[]>([]);
   const [editing, setEditing] = useState<Answered>();
+  // After "Back", the undone answer is shown pre-filled; ``turn`` remounts the answer panel.
+  const [draft, setDraft] = useState<string | number | null>(null);
+  const [turn, setTurn] = useState(0);
+  const [consentGiven, setConsentGiven] = useState(stage !== "consent");
+  const [quitOpen, setQuitOpen] = useState(false);
   const [readback, setReadback] = useState("");
   const [redFlagged, setRedFlagged] = useState(false);
   const [nurseComing, setNurseComing] = useState(false);
@@ -562,6 +584,8 @@ export function KioskIntake() {
     (result: IntakeResponse) => {
       setAnswered((result.answered ?? []) as Answered[]);
       setEditing(undefined);
+      setDraft(result.draft ?? null);
+      setTurn((value) => value + 1);
       if (result.complete) {
         setReadback(result.readback ?? "");
         setRedFlagged((result.case_sheet?.red_flags ?? []).length > 0);
@@ -666,6 +690,32 @@ export function KioskIntake() {
     move("danger");
   }
 
+  /** End the visit without a token: it is cancelled and kept off the staff patient list. */
+  async function quit() {
+    setQuitOpen(false);
+    stopSpeaking();
+    setBusy(true);
+    await intake.cancel();
+    navigate(session?.assisted ? "/staff/queue" : "/kiosk", { replace: true });
+  }
+
+  /** Back inside the interview: undo the last answer, or return to the safety screen. */
+  async function goBack() {
+    if (editing) {
+      setEditing(undefined);
+      if (!question) move("summary");
+      return;
+    }
+    await run(async () => {
+      if (answered.length === 0) {
+        setTiles((await intake.dangerTiles()).tiles);
+        move("danger");
+        return;
+      }
+      acceptInterviewResponse(await intake.back());
+    });
+  }
+
   async function switchLanguage(next: Language) {
     if (next === language || busy) return;
     stopSpeaking();
@@ -697,8 +747,36 @@ export function KioskIntake() {
   return (
     <main className="kiosk-main intake" aria-busy={busy}>
       {stage !== "done" && stage !== "help" && (
-        <LanguageSwitch value={language} disabled={busy} onChange={(next) => void switchLanguage(next)} />
+        <LanguageSwitch
+          value={language}
+          disabled={busy}
+          onChange={(next) => void switchLanguage(next)}
+          leading={
+            <button
+              type="button"
+              className="intake-quit"
+              disabled={busy}
+              onClick={() => {
+                stopSpeaking();
+                setQuitOpen(true);
+              }}
+            >
+              <LogOut aria-hidden="true" size={20} />
+              {t("quit")}
+            </button>
+          }
+        />
       )}
+      <ConfirmDialog
+        open={quitOpen}
+        title={t("quitTitle")}
+        confirmLabel={t("quitYes")}
+        cancelLabel={t("quitNo")}
+        onConfirm={() => void quit()}
+        onCancel={() => setQuitOpen(false)}
+      >
+        <p>{t("quitBody")}</p>
+      </ConfirmDialog>
       <Stepper stage={stage} />
       <section className="intake-card" lang={language}>
         {error && (
@@ -735,6 +813,7 @@ export function KioskIntake() {
                 onClick={() =>
                   void run(async () => {
                     await intake.consent(consent, true);
+                    setConsentGiven(true);
                     move("identity");
                   })
                 }
@@ -746,13 +825,18 @@ export function KioskIntake() {
                 type="button"
                 className="intake-btn intake-btn--ghost"
                 disabled={busy}
-                onClick={() =>
+                onClick={() => {
+                  // Already agreed and came back here: declining now means stopping.
+                  if (consentGiven) {
+                    setQuitOpen(true);
+                    return;
+                  }
                   void run(async () => {
                     await intake.consent(consent, false);
                     intake.finish();
                     move("help");
-                  })
-                }
+                  });
+                }}
               >
                 {t("consentDecline")}
               </button>
@@ -839,6 +923,15 @@ export function KioskIntake() {
               </label>
             )}
             <div className="intake-actions">
+              <button
+                type="button"
+                className="intake-btn intake-btn--ghost"
+                disabled={busy}
+                onClick={() => move("consent")}
+              >
+                <ChevronLeft aria-hidden="true" size={22} />
+                {t("back")}
+              </button>
               <span className="intake-actions-spacer" />
               {phoneConflict && (
                 <button
@@ -902,6 +995,15 @@ export function KioskIntake() {
               </p>
             )}
             <div className="intake-actions">
+              <button
+                type="button"
+                className="intake-btn intake-btn--ghost"
+                disabled={busy}
+                onClick={() => move("identity")}
+              >
+                <ChevronLeft aria-hidden="true" size={22} />
+                {t("back")}
+              </button>
               <span className="intake-actions-spacer" />
               {selectedTiles.length === 0 ? (
                 <button
@@ -964,23 +1066,15 @@ export function KioskIntake() {
               />
             </div>
             <AnswerPanel
-              key={`${currentQuestion.id}-${editing ? "edit" : "ask"}`}
+              key={`${currentQuestion.id}-${editing ? "edit" : `ask-${turn}`}`}
               question={currentQuestion}
               language={language}
               capabilities={capabilities}
-              initial={editing ? editing.answer : null}
+              initial={editing ? editing.answer : draft}
               busy={busy}
               editing={Boolean(editing)}
-              canGoBack={Boolean(editing) || answered.length > 0}
-              onBack={() => {
-                if (editing) {
-                  setEditing(undefined);
-                  if (!question) move("summary");
-                  return;
-                }
-                const previous = answered.at(-1);
-                if (previous) setEditing(previous);
-              }}
+              canGoBack
+              onBack={() => void goBack()}
               onSubmit={(answer, mode, skip) =>
                 void run(async () => {
                   const response = editing

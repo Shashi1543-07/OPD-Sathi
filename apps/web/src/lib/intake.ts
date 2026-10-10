@@ -31,7 +31,13 @@ export type ConsentCopy = {
   sha256: string;
   text: string;
 };
-export type AnswerOption = { id: string; label: string; none: boolean };
+export type AnswerOption = {
+  id: string;
+  label: string;
+  none: boolean;
+  /** Options that contradict this one; picking it clears them. */
+  excludes?: string[];
+};
 export type Question = {
   id: string;
   input: "text" | "scale";
@@ -62,6 +68,8 @@ export type IntakeResponse = {
   case_sheet?: CaseSheet;
   readback?: string;
   answered?: (Question & { answer: string | number })[];
+  /** After "Back": the undone answer, shown pre-filled so the patient can change it. */
+  draft?: string | number | null;
 };
 
 // The kiosk device token survives tab restarts; it expires server-side (KIOSK_TOKEN_HOURS).
@@ -282,6 +290,8 @@ export const intake = {
         input_mode: inputMode,
       }),
     }),
+  back: () =>
+    patientRequest<IntakeResponse>("/interview/back", { method: "POST" }),
   connectAudio,
   confirm: () =>
     patientRequest<{

@@ -193,42 +193,42 @@
     {
       "id": "question.digestive",
       "lang": "en",
-      "text_sha256": "c4b0cdebe7bf597f09a241a6483973fb6d9a4aaba0db877f8f07d042a119c0f8",
+      "text_sha256": "42cbaef605daaf4fdf03a6db8a1a9b3f19738515ecd996b18d8cc08ac91e4848",
       "file": "en/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.digestive",
       "lang": "hi",
-      "text_sha256": "4e1ec4eb0e23b2d802064d7bab424224ee94a6850103bcf1df82a1ce854de003",
+      "text_sha256": "c9a7367f2a2af017c47fdb115fe4c39191d6dba1931e450fe4bce7d0937e976a",
       "file": "hi/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.digestive",
       "lang": "mr",
-      "text_sha256": "16e2fcd204c9fe507303dbabb829be621eff718fa3ba0e9d05a462555d0839f3",
+      "text_sha256": "354e48db39952f5a3e38bd2a9a8fc3ad28ff16b06300888bfbddbff20b63d2ab",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.digestive_site",
       "lang": "en",
-      "text_sha256": "28afeee9b840723894c4c9413886281bce0ce8a5717d78ce84c6344782e573f6",
+      "text_sha256": "174d17a2108076ac8d2f95f2cbfe3ec56bf01578ef253e82e5314826a24fdb45",
       "file": "en/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.digestive_site",
       "lang": "hi",
-      "text_sha256": "00b8b264c7d642bc1d3cdc6b638e475cbd3be34c4f46df54e41719e07ceb6ef9",
+      "text_sha256": "c04dd8df6538c07f158c80ed47fbfbaec0404ca7d535b55e81e15e42c70a5f13",
       "file": "hi/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.digestive_site",
       "lang": "mr",
-      "text_sha256": "9458add06bfa4210ccd48155ac096c771a45f1579bfb77441eae2aa595d5012f",
+      "text_sha256": "8c84ef0974d6363492f9868ecfe829b54ce7f70e663379ab91ca78eb7c8edadd",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },
@@ -382,21 +382,21 @@
     {
       "id": "question.mobility_effect",
       "lang": "en",
-      "text_sha256": "02d2eecd5f7a228a8d9beef38e6d899c3bfa1c2606c4dd87ecff69d93e25dcd9",
+      "text_sha256": "d606d717559b8cd22ae17548c59c09d382dfdb75d3cc010c0dca5fb23b4d7b69",
       "file": "en/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.mobility_effect",
       "lang": "hi",
-      "text_sha256": "26bb4e42ae95015af0c3a7fea968fe5f0e1d328bcb791038b9499abf983bd7e3",
+      "text_sha256": "318107fbc389e16d0afc330f4bfd2e8043a5ce1b1fabedbfe2504d919ba28f30",
       "file": "hi/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.mobility_effect",
       "lang": "mr",
-      "text_sha256": "bbf413f5102b2998b5348a2465ee440855108837ad1ce676b45b86f8d8281ee6",
+      "text_sha256": "27d8c2520a0867bbfac371e009f65b9f64066de2bdc70c7e9e3902bef1c6d4fe",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },
@@ -460,6 +460,27 @@
       "id": "question.past_history",
       "lang": "mr",
       "text_sha256": "23ba4c9a51031c9e1a6460358dc4f8b6758959bcb095c2fd4958f628139c8d3f",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.pregnancy",
+      "lang": "en",
+      "text_sha256": "6dffd60dff2122684cb2ae8386f140f2ce9efd9db343efa9dd80f548b13a0052",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.pregnancy",
+      "lang": "hi",
+      "text_sha256": "3388bdc3e89733ac47c835fb6e552b736589717775ed55faf6b77f619df678c0",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.pregnancy",
+      "lang": "mr",
+      "text_sha256": "6ba99e6ffe040e2c2ca6fa751d9491156bd1c68cacc7e9a95341931ac01459b3",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },
@@ -592,21 +613,21 @@
     {
       "id": "question.urinary",
       "lang": "en",
-      "text_sha256": "6eefadbe90219a38b522b511361b86f5d9e84ae70817f4412b9f52be27d33b30",
+      "text_sha256": "6cbabc2f6062ae33f7aa34b06a49f4214e6d4b8a355908059d29546df475ae46",
       "file": "en/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.urinary",
       "lang": "hi",
-      "text_sha256": "00723b4f60ca34df0cd68a4c0e615154de6ba316161c667d801001dd5fa00abb",
+      "text_sha256": "65fb8ab09a43ce1e4deace71635bf30b0872c367fad57d77267686ff286ab55a",
       "file": "hi/mock-tone.wav",
       "duration_seconds": 0.12
     },
     {
       "id": "question.urinary",
       "lang": "mr",
-      "text_sha256": "dcb5e8cd3b815b27b6c65504b9401633deaefac004ddd267b2b2ab12c726764b",
+      "text_sha256": "d4fcadf3e38dad92dd289b299e4c9b2f959689408db45792f4773ec606451ed9",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },

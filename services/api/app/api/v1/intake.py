@@ -43,10 +43,15 @@ from app.domain.interview.engine import (
     apply_answer,
     build_case_sheet,
     correct_answer,
+    go_back,
     next_question,
+    pending,
+    pregnancy_answer,
     question_for,
+    question_total,
     skip_followups,
     start,
+    visible_question,
     with_language,
 )
 from app.domain.queue.redis_queue import QueueRedis
@@ -62,7 +67,13 @@ _SESSION_TTL_FACTOR = 60 * 60
 MAX_ANSWER_CHARACTERS = 500
 # Corrections are stored after every possible interview turn so turn numbers never collide.
 _CORRECTION_TURN_BASE = 100
+# Each "Back" re-asks a question, so answers get fresh turn numbers below the correction base.
+_MAX_INTERVIEW_TURNS = _CORRECTION_TURN_BASE
 _FOLLOWUP_WAIT_SECONDS = 1.5
+# AI follow-ups are drafted once the patient has said what the problem is and since when,
+# so the model sees an overview while the patient answers the next few bank questions.
+_FOLLOWUP_TRIGGER = "duration"
+_FOLLOWUP_BASIS = ("chief_concern", "duration")
 _DANGER_TILE_RULE_IDS = {
     "chest_pain": "DS_CHEST",
     "breathing_difficulty": "DS_BREATH",
@@ -501,7 +512,8 @@ def _patient_message(language: Language) -> str:
 
 
 def _question_payload(state: InterviewState, question_id: str) -> dict[str, Any]:
-    question = question_for(state, question_id)
+    raw = question_for(state, question_id)
+    question = visible_question(state, raw) or raw
     language = state.language
     return {
         "id": question.id,
@@ -510,10 +522,55 @@ def _question_payload(state: InterviewState, question_id: str) -> dict[str, Any]
         "prompt": question.prompt[language],
         "multi": question.multi,
         "options": [
-            {"id": option.id, "label": option.label[language], "none": option.none}
+            {
+                "id": option.id,
+                "label": option.label[language],
+                "none": option.none,
+                "excludes": option.excludes,
+            }
             for option in question.options
         ],
     }
+
+
+async def _sync_pregnancy(
+    connection: Any, *, hospital_id: UUID, visit_id: UUID, interview_state: InterviewState
+) -> None:
+    """Keep the visit's pregnancy flag (queue priority, routing, safety rules) in step."""
+    if "pregnancy" not in interview_state.queued:
+        return
+    await connection.execute(
+        text(
+            "UPDATE visits SET pregnant = :pregnant "
+            "WHERE hospital_id = :hospital_id AND id = :visit_id"
+        ),
+        {
+            "pregnant": pregnancy_answer(interview_state),
+            "hospital_id": hospital_id,
+            "visit_id": visit_id,
+        },
+    )
+
+
+def _interview_not_started(state: dict[str, Any]) -> bool:
+    """On the first question with nothing answered: Back may still change earlier steps."""
+    interview = state.get("interview")
+    return (
+        state.get("phase") == "interview"
+        and isinstance(interview, dict)
+        and not interview.get("asked")
+    )
+
+
+def _next_turn_index(state: dict[str, Any], interview_state: InterviewState) -> int:
+    """A fresh turn number per answer, so re-answering after "Back" never collides."""
+    index = max(int(state.get("turns", 0)), len(interview_state.asked) - 1)
+    if index >= _MAX_INTERVIEW_TURNS:
+        raise _error(
+            409, "TOO_MANY_CHANGES", "Too many changes", "Please ask staff to help you finish."
+        )
+    state["turns"] = index + 1
+    return index
 
 
 def _answered(state: InterviewState) -> list[dict[str, Any]]:
@@ -998,7 +1055,11 @@ async def save_identity(
             "Name required",
             "Enter the patient's name for nurse-assisted registration.",
         )
-    if state.get("phase") != "identity":
+    # A patient who went Back from the safety screen (or from the first question, before
+    # answering anything) may change their details.
+    if state.get("phase") not in {"identity", "danger_signs"} and not _interview_not_started(
+        state
+    ):
         raise _error(
             409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
         )
@@ -1050,7 +1111,8 @@ async def save_danger_signs(
         )
     key = _session_key(hospital_id, visit_id)
     state = _read_state(await request.app.state.redis_state.get(key))
-    if state.get("phase") != "danger_signs":
+    # Back from the first question (nothing answered yet) returns here to change the tiles.
+    if state.get("phase") != "danger_signs" and not _interview_not_started(state):
         raise _error(
             409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
         )
@@ -1075,7 +1137,12 @@ async def save_danger_signs(
         alerts=alerts,
     )
     state["danger_ids"] = payload.tile_ids
-    interview_state = start(context["language"], red_flag_ids=tuple(payload.tile_ids))
+    interview_state = start(
+        context["language"],
+        red_flag_ids=tuple(payload.tile_ids),
+        sex=context.get("sex"),
+        age=context.get("age_years"),
+    )
     state["interview"] = interview_state.model_dump(mode="json")
     state["phase"] = "interview"
     await request.app.state.redis_state.set(
@@ -1092,6 +1159,26 @@ async def save_danger_signs(
 
 def _followup_key(hospital_id: UUID, visit_id: UUID) -> str:
     return f"{_session_key(hospital_id, visit_id)}:followups"
+
+
+def _followup_basis(interview_state: InterviewState) -> str:
+    """The answers a draft was written from; a draft for older answers is never used."""
+    return json.dumps(
+        [interview_state.answers.get(question_id) for question_id in _FOLLOWUP_BASIS],
+        ensure_ascii=False,
+    )
+
+
+async def _forget_followups(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, state: dict[str, Any]
+) -> None:
+    """Allow a fresh draft after the patient changed the answers it would be based on."""
+    state.pop("followups_requested", None)
+    state.pop("followups_waited", None)
+    try:
+        await request.app.state.redis_state.delete(_followup_key(hospital_id, visit_id))
+    except RedisError:
+        return
 
 
 async def _followups_enabled(request: Request, hospital_id: UUID) -> bool:
@@ -1139,10 +1226,14 @@ async def _draft_and_store_followups(
                 .mappings()
                 .first()
             )
+        duration = interview_state.answers.get("duration")
         questions = await asyncio.wait_for(
             draft_followups(
                 request.app.state.llm_provider,
                 complaint=str(interview_state.answers.get("chief_concern", "")),
+                duration=(
+                    QUESTIONS["duration"].english(duration) if isinstance(duration, str) else ""
+                ),
                 language=interview_state.language,
                 age=patient["age_years"] if patient else None,
                 sex=patient["sex"] if patient else None,
@@ -1166,7 +1257,12 @@ async def _draft_and_store_followups(
     try:
         await request.app.state.redis_state.set(
             _followup_key(hospital_id, visit_id),
-            json.dumps([question.model_dump(mode="json") for question in questions]),
+            json.dumps(
+                {
+                    "basis": _followup_basis(interview_state),
+                    "questions": [question.model_dump(mode="json") for question in questions],
+                }
+            ),
             ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         )
     except RedisError:
@@ -1212,11 +1308,15 @@ async def _merge_followups(
     if raw is None:
         return interview_state
     questions: list[Question] = []
-    if raw is not None:
-        try:
-            questions = [Question.model_validate(item) for item in json.loads(raw)]
-        except (TypeError, ValueError):
-            questions = []
+    try:
+        stored = json.loads(raw)
+        if isinstance(stored, dict):
+            if stored.get("basis") != _followup_basis(interview_state):
+                return interview_state  # Written for answers the patient has since changed.
+            stored = stored.get("questions")
+        questions = [Question.model_validate(item) for item in stored]
+    except (TypeError, ValueError):
+        questions = []
     merged = (
         add_followups(interview_state, questions) if questions else skip_followups(interview_state)
     )
@@ -1249,12 +1349,9 @@ async def _question_response(
             interview_state=interview_state,
         )
     pending_id = state.get("ai_selected_question")
-    if (
-        isinstance(pending_id, str)
-        and pending_id in QUESTIONS
-        and pending_id not in interview_state.asked
-    ):
-        question = QUESTIONS[pending_id]
+    still_to_ask = pending(interview_state)
+    if isinstance(pending_id, str) and pending_id in QUESTIONS and pending_id in still_to_ask:
+        question = visible_question(interview_state, QUESTIONS[pending_id]) or question
     else:
         state.pop("ai_selected_question", None)
         if (
@@ -1264,9 +1361,7 @@ async def _question_response(
             and await _hospital_llm_enabled(request, hospital_id)
         ):
             candidate_ids = [
-                question_id
-                for question_id in interview_state.queued
-                if question_id in QUESTIONS and question_id not in interview_state.asked
+                question_id for question_id in still_to_ask if question_id in QUESTIONS
             ][:5]
             candidates = tuple(
                 QuestionCandidate(
@@ -1310,7 +1405,7 @@ async def _question_response(
             # Before the main concern is known, assume a typical interview length.
             "total": min(
                 MAX_QUESTIONS,
-                max(len(interview_state.queued), 10 if not interview_state.asked else 0),
+                max(question_total(interview_state), 10 if not interview_state.asked else 0),
             ),
         },
         "answered": _answered(interview_state),
@@ -1397,16 +1492,20 @@ async def submit_answer(
         except InterviewValidationError as exc:
             raise _error(422, "VALIDATION_FAILED", "Answer not accepted", str(exc)) from exc
         raw_answer = None if payload.skip or payload.answer is None else str(payload.answer)
+        turn_index = _next_turn_index(state, next_state)
         alerts: list[dict[str, Any]] = []
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
             await InterviewTurnRepository(connection, request.app.state.settings).add(
                 hospital_id=hospital_id,
                 visit_id=visit_id,
-                turn_index=len(next_state.asked) - 1,
+                turn_index=turn_index,
                 question_id=payload.question_id,
                 input_mode=payload.input_mode,
                 text_original=raw_answer,
+            )
+            await _sync_pregnancy(
+                connection, hospital_id=hospital_id, visit_id=visit_id, interview_state=next_state
             )
             _, _, alerts = await _evaluate_visit(
                 connection,
@@ -1419,8 +1518,8 @@ async def submit_answer(
         state["interview"] = next_state.model_dump(mode="json")
         state.pop("ai_selected_question", None)
         draft_followups_now = (
-            payload.question_id == "chief_concern"
-            and not payload.skip
+            payload.question_id == _FOLLOWUP_TRIGGER
+            and isinstance(next_state.answers.get("chief_concern"), str)
             and not state.get("followups_requested")
             and await _followups_enabled(request, hospital_id)
         )
@@ -1477,6 +1576,8 @@ async def correct_interview_answer(
         data = build_case_sheet(updated)
     except InterviewValidationError as exc:
         raise _error(422, "VALIDATION_FAILED", "Answer not accepted", str(exc)) from exc
+    # A new main problem on the review screen can need questions not yet asked.
+    reopen = state.get("phase") == "summary" and next_question(updated) is not None
     alerts: list[dict[str, Any]] = []
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
@@ -1488,6 +1589,9 @@ async def correct_interview_answer(
             input_mode=payload.input_mode,
             text_original=str(payload.answer),
         )
+        await _sync_pregnancy(
+            connection, hospital_id=hospital_id, visit_id=visit_id, interview_state=updated
+        )
         flags, route_result, alerts = await _evaluate_visit(
             connection,
             hospital_id=hospital_id,
@@ -1497,7 +1601,12 @@ async def correct_interview_answer(
             request=request,
             include_department=state.get("phase") == "summary",
         )
-        if state.get("phase") == "summary":
+        if reopen:
+            await IntakeRepository(connection, request.app.state.settings).set_visit_status(
+                hospital_id=hospital_id, visit_id=visit_id, status="registering"
+            )
+            state["phase"] = "interview"
+        elif state.get("phase") == "summary":
             data = _patient_case_sheet(data, flags, route_result)
             corrections = list(state.get("corrected_question_ids", []))
             if payload.question_id not in corrections:
@@ -1540,6 +1649,65 @@ async def correct_interview_answer(
     return await _question_response(
         request, hospital_id=hospital_id, visit_id=visit_id, state=state
     )
+
+
+@router.post("/sessions/{visit_id}/interview/back")
+async def go_back_one_question(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, Any]:
+    """Undo the last answer and ask that question again, with the old answer filled in.
+
+    Answers after it are not affected; going back to the main problem re-plans the
+    symptom questions once it is answered again.
+    """
+    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=True)
+    key = _session_key(hospital_id, visit_id)
+    state = _read_state(await request.app.state.redis_state.get(key))
+    if state.get("phase") != "interview":
+        raise _error(
+            409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
+        )
+    previous = InterviewState.model_validate(state["interview"])
+    try:
+        updated, undone = go_back(previous)
+    except InterviewValidationError as exc:
+        raise _error(409, "NOTHING_TO_UNDO", "Nothing to go back to", str(exc)) from exc
+    undone_id = previous.asked[-1]
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _sync_pregnancy(
+            connection, hospital_id=hospital_id, visit_id=visit_id, interview_state=updated
+        )
+    state["interview"] = updated.model_dump(mode="json")
+    state.pop("ai_selected_question", None)
+    if undone_id in _FOLLOWUP_BASIS and updated.ai_followups == "none":
+        await _forget_followups(request, hospital_id=hospital_id, visit_id=visit_id, state=state)
+    await request.app.state.redis_state.set(
+        key,
+        json.dumps(state, separators=(",", ":")),
+        ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+    )
+    current = next_question(updated)
+    if current is None or current.id != undone_id:
+        return await _question_response(
+            request, hospital_id=hospital_id, visit_id=visit_id, state=state
+        )
+    return {
+        "complete": False,
+        "question": _question_payload(updated, undone_id),
+        "progress": {
+            "current": len(updated.asked) + 1,
+            "total": max(question_total(updated), 10 if not updated.asked else 0),
+        },
+        "answered": _answered(updated),
+        "draft": (
+            None if undone is None else question_for(updated, undone_id).localized(
+                undone, updated.language
+            )
+        ),
+    }
 
 
 @router.get("/sessions/{visit_id}/readback-audio")

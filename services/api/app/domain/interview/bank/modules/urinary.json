@@ -7,9 +7,9 @@
       "input": "text",
       "optional": true,
       "prompt": {
-        "en": "What problem do you have when passing urine?",
-        "hi": "पेशाब करते समय क्या परेशानी है?",
-        "mr": "लघवी करताना कोणता त्रास आहे?"
+        "en": "Which of these do you have when passing urine?",
+        "hi": "पेशाब करते समय इनमें से क्या होता है?",
+        "mr": "लघवी करताना यापैकी काय होते?"
       },
       "options": [
         {
@@ -18,6 +18,11 @@
             "en": "Burning or pain",
             "hi": "जलन या दर्द",
             "mr": "जळजळ किंवा वेदना"
+          },
+          "hide_with_answers": {
+            "chief_concern": [
+              "urine"
+            ]
           }
         },
         {
@@ -51,6 +56,15 @@
             "hi": "पेशाब रोक नहीं पाते",
             "mr": "लघवी रोखता येत नाही"
           }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true
         }
       ],
       "multi": true
@@ -72,7 +86,10 @@
             "en": "Fever",
             "hi": "बुखार",
             "mr": "ताप"
-          }
+          },
+          "hide_with_modules": [
+            "fever"
+          ]
         },
         {
           "id": "flank",

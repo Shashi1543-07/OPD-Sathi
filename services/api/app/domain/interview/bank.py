@@ -2,11 +2,12 @@
 
 import json
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Literal, NotRequired, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
 Language = Literal["en", "hi", "mr"]
+Sex = Literal["female", "male", "other", "unknown"]
 REVIEW_STATUS = "draft_needs_clinician_review"
 BANK_DIRECTORY = Path(__file__).with_name("bank")
 
@@ -15,15 +16,33 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
-class AnswerOption(StrictModel):
-    """A tap-to-answer choice; ``none`` marks an explicit negative such as "No allergy"."""
+class Applicability(StrictModel):
+    """When a question or option is shown; every rule must pass (empty rules always pass).
+
+    ``hide_with_modules`` hides it when another module in this interview already covers the
+    same topic, and ``hide_with_answers`` when an earlier answer makes it irrelevant.
+    """
+
+    only_sexes: list[Sex] = Field(default_factory=list)
+    min_age: int | None = Field(default=None, ge=0, le=120)
+    max_age: int | None = Field(default=None, ge=0, le=120)
+    hide_with_modules: list[str] = Field(default_factory=list)
+    hide_with_answers: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class AnswerOption(Applicability):
+    """A tap-to-answer choice; ``none`` marks an explicit negative such as "No allergy".
+
+    ``excludes`` lists options that contradict this one, so they cannot both be picked.
+    """
 
     id: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_]+$")
     label: dict[Language, str]
     none: bool = False
+    excludes: list[str] = Field(default_factory=list)
 
 
-class Question(StrictModel):
+class Question(Applicability):
     id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
     module: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_]*$")
     input: Literal["text", "scale"]
@@ -31,6 +50,8 @@ class Question(StrictModel):
     prompt: dict[Language, str]
     options: list[AnswerOption] = Field(default_factory=list, max_length=16)
     multi: bool = True
+    # Skip when every tapped main problem is one of these (the answer is already known).
+    skip_if_only_concerns: list[str] = Field(default_factory=list)
 
     def option_for_label(self, label: str) -> AnswerOption | None:
         """Find the option whose label (in any language) matches ``label`` exactly."""
@@ -70,6 +91,32 @@ class TriggerConfiguration(TypedDict):
     always: list[str]
     max_triggered_modules: int
     keywords: dict[str, list[str]]
+    # Phrases that contain a module keyword but mean something else ("fell ill").
+    ignore_phrases: NotRequired[dict[str, list[str]]]
+
+
+def _check_rules(questions: dict[str, Question], modules: set[str]) -> None:
+    """Fail closed when an applicability rule refers to something that does not exist."""
+    concern_ids = {option.id for option in questions["chief_concern"].options}
+    for question in questions.values():
+        option_ids = {option.id for option in question.options}
+        items: list[tuple[str, Applicability]] = [(question.id, question)]
+        items += [(f"{question.id}.{option.id}", option) for option in question.options]
+        for name, item in items:
+            if item.min_age is not None and item.max_age is not None:
+                if item.min_age > item.max_age:
+                    raise ValueError(f"{name} has min_age above max_age")
+            if set(item.hide_with_modules) - modules:
+                raise ValueError(f"{name} hides with an unknown module")
+            for other_id, other_options in item.hide_with_answers.items():
+                other = questions.get(other_id)
+                if other is None or set(other_options) - {o.id for o in other.options}:
+                    raise ValueError(f"{name} hides with an unknown answer")
+        for option in question.options:
+            if set(option.excludes) - option_ids or option.id in option.excludes:
+                raise ValueError(f"{question.id}.{option.id} excludes an unknown option")
+        if set(question.skip_if_only_concerns) - concern_ids:
+            raise ValueError(f"{question.id} skips for an unknown main problem")
 
 
 def load_question_bank(
@@ -136,6 +183,15 @@ def load_question_bank(
         raise ValueError("trigger configuration refers to an unknown module")
     if set(triggers["always"]) & set(triggers["keywords"]):
         raise ValueError("a module cannot be both always-on and keyword-triggered")
+    ignore_phrases = triggers.get("ignore_phrases", {})
+    if not isinstance(ignore_phrases, dict) or set(ignore_phrases) - set(triggers["keywords"]):
+        raise ValueError("ignore phrases must belong to keyword-triggered modules")
+    if any(
+        not isinstance(terms, list) or any(not isinstance(t, str) or not t.strip() for t in terms)
+        for terms in ignore_phrases.values()
+    ):
+        raise ValueError("ignore phrases must be non-empty strings")
+    _check_rules(questions, module_names)
     return questions, triggers
 
 

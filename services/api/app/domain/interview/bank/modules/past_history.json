@@ -42,7 +42,10 @@
             "en": "Asthma",
             "hi": "दमा",
             "mr": "दमा"
-          }
+          },
+          "hide_with_modules": [
+            "respiratory"
+          ]
         },
         {
           "id": "tb",
@@ -61,14 +64,6 @@
           }
         },
         {
-          "id": "pregnant",
-          "label": {
-            "en": "Currently pregnant",
-            "hi": "अभी गर्भवती हूँ",
-            "mr": "सध्या गर्भवती आहे"
-          }
-        },
-        {
           "id": "none",
           "label": {
             "en": "No long-term illness",
@@ -79,6 +74,52 @@
         }
       ],
       "multi": true
+    },
+    {
+      "id": "pregnancy",
+      "module": "past_history",
+      "input": "text",
+      "optional": true,
+      "only_sexes": [
+        "female",
+        "other",
+        "unknown"
+      ],
+      "min_age": 12,
+      "max_age": 50,
+      "prompt": {
+        "en": "Are you pregnant now?",
+        "hi": "क्या आप अभी गर्भवती हैं?",
+        "mr": "तुम्ही सध्या गर्भवती आहात का?"
+      },
+      "options": [
+        {
+          "id": "yes",
+          "label": {
+            "en": "Yes",
+            "hi": "हाँ",
+            "mr": "होय"
+          }
+        },
+        {
+          "id": "unsure",
+          "label": {
+            "en": "Not sure",
+            "hi": "पक्का नहीं पता",
+            "mr": "नक्की माहीत नाही"
+          }
+        },
+        {
+          "id": "no",
+          "label": {
+            "en": "No",
+            "hi": "नहीं",
+            "mr": "नाही"
+          },
+          "none": true
+        }
+      ],
+      "multi": false
     }
   ]
 }

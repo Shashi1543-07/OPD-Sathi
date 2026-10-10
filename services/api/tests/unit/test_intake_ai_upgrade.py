@@ -17,7 +17,13 @@ from app.ai.readback import build_readback_from_answers
 from app.ai.speech import SpeechService
 from app.config import Settings
 from app.domain.interview.bank import QUESTIONS
-from app.domain.interview.engine import apply_answer, build_case_sheet, next_question, start
+from app.domain.interview.engine import (
+    apply_answer,
+    build_case_sheet,
+    next_question,
+    question_total,
+    start,
+)
 from app.workers.main import close_previous_days
 
 
@@ -64,7 +70,7 @@ def test_tapped_hindi_answers_give_the_doctor_english_history() -> None:
 
 
 def test_fever_and_cough_trigger_targeted_follow_up_questions() -> None:
-    state = start("en")
+    state = start("en", sex="male", age=40)
     state = apply_answer(state, "chief_concern", "Fever, Cough")
     assert state.queued[:7] == [
         "chief_concern",
@@ -75,7 +81,9 @@ def test_fever_and_cough_trigger_targeted_follow_up_questions() -> None:
         "respiratory",
         "respiratory_history",
     ]
-    assert len(state.queued) <= 12
+    # The pregnancy question is planned but never shown to this patient.
+    assert "pregnancy" in state.queued
+    assert question_total(state) <= 12
 
 
 def test_every_option_label_maps_back_to_english() -> None:

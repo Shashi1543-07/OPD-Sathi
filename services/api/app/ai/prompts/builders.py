@@ -17,7 +17,7 @@ PromptTask = Literal[
     "followup_questions",
 ]
 PROMPT_VERSIONS: dict[PromptTask, str] = {
-    "followup_questions": "1",
+    "followup_questions": "2",
     "extraction": "1",
     "question_choice": "1",
     "redflag_opinion": "2",
@@ -65,10 +65,16 @@ _INSTRUCTIONS: dict[PromptTask, str] = {
     ),
     "followup_questions": (
         "You help an Indian government-hospital OPD kiosk take a patient's history before they "
-        "see the doctor. Given the patient's main complaint, write up to 3 short follow-up "
-        "questions a doctor would ask to understand THIS complaint better (for example: where "
-        "exactly, what makes it worse, colour of phlegm, any travel or contact, how often). "
-        "Rules: (1) Do not repeat or overlap the planned questions listed. (2) Never name or "
+        "see the doctor. Given the patient's main complaint and how long they have had it, "
+        "write up to 3 short follow-up questions a doctor would ask to understand THIS "
+        "complaint better (for example: where exactly, what makes it worse, colour of phlegm, "
+        "any travel or contact, how often). Rules: (0) Every question must fit this patient's "
+        "age and sex: never ask a male about periods, pregnancy or breastfeeding, never ask a "
+        "female about male body parts, and never ask a young child about periods, pregnancy, "
+        "smoking, alcohol or work; when unsure, leave the question out. "
+        "(1) Do not repeat or overlap the planned questions or any of their listed choices, "
+        "even in other words (a 'whistling sound' is the same as 'wheezing', 'short of breath' "
+        "the same as 'breathless'); ask about something new instead. (2) Never name or "
         "hint at a disease, cause, test, medicine or advice; never say 'could be', 'sign of', "
         "'should'. (3) One simple idea per question, under 15 words, in plain everyday words a "
         "villager understands; text_en must end with '?'. (4) Write natural, simple Hindi and "
@@ -155,12 +161,14 @@ def build_followup_prompt(
     sex: str | None,
     planned_questions: list[str],
     danger_signs: list[str],
+    duration: str = "",
 ) -> PromptEnvelope:
     """Build the follow-up drafting prompt; no names or contact details are sent."""
     return _build(
         "followup_questions",
         {
             "main_complaint": complaint,
+            "since_when": duration,
             "patient_language": language,
             "age_years": age,
             "sex": sex,

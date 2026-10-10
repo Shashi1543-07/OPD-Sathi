@@ -404,6 +404,9 @@ async def staff_patients(
                         "AND d.id = v.department_id LEFT JOIN case_sheets cs "
                         "ON cs.hospital_id = v.hospital_id AND cs.visit_id = v.id "
                         "WHERE v.hospital_id = :hospital_id AND d.is_active = true "
+                        # A kiosk session ended before a token was issued (the patient quit,
+                        # declined consent or walked away) was never a registration.
+                        "AND NOT (v.status = 'cancelled' AND v.token_label IS NULL) "
                         "AND (CAST(:department_id AS uuid) IS NULL "
                         "OR v.department_id = CAST(:department_id AS uuid)) "
                         "AND (CAST(:since AS timestamptz) IS NULL "

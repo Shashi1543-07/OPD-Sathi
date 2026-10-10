@@ -87,6 +87,26 @@ _BLOCKED_INDIC = (
 )
 _DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 
+# Questions that only make sense for one sex (or not for young children), checked in every
+# language on the question and its options. The prompt asks for this too; this enforces it.
+_FEMALE_ONLY = re.compile(
+    r"\b(?:periods?|menstru\w*|menses|pregnan\w*|lmp|vagina\w*|white discharge|"
+    r"breast ?feed\w*)\b|माहवारी|मासिक|पीरियड|गर्भ|स्तनपान|पाळी|योनी",
+    re.I,
+)
+_MALE_ONLY = re.compile(r"\b(?:testic\w*|testis|scrot\w*|penis)\b|अंडकोष|वृषण", re.I)
+
+
+def _fits_patient(question: Question, *, sex: str | None, age: int | None) -> bool:
+    texts = [*question.prompt.values()]
+    texts += [label for option in question.options for label in option.label.values()]
+    joined = " ".join(texts)
+    if sex == "male" and _FEMALE_ONLY.search(joined):
+        return False
+    if sex == "female" and _MALE_ONLY.search(joined):
+        return False
+    return not (age is not None and age < 10 and _FEMALE_ONLY.search(joined))
+
 
 _STOPWORDS = {
     "you",
@@ -120,7 +140,12 @@ def _words(text: str) -> set[str]:
 
 
 def _overlaps(prompt: str, options: list[str], planned: list[tuple[str, set[str]]]) -> bool:
-    """True when a draft repeats a planned question in other words or with the same options."""
+    """True when a draft repeats a planned question in other words or with the same options.
+
+    A draft also repeats a planned question when it asks about one of that question's
+    answer choices: "Do you bring up any phlegm?" repeats "Cough with phlegm" from "Tell us
+    about the cough". Words the planned question already uses ("cough") do not count.
+    """
     words = _words(prompt)
     chosen = {label.casefold() for label in options}
     for planned_prompt, planned_options in planned:
@@ -129,6 +154,10 @@ def _overlaps(prompt: str, options: list[str], planned: list[tuple[str, set[str]
             return True
         if len(chosen & planned_options) >= 2:
             return True
+        for planned_label in planned_options:
+            distinctive = _words(planned_label) - other
+            if distinctive and distinctive <= words:
+                return True
     return False
 
 
@@ -193,13 +222,27 @@ def _question(index: int, item: dict[str, Any], planned: list[tuple[str, set[str
         raise UnsafeFollowupError("follow-up does not match the question schema") from exc
 
 
-def parse_followups(output: dict[str, Any], planned: list[Question]) -> list[Question]:
+def parse_followups(
+    output: dict[str, Any],
+    planned: list[Question],
+    *,
+    sex: str | None = None,
+    age: int | None = None,
+) -> list[Question]:
     """Keep only the drafted questions that pass every check (may return an empty list).
 
-    Each accepted draft also counts as planned, so two drafts cannot repeat each other.
+    Each accepted draft also counts as planned, so two drafts cannot repeat each other, and
+    a question that cannot apply to this patient's sex or age is dropped.
     """
+    # The main-problem choices name what the patient already said ("Cough"); a follow-up
+    # about it is the point, so only the other planned questions' choices count as asked.
     seen = [
-        (question.prompt["en"], {o.label["en"].casefold() for o in question.options if not o.none})
+        (
+            question.prompt["en"],
+            {o.label["en"].casefold() for o in question.options if not o.none}
+            if question.id != "chief_concern"
+            else set(),
+        )
         for question in planned
     ]
     questions: list[Question] = []
@@ -209,6 +252,8 @@ def parse_followups(output: dict[str, Any], planned: list[Question]) -> list[Que
         try:
             question = _question(len(questions) + 1, item, seen)
         except UnsafeFollowupError:
+            continue
+        if not _fits_patient(question, sex=sex, age=age):
             continue
         questions.append(question)
         seen.append(
@@ -235,15 +280,26 @@ async def draft_followups(
     planned_questions: list[Question],
     danger_signs: list[str],
     session_id: str,
+    duration: str = "",
     timeout: float = 10.0,
 ) -> list[Question]:
     """Ask the model for follow-ups; any failure returns an empty list (bank fallback)."""
     prompt = build_followup_prompt(
         complaint=complaint,
+        duration=duration,
         language=language,
         age=age,
         sex=sex,
-        planned_questions=[question.prompt["en"] for question in planned_questions],
+        # The answer choices too, so the model does not ask about them again.
+        planned_questions=[
+            question.prompt["en"]
+            + (
+                " (choices: " + ", ".join(o.label["en"] for o in question.options) + ")"
+                if question.options
+                else ""
+            )
+            for question in planned_questions
+        ],
         danger_signs=danger_signs,
     )
     try:
@@ -252,4 +308,4 @@ async def draft_followups(
         )
     except (LLMUnavailableError, UnsafeFollowupError, ValueError):
         return []
-    return parse_followups(output, planned_questions)
+    return parse_followups(output, planned_questions, sex=sex, age=age)
