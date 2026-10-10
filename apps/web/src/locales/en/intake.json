@@ -65,6 +65,7 @@
   "department": "Go to",
   "position": "Your place in the queue",
   "ahead": "{{count}} people ahead of you",
+  "ahead_one": "1 person ahead of you",
   "aheadNone": "You are next",
   "waitAbout": "About {{minutes}} minutes",
   "waitHint": "Please sit in the waiting area. Your token number will be called.",

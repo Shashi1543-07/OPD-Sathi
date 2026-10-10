@@ -1,9 +1,9 @@
 import type { Language } from "../i18n";
+import { apiOrigin, apiSocketUrl } from "./api";
 import { staffAuth } from "./auth";
 import type { OfflineSubmission } from "./offlineOutbox";
 import type { SpeechCapabilities } from "./voice";
 
-const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const kioskKey = "osa.kiosk.access";
 const patientKey = "osa.patient.session";
 
@@ -148,12 +148,9 @@ function patientRequest<T>(path: string, options: RequestInit = {}) {
 function connectAudio(onMessage: (message: MessageEvent<string>) => void) {
   const session = getPatientSession();
   if (!session) throw new Error("No active patient session");
-  const origin = apiOrigin.replace(/\/$/, "");
-  const socketUrl =
-    `${origin}/ws/intake/${encodeURIComponent(session.visit_id)}/audio`
-      .replace(/^https:/, "wss:")
-      .replace(/^http:/, "ws:");
-  const socket = new WebSocket(socketUrl);
+  const socket = new WebSocket(
+    apiSocketUrl(`/ws/intake/${encodeURIComponent(session.visit_id)}/audio`),
+  );
   socket.addEventListener("message", onMessage);
   socket.addEventListener("open", () => {
     socket.send(

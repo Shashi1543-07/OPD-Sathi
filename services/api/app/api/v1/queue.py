@@ -129,6 +129,22 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         doctors, samples = await repository.queue_estimate_inputs(
             hospital_id=visit["hospital_id"], department_id=visit["department_id"]
         )
+        # Where to go and in which language to show it on the patient's phone.
+        place = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT d.name_en, d.name_hi, d.name_mr, h.name AS hospital, v.language "
+                        "FROM visits v JOIN departments d ON d.hospital_id = v.hospital_id "
+                        "AND d.id = v.department_id JOIN hospitals h ON h.id = v.hospital_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                    ),
+                    {"hospital_id": visit["hospital_id"], "visit_id": visit["visit_id"]},
+                )
+            )
+            .mappings()
+            .first()
+        )
     try:
         read_model = QueueRedis(
             request.app.state.redis_state, app_env=request.app.state.settings.app_env
@@ -173,6 +189,13 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         "position": position if state == "waiting" else None,
         "eta_min": eta.eta_min if state == "waiting" else 0,
         "eta_max": eta.eta_max if state == "waiting" else 0,
+        "department": (
+            {lang: place[f"name_{lang}"] or place["name_en"] for lang in ("en", "hi", "mr")}
+            if place
+            else None
+        ),
+        "hospital": place["hospital"] if place else None,
+        "language": place["language"] if place else "en",
         "updated_at": datetime.now(UTC).isoformat(),
     }
 

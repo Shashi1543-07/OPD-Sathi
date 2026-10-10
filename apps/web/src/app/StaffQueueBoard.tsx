@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, FileText, Hand, MoreHorizontal, RefreshCw, Users } from "lucide-react";
 import { ConnectionIndicator, UrgencyBadge } from "../components/ui";
+import { apiSocketUrl } from "../lib/api";
 import { staffAuth } from "../lib/auth";
 import {
   applyQueueOperations,
@@ -33,7 +34,6 @@ type StaffAlert = {
 };
 type ConnectionState = "live" | "reconnecting" | "offline";
 
-const apiOrigin = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const PAGE_SIZE = 50;
 const SOUND_PREFERENCE_KEY = "opd-staff-alert-sound";
 type QueueSnapshot = {
@@ -302,10 +302,7 @@ export function StaffQueueBoard() {
         return;
       }
       setConnection("reconnecting");
-      const api = new URL(apiOrigin);
-      api.protocol = api.protocol === "https:" ? "wss:" : "ws:";
-      api.pathname = "/ws/staff/queue";
-      api.search = "";
+      const api = apiSocketUrl("/ws/staff/queue");
       api.searchParams.set("department_id", departmentId);
       socket = new WebSocket(api);
       socket.onopen = () => {
@@ -375,10 +372,7 @@ export function StaffQueueBoard() {
       if (disposed) return;
       const token = staffAuth.accessToken;
       if (!token) return;
-      const api = new URL(apiOrigin);
-      api.protocol = api.protocol === "https:" ? "wss:" : "ws:";
-      api.pathname = "/ws/staff/queue";
-      api.search = "";
+      const api = apiSocketUrl("/ws/staff/queue");
       api.searchParams.set("alerts_only", "true");
       if (departmentId) api.searchParams.set("department_id", departmentId);
       alertSocket = new WebSocket(api);

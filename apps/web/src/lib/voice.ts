@@ -235,13 +235,42 @@ export function listenWithServer(
 
 let currentAudio: HTMLAudioElement | undefined;
 let currentUrl: string | undefined;
+// Bumped by every stop, so a sentence queue from an earlier read stops speaking.
+let speechRun = 0;
 
 export function stopSpeaking() {
+  speechRun += 1;
   currentAudio?.pause();
   currentAudio = undefined;
   if (currentUrl) URL.revokeObjectURL(currentUrl);
   currentUrl = undefined;
   window.speechSynthesis?.cancel();
+}
+
+/**
+ * Chrome stops a single utterance after about 15 seconds, cutting long text (the consent
+ * notice, the read-back) mid-sentence. Read it sentence by sentence instead.
+ */
+export function sentences(text: string, maxLength = 180): string[] {
+  const parts = text.match(/[^.?!।]+[.?!।]*\s*/g) ?? [text];
+  const chunks: string[] = [];
+  for (const part of parts.map((item) => item.trim()).filter(Boolean)) {
+    if (part.length <= maxLength) {
+      chunks.push(part);
+      continue;
+    }
+    // A very long sentence: break at commas, then at spaces.
+    let rest = part;
+    while (rest.length > maxLength) {
+      const window = rest.slice(0, maxLength);
+      const cut = Math.max(window.lastIndexOf(","), window.lastIndexOf(" "));
+      const at = cut > maxLength / 3 ? cut + 1 : maxLength;
+      chunks.push(rest.slice(0, at).trim());
+      rest = rest.slice(at).trim();
+    }
+    if (rest) chunks.push(rest);
+  }
+  return chunks;
 }
 
 function pickVoice(language: string) {
@@ -260,13 +289,8 @@ export function browserVoiceAvailable(language: string) {
   return Boolean(window.speechSynthesis) && Boolean(pickVoice(language));
 }
 
-function speakInBrowser(text: string, language: string): Promise<void> {
+function speakSentence(text: string, language: string): Promise<void> {
   return new Promise((resolve) => {
-    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-      resolve();
-      return;
-    }
-    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     const voice = pickVoice(language);
     if (voice) utterance.voice = voice;
@@ -278,6 +302,16 @@ function speakInBrowser(text: string, language: string): Promise<void> {
   });
 }
 
+async function speakInBrowser(text: string, language: string): Promise<void> {
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+  window.speechSynthesis.cancel();
+  const run = speechRun;
+  for (const part of sentences(text)) {
+    if (run !== speechRun) return; // Stopped, or another read started.
+    await speakSentence(part, language);
+  }
+}
+
 /** Play server audio if ``fetchAudio`` succeeds, otherwise use the browser voice. */
 export async function speak(
   text: string,
@@ -285,15 +319,18 @@ export async function speak(
   fetchAudio?: () => Promise<Blob>,
 ): Promise<void> {
   stopSpeaking();
+  const run = speechRun;
   if (fetchAudio) {
     try {
       const blob = await fetchAudio();
+      if (run !== speechRun) return; // Stopped while the audio was loading.
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       currentAudio = audio;
       currentUrl = url;
       await new Promise<void>((resolve) => {
         audio.onended = () => resolve();
+        audio.onpause = () => resolve(); // Stopped by the patient.
         audio.onerror = () => resolve();
         audio.play().catch(() => resolve());
       });

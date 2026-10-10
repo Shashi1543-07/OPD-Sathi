@@ -739,6 +739,10 @@
   border-color: #000;
 }
 
+.print-only {
+  display: none;
+}
+
 @media print {
   .kiosk-header,
   .kiosk-footer,
@@ -749,6 +753,47 @@
   .intake-card {
     box-shadow: none;
     border: 0;
+  }
+  /* A compact, black-ink slip that also fits an 80 mm receipt printer. */
+  .print-only {
+    display: block;
+  }
+  .intake-ticket {
+    right: 0;
+    max-width: 120mm;
+    margin: 0 auto;
+    gap: 4mm;
+    color: #000;
+  }
+  .intake-ticket .intake-title {
+    font-size: 16pt;
+    margin: 0;
+  }
+  .intake-ticket-ok {
+    display: none !important;
+  }
+  .intake-ticket-main {
+    border: 1.5px dashed #000;
+    border-radius: 4mm;
+    padding: 5mm;
+    gap: 5mm;
+    justify-content: center;
+  }
+  .intake-ticket-token .status-token {
+    color: #000;
+    background: none;
+    font-size: 40pt;
+  }
+  .intake-ticket-token p,
+  .intake-ticket-qr,
+  .intake-ticket .intake-lead,
+  .intake-ticket-meta {
+    color: #000;
+    font-size: 11pt;
+  }
+  .intake-ticket-meta {
+    margin: 0;
+    text-align: center;
   }
 }
 

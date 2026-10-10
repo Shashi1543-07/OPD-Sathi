@@ -9,11 +9,27 @@
   "demoOnly": "The fictional status card is a preview.",
   "loading": "Loading queue status…",
   "reconnecting": "Reconnecting; live updates will resume automatically.",
+  "goTo": "Go to",
+  "youAreNext": "You are next",
+  "minutes": "{{range}} min",
+  "calledTitle": "It is your turn!",
+  "calledBody": "Please go to {{department}} now.",
+  "calledBodyDesk": "Please go to the staff desk now.",
+  "keepOpen": "Keep this page open. It updates by itself.",
+  "live": "Live",
+  "lastUpdated": "Updated {{time}}",
+  "language": "Language",
+  "steps": {
+    "waiting": "Waiting",
+    "called": "Called",
+    "in_consult": "With doctor",
+    "done": "Done"
+  },
   "state": {
     "waiting": "Please wait for your turn.",
     "called": "Please go to the staff desk.",
-    "in_consult": "Your visit is in progress.",
-    "done": "Your visit is complete.",
+    "in_consult": "You are with the doctor now.",
+    "done": "Your visit is complete. Thank you!",
     "no_show": "Please ask staff for help.",
     "cancelled": "Please ask staff for help."
   }

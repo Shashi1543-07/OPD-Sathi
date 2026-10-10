@@ -44,6 +44,9 @@ type Answered = Question & { answer: string | number | null };
 type QueueTicket = {
   token: string;
   statusUrl: string;
+  /** Absolute link a phone on the clinic Wi-Fi can open; the kiosk itself is localhost. */
+  publicStatusUrl: string | null;
+  issuedAt: Date;
   position: number | null;
   departmentName: string | null;
   waitMinutes: number | null;
@@ -1156,10 +1159,16 @@ export function KioskIntake() {
                   void run(async () => {
                     const result = (await intake.confirm()) as Awaited<
                       ReturnType<typeof intake.confirm>
-                    > & { department_name?: string | null; wait_minutes?: number | null };
+                    > & {
+                      department_name?: string | null;
+                      wait_minutes?: number | null;
+                      public_status_url?: string | null;
+                    };
                     setTicket({
                       token: result.token,
                       statusUrl: result.status_url,
+                      publicStatusUrl: result.public_status_url ?? null,
+                      issuedAt: new Date(),
                       position: result.position,
                       departmentName: result.department_name ?? null,
                       waitMinutes: result.wait_minutes ?? null,
@@ -1201,16 +1210,29 @@ export function KioskIntake() {
                   </p>
                 )}
               </div>
-              <a className="intake-ticket-qr" href={ticket.statusUrl}>
+              {/* Not a link: tapping it would take the shared kiosk away from the next patient. */}
+              <div className="intake-ticket-qr">
                 <QRCodeSVG
-                  value={new URL(ticket.statusUrl, window.location.origin).toString()}
-                  size={168}
+                  value={
+                    ticket.publicStatusUrl ??
+                    new URL(ticket.statusUrl, window.location.origin).toString()
+                  }
+                  size={184}
+                  level="M"
+                  marginSize={2}
                   title={t("scanQr")}
                 />
                 <span>{t("scanQr")}</span>
-              </a>
+              </div>
             </div>
             <p className="intake-lead">{t("waitHint")}</p>
+            <p className="intake-ticket-meta print-only">
+              {t("clinicName", { ns: "kiosk" })} ·{" "}
+              {ticket.issuedAt.toLocaleString(language === "en" ? "en-IN" : `${language}-IN`, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </p>
             <div className="intake-actions no-print">
               <button
                 type="button"

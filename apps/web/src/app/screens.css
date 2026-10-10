@@ -2557,6 +2557,186 @@
   gap: var(--space-1-5);
   margin: 0;
 }
+.status-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.status-head .eyebrow,
+.status-hospital {
+  margin: 0;
+}
+.status-hospital {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.status-lang {
+  display: flex;
+  gap: var(--space-1);
+}
+.status-lang button {
+  min-height: 2.25rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--navy-900);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.status-lang button[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.status-ticket {
+  display: grid;
+  gap: var(--space-2);
+}
+.status-ticket > span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.status-go {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin: 0;
+  color: var(--navy-900);
+  font-size: 1.1rem;
+}
+.status-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2-5);
+}
+.status-figure {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  color: var(--primary);
+}
+.status-figure span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.status-figure strong {
+  color: var(--navy-900);
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.status-figure strong.status-next {
+  color: var(--primary-active, var(--primary));
+  font-size: 1.35rem;
+}
+.status-called {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--primary);
+  color: #fff;
+  text-align: center;
+  animation: status-pulse 1.6s ease-in-out infinite;
+}
+.status-called strong {
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+.status-called p {
+  margin: 0;
+  font-size: 1.1rem;
+}
+@keyframes status-pulse {
+  50% {
+    box-shadow: 0 0 0 8px rgb(13 148 136 / 18%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-called {
+    animation: none;
+  }
+}
+.status-message {
+  margin: 0;
+  padding: var(--space-3) var(--space-3-5);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  color: var(--navy-900);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.status-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.status-steps li {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+}
+.status-step-dot {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  font-size: 0.8rem;
+}
+.status-steps li.is-done .status-step-dot {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+.status-steps li.is-current {
+  color: var(--navy-900);
+}
+.status-steps li.is-current .status-step-dot {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.status-live {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--routine, #16a34a);
+}
+.status-live.is-off {
+  background: var(--text-dim);
+}
+.status-tip,
+.status-foot {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+.status-foot {
+  color: var(--text-dim);
+  font-size: var(--font-size-xs);
+}
 
 /* ============================================================
    9. OFFLINE INTAKE & DEMO RIBBON
@@ -3241,10 +3421,13 @@
     visibility: hidden;
   }
   .token-receipt,
-  .token-receipt * {
+  .token-receipt *,
+  .intake-ticket,
+  .intake-ticket * {
     visibility: visible;
   }
-  .token-receipt {
+  .token-receipt,
+  .intake-ticket {
     left: 0;
     position: absolute;
     top: 0;

@@ -16,6 +16,7 @@ from app.ai.clinical_summary import apply_summary, summarize_interview
 from app.ai.department_classifier import classify_department, combine_department_classification
 from app.ai.followup_questions import draft_followups
 from app.ai.prompts.builders import QuestionCandidate
+from app.ai.providers.tts.base import pad_with_silence
 from app.ai.question_choice import select_question_id
 from app.ai.readback import build_readback, build_readback_from_answers
 from app.ai.redflag_opinion import combine_redflag_opinions, second_opinion_flags
@@ -1758,8 +1759,9 @@ async def generate_readback_audio(
             "Read-back audio unavailable",
             "Read-back text remains available.",
         ) from exc
+    content = pad_with_silence(clip.content) if clip.media_type == "audio/wav" else clip.content
     return Response(
-        content=clip.content,
+        content=content,
         media_type=clip.media_type,
         headers={"Cache-Control": "private, no-store", "Pragma": "no-cache"},
     )
@@ -2094,12 +2096,15 @@ async def confirm_summary(
     except Exception:
         department_name = None
     consult_minutes = request.app.state.settings.default_consult_min
+    public_web_url = request.app.state.settings.public_web_url.strip().rstrip("/")
     queue_response = {
         "confirmed": True,
         "status": "queued",
         "token": queue_record["token_label"],
         "status_token": status_token,
         "status_url": f"/s/{status_token}",
+        # The QR code needs an address a patient's phone can open (not localhost).
+        "public_status_url": f"{public_web_url}/s/{status_token}" if public_web_url else None,
         "position": position,
         "department_name": department_name,
         "wait_minutes": round(max(position - 1, 0) * consult_minutes) if position else None,

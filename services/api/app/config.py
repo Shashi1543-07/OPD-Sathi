@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     provider_mode: str = "standard"
     demo_story: str = "hindi-fever"
     web_origin: str = "http://localhost:5173"
+    # Address patients' phones use to open the token QR link, e.g. http://192.168.1.20:5173.
+    # The kiosk itself runs on localhost (needed for the microphone), which a phone cannot
+    # reach. Empty: the QR uses the kiosk's own address.
+    public_web_url: str = ""
     log_level: str = "INFO"
     database_url: str = "postgresql+asyncpg://osa_app:local-only@localhost:5432/osa"
     worker_database_url: str = ""
