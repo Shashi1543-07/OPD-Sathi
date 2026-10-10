@@ -790,23 +790,39 @@
   border-right: 1px solid rgb(255 255 255 / 10%);
 }
 .staff-brand {
+  align-items: center;
   color: white;
+  display: flex;
   font-size: 1.0625rem;
   font-weight: 700;
+  gap: 0.65rem;
   letter-spacing: -0.01em;
+  line-height: 1.2;
   padding: var(--space-2) var(--space-2-5);
   text-decoration: none;
-  display: block;
-  line-height: 1.2;
 }
-.staff-brand span {
+.staff-brand-mark {
+  align-items: center;
+  background: linear-gradient(135deg, #14b8a6, #0d9488);
+  border-radius: 0.6rem;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2.1rem;
+  justify-content: center;
+  width: 2.1rem;
+}
+.staff-brand-text {
+  display: grid;
+  min-width: 0;
+}
+.staff-brand small {
   display: block;
   font-size: 0.6875rem;
-  font-weight: 400;
-  opacity: 0.55;
-  margin-top: 2px;
-  text-transform: uppercase;
+  font-weight: 500;
   letter-spacing: 0.05em;
+  margin-top: 2px;
+  opacity: 0.6;
+  text-transform: uppercase;
 }
 .staff-sidebar nav {
   display: grid;
@@ -818,10 +834,10 @@
   border-radius: var(--radius-md);
   color: rgb(255 255 255 / 75%);
   display: flex;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-weight: 500;
   gap: var(--space-2-5);
-  min-height: 2.375rem;
+  min-height: 2.6rem;
   padding: 0 var(--space-3);
   text-decoration: none;
   transition:
@@ -833,9 +849,44 @@
   color: white;
 }
 .staff-sidebar nav a[aria-current="page"] {
-  background: rgb(255 255 255 / 14%);
+  background: linear-gradient(90deg, rgb(20 184 166 / 30%), rgb(20 184 166 / 12%));
+  box-shadow: inset 3px 0 0 #2dd4bf;
   color: white;
   font-weight: 600;
+}
+.staff-sidebar nav a svg {
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+.staff-user {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.staff-avatar {
+  align-items: center;
+  background: #ccfbf1;
+  border-radius: 999px;
+  color: #0f766e;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  font-weight: 800;
+  height: 2.25rem;
+  justify-content: center;
+  width: 2.25rem;
+}
+.staff-user .staff-user-meta {
+  min-width: 0;
+}
+.staff-user-name {
+  color: white;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .staff-sidebar nav a:focus-visible {
   outline: 2px solid #f2a900;
@@ -3111,7 +3162,8 @@
     grid-area: brand;
     padding: var(--space-1) var(--space-2);
   }
-  .staff-brand span {
+  .staff-brand small,
+  .staff-avatar {
     display: none;
   }
   .staff-sidebar nav {
@@ -3631,21 +3683,41 @@
 }
 
 /* ============================================================
-   Queue board (redesign): stat tiles, compact rows, tidy actions
+   Queue page (staff/doctor/admin)
+   Layout responds to the width the page actually gets (container queries), so browser
+   zoom or a narrow window never pushes content past the right edge.
    ============================================================ */
 .qb {
+  container: queue / inline-size;
+  display: grid;
   gap: var(--space-4);
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 auto;
+  max-width: 1440px;
+  min-width: 0;
+  width: 100%;
 }
+.qb > * {
+  min-width: 0;
+}
+
+/* Heading */
 .qb-head {
   align-items: flex-end;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-3) var(--space-4);
   justify-content: space-between;
 }
+.qb-head-title {
+  min-width: 0;
+}
 .qb-head h2 {
-  font-size: var(--font-size-3xl);
-  font-weight: 700;
+  color: var(--navy-900);
+  font-size: clamp(1.5rem, 2.4vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
   margin: 0;
 }
 .qb-dept-name {
@@ -3654,36 +3726,73 @@
 .qb-head p {
   color: var(--text-muted);
   font-size: var(--font-size-sm);
-  margin: 0.15rem 0 0;
+  margin: 0.25rem 0 0;
 }
 .qb-head-actions {
   align-items: center;
   display: flex;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
-
-.qb-btn {
+.qb-sound {
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--text-primary);
+  border-radius: 999px;
+  color: var(--text-muted);
   cursor: pointer;
   display: inline-flex;
-  font: inherit;
   font-size: var(--font-size-sm);
   font-weight: 600;
   gap: 0.35rem;
-  justify-content: center;
   min-height: 2.25rem;
-  padding: 0.35rem 0.8rem;
+  padding: 0 0.75rem 0 0.6rem;
+}
+.qb-sound input {
+  accent-color: var(--primary);
+  height: 0.95rem;
+  margin: 0;
+  width: 0.95rem;
+}
+.qb-sound:has(input:checked) {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  color: var(--primary);
+}
+.qb-sound:has(input:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Buttons */
+.qb-btn {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  gap: 0.4rem;
+  justify-content: center;
+  min-height: 2.375rem;
+  padding: 0 0.85rem;
   text-decoration: none;
+  transition:
+    background var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease;
   white-space: nowrap;
-  transition: background var(--motion-fast) ease, border-color var(--motion-fast) ease;
 }
 .qb-btn:hover:not(:disabled) {
   background: var(--surface-hover);
   border-color: var(--border-strong);
+}
+.qb-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 .qb-btn:disabled {
   cursor: not-allowed;
@@ -3692,142 +3801,176 @@
 .qb-btn--primary {
   background: var(--primary);
   border-color: var(--primary);
+  box-shadow: 0 1px 2px rgb(13 148 136 / 25%);
   color: #fff;
-  min-width: 5.5rem;
 }
 .qb-btn--primary:hover:not(:disabled) {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
 }
+.qb-btn--large {
+  font-size: var(--font-size-md);
+  min-height: 2.75rem;
+  padding: 0 1.2rem;
+}
 
-/* Stat tiles */
+/* KPI cards: equal widths, never clipped; click to filter */
 .qb-stats {
   display: grid;
   gap: var(--space-3);
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .qb-stat {
+  --tone: var(--info);
+  --tone-tint: #eff6ff;
+  align-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 4px solid var(--border-strong);
+  border-left: 4px solid var(--tone);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  transition:
+    box-shadow var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+.qb-stat:hover {
+  box-shadow: var(--shadow-sm, 0 2px 8px rgb(11 37 69 / 8%));
+}
+.qb-stat:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.qb-stat[aria-pressed="true"] {
+  background: var(--tone-tint);
+  border-color: var(--tone);
+}
+.qb-stat-icon {
+  align-items: center;
+  background: var(--tone-tint);
+  border-radius: 999px;
+  color: var(--tone);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2.6rem;
+  justify-content: center;
+  width: 2.6rem;
+}
+.qb-stat-text {
+  display: grid;
+  min-width: 0;
+}
+.qb-stat-text strong {
+  color: var(--navy-900);
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1.05;
+}
+.qb-stat-text span {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.qb-stat--wait { --tone: var(--info); --tone-tint: #eff6ff; }
+.qb-stat--called { --tone: var(--priority); --tone-tint: var(--priority-tint); }
+.qb-stat--consult { --tone: var(--primary); --tone-tint: var(--primary-tint); }
+.qb-stat--attention { --tone: var(--urgent); --tone-tint: var(--urgent-tint); }
+
+/* Filter toolbar: one aligned row on desktop, wraps on smaller widths */
+.qb-filters {
+  align-items: end;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
   display: grid;
-  gap: 0.1rem;
-  padding: 0.7rem 1rem;
+  gap: var(--space-3) var(--space-4);
+  grid-template-columns: minmax(11rem, 1fr) minmax(10rem, 0.8fr) minmax(12rem, 1.6fr) auto;
+  padding: 0.85rem 1rem;
 }
-.qb-stat strong {
-  font-size: 1.6rem;
-  line-height: 1.1;
-}
-.qb-stat span {
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-}
-.qb-stat--wait { border-left-color: var(--info); }
-.qb-stat--called { border-left-color: var(--priority); }
-.qb-stat--consult { border-left-color: var(--primary); }
-.qb-stat--attention { border-left-color: var(--urgent); }
-
-/* Toolbar */
-.qb-toolbar {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  justify-content: space-between;
-}
-.qb-tabs {
-  background: var(--surface-subtle);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  display: flex;
-  flex: 1 1 24rem;
-  flex-wrap: nowrap;
-  gap: 0.25rem;
-  max-width: 100%;
+.qb-field {
+  display: grid;
+  gap: 0.35rem;
   min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding: 0.25rem;
-  scroll-padding-inline: 0.5rem;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
-.qb-tabs::-webkit-scrollbar {
-  height: 6px;
+.qb-field > span:first-child {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
-.qb-tabs::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 999px;
+.qb-control {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+  display: flex;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  min-width: 0;
+  padding: 0 0.75rem;
+  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
-.qb-tabs button {
-  flex: 0 0 auto;
-  scroll-snap-align: start;
-  white-space: nowrap;
+.qb-control:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.qb-control select,
+.qb-control input {
   background: transparent;
   border: 0;
-  border-radius: 999px;
-  color: var(--text-muted);
-  cursor: pointer;
+  color: var(--text-primary);
+  flex: 1 1 auto;
   font: inherit;
   font-size: var(--font-size-sm);
   font-weight: 600;
-  padding: 0.4rem 0.95rem;
+  min-height: 2.4rem;
+  min-width: 0;
+  outline: none;
+  width: 100%;
 }
-.qb-tabs button:hover {
+.qb-control input {
+  font-weight: 500;
+}
+.qb-control select:disabled {
+  color: var(--text-dim);
+}
+.qb-check {
+  align-items: center;
   color: var(--text-primary);
-}
-.qb-tabs button[aria-pressed="true"] {
-  background: var(--surface);
-  box-shadow: var(--shadow-xs);
-  color: var(--primary);
-}
-.qb-toolbar-right {
-  align-items: center;
-  display: flex;
-  flex: 0 0 auto;
-  gap: var(--space-4);
-}
-.qb-select {
-  align-items: center;
-  color: var(--text-muted);
+  cursor: pointer;
   display: inline-flex;
   font-size: var(--font-size-sm);
   font-weight: 600;
   gap: 0.5rem;
+  min-height: 2.5rem;
+  white-space: nowrap;
 }
-.qb-select select,
-.qb-override select,
-.qb-override input,
-.qb-route-form input {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-size-sm);
-  min-height: 2.1rem;
-  padding: 0.3rem 0.6rem;
-}
-.qb-toggle {
-  align-items: center;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  gap: 0.4rem;
-}
-.qb-toggle input {
-  accent-color: var(--primary);
-  height: 1rem;
-  width: 1rem;
+.qb-check input {
+  accent-color: var(--urgent);
+  height: 1.05rem;
+  margin: 0;
+  width: 1.05rem;
 }
 
-/* Alerts */
+/* Alerts: compact and scrolling, so they never push the queue off the screen */
+.qb-alerts-title {
+  color: var(--urgent-ink);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  margin: 0 0 calc(-1 * var(--space-2));
+}
 .qb-alerts {
   display: grid;
   gap: var(--space-2);
@@ -3837,19 +3980,13 @@
   padding-right: 0.25rem;
   scrollbar-width: thin;
 }
-.qb-alerts-title {
-  color: var(--urgent-ink);
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  margin: 0;
-}
 .qb-alert {
   align-items: center;
   border: 1px solid;
   border-radius: var(--radius-lg);
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   padding: 0.6rem 0.9rem;
 }
 .qb-alert--urgent {
@@ -3871,6 +4008,7 @@
   display: grid;
   gap: 0.1rem;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 .qb-alert-text strong {
   font-size: var(--font-size-md);
@@ -3885,53 +4023,113 @@
   margin: 0;
   padding: 0.6rem 0.9rem;
 }
-.qb-empty {
-  align-items: center;
-  background: var(--surface);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
-  color: var(--text-muted);
-  display: grid;
-  justify-items: center;
-  gap: var(--space-2);
-  padding: var(--space-8);
-}
-.qb-empty p {
-  margin: 0;
-}
 
-/* Table */
-.qb-table {
+/* Patients in queue */
+.qb-list {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
   display: grid;
+  min-width: 0;
+  overflow: hidden;
+}
+.qb-list-head {
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+}
+.qb-list-head h3 {
+  align-items: center;
+  color: var(--navy-900);
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  gap: 0.5rem;
+  margin: 0;
+}
+.qb-list-head h3 > svg {
+  color: var(--primary);
+}
+.qb-count {
+  background: #eff6ff;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  padding: 0.15rem 0.6rem;
+}
+.qb-sort {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  gap: 0.35rem;
+}
+.qb-state {
+  color: var(--text-muted);
+  margin: 0;
+  padding: var(--space-5) 1rem;
+}
+.qb-empty {
+  align-items: center;
+  color: var(--text-muted);
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  padding: var(--space-8) 1rem;
+  text-align: center;
+}
+.qb-empty p {
+  margin: 0;
+}
+
+/* Table: header and rows share the same column template */
+.qb-table {
+  display: grid;
+  min-width: 0;
 }
 .qb-row {
+  /* A fixed actions width keeps the header and every row on the same columns. */
+  --qb-actions: 21.5rem;
   align-items: center;
+  column-gap: 0.75rem;
   display: grid;
-  gap: var(--space-3);
   grid-template-columns:
-    5.5rem 6.5rem minmax(10rem, 2.2fr) 7rem 5.5rem 8.5rem minmax(15rem, 1.4fr);
+    minmax(5.5rem, 0.75fr) minmax(7rem, 0.9fr) minmax(9rem, 2fr) minmax(8.5rem, 1fr)
+    minmax(5.5rem, 0.7fr) minmax(7rem, 0.8fr) var(--qb-actions);
+  min-width: 0;
+}
+.qb-row > * {
+  min-width: 0;
 }
 .qb-row--head {
+  /* Reserve the same scrollbar gutter as the rows below, so columns line up. */
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
   background: var(--surface-subtle);
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   font-weight: 700;
-  letter-spacing: 0.04em;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  padding: 0.55rem 1rem;
+  letter-spacing: 0.05em;
+  padding: 0.6rem 1rem 0.6rem calc(1rem + 4px);
   text-transform: uppercase;
 }
 .qb-col-actions {
   justify-self: end;
 }
 .qb-viewport {
-  max-height: min(64vh, 720px);
+  max-height: min(62vh, 720px);
   min-height: 0;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 .qb-item {
   left: 0;
@@ -3942,23 +4140,28 @@
 .qb-card {
   border-bottom: 1px solid var(--border-subtle);
   border-left: 4px solid transparent;
-  padding: 0.7rem 1rem 0.7rem calc(1rem - 4px);
+  padding: 0.75rem 1rem;
   transition: background var(--motion-fast) ease;
 }
 .qb-card:hover {
   background: var(--surface-subtle);
 }
 .qb-item--urgent .qb-card {
-  background: #fff7f7;
+  background: #fff8f8;
   border-left-color: var(--urgent);
+}
+.qb-item--urgent .qb-card:hover {
+  background: #fff1f1;
 }
 .qb-item--priority .qb-card {
   border-left-color: var(--priority);
 }
 .qb-token {
   display: grid;
+  gap: 0.1rem;
 }
 .qb-token strong {
+  color: var(--navy-900);
   font-family: var(--font-family-mono);
   font-size: var(--font-size-lg);
   letter-spacing: 0.02em;
@@ -3969,19 +4172,28 @@
   font-size: var(--font-size-xs);
 }
 .qb-patient {
+  align-items: center;
   color: var(--text-muted);
+  display: flex;
   font-size: var(--font-size-sm);
-  white-space: nowrap;
+  gap: 0.4rem;
+}
+.qb-patient > svg {
+  color: var(--text-dim);
+  flex: 0 0 auto;
 }
 .qb-complaint {
   display: grid;
-  font-size: var(--font-size-md);
-  font-weight: 500;
   gap: 0.2rem;
-  min-width: 0;
 }
-.qb-complaint > :first-child,
-.qb-complaint {
+.qb-complaint-text {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--navy-900);
+  display: -webkit-box;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 .qb-flag {
@@ -3992,10 +4204,18 @@
   font-weight: 600;
   gap: 0.25rem;
 }
+.qb-urgency {
+  display: grid;
+  gap: 0.25rem;
+  justify-items: start;
+}
 .qb-wait {
+  align-items: center;
   color: var(--text-muted);
+  display: inline-flex;
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
+  gap: 0.35rem;
   white-space: nowrap;
 }
 .qb-status {
@@ -4003,7 +4223,7 @@
   display: inline-block;
   font-size: var(--font-size-xs);
   font-weight: 700;
-  padding: 0.2rem 0.65rem;
+  padding: 0.22rem 0.7rem;
   white-space: nowrap;
 }
 .qb-status--queued {
@@ -4017,20 +4237,15 @@
 .qb-status--in_consult {
   background: var(--primary-tint);
   color: var(--primary);
-  outline: 1px solid #99f6e4;
 }
 .qb-actions {
   align-items: center;
   display: flex;
   gap: 0.4rem;
+  justify-content: flex-end;
 }
-/* Triage score and its explanation (staff only). */
-/* Each virtual row is its own stacking context; lift the one whose pop-over is open. */
-.qb-urgency {
-  display: grid;
-  justify-items: start;
-  gap: 0.25rem;
-}
+
+/* Triage score and its explanation (staff only) */
 .qb-why {
   background: none;
   border: 0;
@@ -4056,22 +4271,22 @@
   text-decoration: underline;
 }
 .qb-why-panel {
-  width: min(28rem, calc(100vw - 1rem));
-  display: grid;
   align-content: start;
-  gap: 0.6rem;
-  padding: 0.95rem 1.1rem;
   color: var(--navy-900);
+  display: grid;
   font-size: 0.85rem;
+  gap: 0.6rem;
   line-height: 1.4;
+  padding: 0.95rem 1.1rem;
+  width: min(28rem, calc(100vw - 1rem));
 }
 .qb-why-panel p {
   margin: 0;
 }
 .qb-why-total {
   display: flex;
-  justify-content: space-between;
   gap: 0.5rem;
+  justify-content: space-between;
 }
 .qb-why-total span {
   color: var(--text-dim);
@@ -4080,15 +4295,15 @@
 .qb-why-panel ul {
   display: grid;
   gap: 0.3rem;
+  list-style: none;
   margin: 0;
   padding: 0;
-  list-style: none;
 }
 .qb-why-panel li {
-  display: grid;
-  grid-template-columns: 2.5rem 1fr auto;
-  gap: 0.4rem;
   align-items: baseline;
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: 2.5rem 1fr auto;
 }
 .qb-why-panel li b {
   color: var(--primary);
@@ -4104,9 +4319,9 @@
 }
 .qb-why-override,
 .qb-why-ai {
+  align-items: flex-start;
   display: flex;
   gap: 0.4rem;
-  align-items: flex-start;
 }
 .qb-why-ai--more_urgent {
   color: #b42318;
@@ -4116,6 +4331,7 @@
   color: var(--text-dim);
 }
 
+/* Row menu (⋯) */
 .qb-more {
   align-items: center;
   background: var(--surface);
@@ -4124,13 +4340,18 @@
   color: var(--text-primary);
   cursor: pointer;
   display: inline-flex;
-  height: 2.25rem;
+  flex: 0 0 auto;
+  height: 2.375rem;
   justify-content: center;
-  width: 2.25rem;
+  width: 2.375rem;
 }
 .qb-more:hover,
 .qb-more[aria-expanded="true"] {
   background: var(--surface-hover);
+}
+.qb-more:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 .qb-menu {
   display: grid;
@@ -4155,8 +4376,22 @@
   display: grid;
   font-size: var(--font-size-xs);
   font-weight: 600;
-  gap: 0.2rem;
+  gap: 0.25rem;
 }
+.qb-override select,
+.qb-override input,
+.qb-route-form input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  min-height: 2.25rem;
+  padding: 0.3rem 0.6rem;
+}
+
+/* Department-not-confirmed note under a row */
 .qb-route {
   align-items: center;
   background: var(--priority-tint);
@@ -4166,46 +4401,140 @@
   flex-wrap: wrap;
   font-size: var(--font-size-sm);
   gap: 0.5rem;
-  margin-top: 0.5rem;
-  padding: 0.35rem 0.7rem;
+  margin-top: 0.6rem;
+  padding: 0.45rem 0.7rem;
 }
 .qb-route-form {
+  align-items: center;
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
   margin-left: auto;
 }
 .qb-route-form input {
-  min-height: 2rem;
-  width: 13rem;
+  min-width: 0;
+  width: 14rem;
 }
-.qb .staff-queue-load-more {
-  border-radius: 0;
-  border-width: 1px 0 0;
-  min-height: 2.75rem;
-  width: 100%;
+.staff-queue-load-more {
+  justify-self: center;
+  margin: 0.75rem;
 }
 
-@media (max-width: 1180px) {
+/* Next action */
+.qb-next {
+  align-items: center;
+  background: linear-gradient(90deg, var(--primary-tint), var(--surface) 70%);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  padding: 0.9rem 1.1rem;
+}
+.qb-next-text {
+  display: grid;
+  flex: 1 1 16rem;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.qb-next-label {
+  align-items: center;
+  color: var(--primary);
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  gap: 0.35rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.qb-next-text strong {
+  color: var(--navy-900);
+  font-family: var(--font-family-mono);
+  font-size: 1.35rem;
+}
+.qb-next-text > span:last-child {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Responsive (by the queue's own width) ---- */
+
+/* Laptop: keep the full table, make "Open case sheet" an icon button (label kept for
+   screen readers). */
+@container queue (max-width: 1250px) {
+  .qb-btn-label {
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+  .qb-actions a.qb-btn {
+    padding: 0;
+    width: 2.375rem;
+  }
+  .qb-row {
+    --qb-actions: 14rem;
+  }
+}
+
+/* Tablet: filters in two columns; KPI cards in two columns. */
+@container queue (max-width: 1000px) {
+  .qb-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .qb-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Below the full-table width: each patient is a two-line row, no table header. */
+@container queue (max-width: 1040px) {
   .qb-row--head {
     display: none;
   }
   .qb-row {
-    grid-template-columns: 5.5rem 1fr auto;
-    row-gap: 0.4rem;
+    grid-template-areas:
+      "token complaint complaint priority"
+      "token patient   patient   priority"
+      "token wait      status    actions";
+    grid-template-columns: minmax(5.5rem, auto) minmax(0, 1fr) auto auto;
+    row-gap: 0.35rem;
+    --qb-actions: auto;
   }
-  .qb-patient { grid-column: 2; grid-row: 1; }
-  .qb-complaint { grid-column: 1 / -1; grid-row: 2; }
-  .qb-row > div:nth-child(4) { grid-column: 3; grid-row: 1; justify-self: end; }
-  .qb-wait { grid-column: 1; grid-row: 3; }
-  .qb-row > div:nth-child(6) { grid-column: 2; grid-row: 3; }
-  .qb-actions { grid-column: 3; grid-row: 3; justify-self: end; flex-wrap: wrap; }
-  .qb-row > div:nth-child(6) { justify-self: start; }
+  .qb-token { grid-area: token; align-self: start; }
+  .qb-complaint { grid-area: complaint; }
+  .qb-patient { grid-area: patient; }
+  .qb-urgency { grid-area: priority; align-self: start; justify-items: end; }
+  .qb-wait { grid-area: wait; }
+  .qb-status-cell { grid-area: status; }
+  .qb-actions { grid-area: actions; }
 }
-@media (max-width: 720px) {
-  .qb-actions { grid-column: 1 / -1; grid-row: 4; justify-self: start; }
-  .qb-menu { left: 0; right: auto; }
-  .qb-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+/* Phone: stacked patient cards with full-width actions. */
+@container queue (max-width: 600px) {
+  .qb-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .qb-row {
+    grid-template-areas:
+      "token     priority"
+      "complaint complaint"
+      "patient   patient"
+      "wait      status"
+      "actions   actions";
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .qb-status-cell { justify-self: end; }
+  .qb-actions {
+    justify-content: stretch;
+  }
+  .qb-actions .qb-btn--primary {
+    flex: 1 1 auto;
   }
   .qb-route-form {
     margin-left: 0;
@@ -4214,6 +4543,33 @@
   .qb-route-form input {
     flex: 1;
     width: auto;
+  }
+  .qb-next .qb-btn--large {
+    width: 100%;
+  }
+  .qb-alert {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .qb-alert > .qb-btn {
+    grid-column: 1 / -1;
+  }
+}
+@container queue (max-width: 420px) {
+  .qb-stat {
+    gap: 0.6rem;
+    padding: 0.7rem 0.75rem;
+  }
+  .qb-stat-icon {
+    height: 2.1rem;
+    width: 2.1rem;
+  }
+  .qb-stat-text strong {
+    font-size: 1.45rem;
+  }
+}
+@container queue (max-width: 300px) {
+  .qb-stats {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -5348,4 +5704,38 @@
 }
 .emergency-casualty {
   font-weight: 700;
+}
+
+/* One page-title style across the staff workspace (Queue, Patients, Reports, Settings). */
+.qb-head h2,
+.pr-head h2,
+.analytics-header h2,
+.staff-admin .staff-queue-heading h2 {
+  color: var(--navy-900);
+  font-size: clamp(1.5rem, 2.4vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  margin: 0;
+}
+.pr-head p,
+.analytics-header p,
+.staff-admin .staff-queue-heading p {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin: 0.25rem 0 0;
+}
+/* Tokens never break across lines. */
+.cx-token,
+.qb-token strong {
+  white-space: nowrap;
+}
+
+/* Case-sheet header: the token and patient line wrap instead of widening the page. */
+.cx-hero-id {
+  flex-wrap: wrap;
+}
+.cx-hero > *,
+.cx-hero-id > * {
+  min-width: 0;
 }

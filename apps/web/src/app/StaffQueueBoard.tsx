@@ -2,7 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, FileText, Hand, MoreHorizontal, RefreshCw, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  Bell,
+  BellOff,
+  CheckCircle2,
+  Clock3,
+  FileText,
+  Hand,
+  ListOrdered,
+  MoreHorizontal,
+  PhoneCall,
+  RefreshCw,
+  Search,
+  Stethoscope,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { ConnectionIndicator, Popover, UrgencyBadge } from "../components/ui";
 import { TriageWhy } from "./TriageWhy";
 import { apiSocketUrl } from "../lib/api";
@@ -561,7 +577,26 @@ export function StaffQueueBoard() {
     staffAuth.user?.role === "nurse" || staffAuth.user?.role === "admin";
   const canOpenCase =
     staffAuth.user?.role === "doctor" || staffAuth.user?.role === "admin";
-  const orderedItems = useMemo(() => sortQueue(items), [items]);
+  const [search, setSearch] = useState("");
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const sortedItems = useMemo(() => sortQueue(items), [items]);
+  // Search and "priority / urgent only" narrow what is shown; the counts and the next
+  // patient to call always come from the whole loaded queue.
+  const orderedItems = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return sortedItems.filter(
+      (item) =>
+        (!attentionOnly || item.urgency !== "routine") &&
+        (!needle ||
+          item.token.toLowerCase().includes(needle) ||
+          (item.complaint ?? "").toLowerCase().includes(needle)),
+    );
+  }, [sortedItems, search, attentionOnly]);
+  const filtersActive = Boolean(search.trim()) || attentionOnly || statusFilter !== "all";
+  const nextPatient =
+    statusFilter === "all" || statusFilter === "queued"
+      ? sortedItems.find((item) => item.status === "queued")
+      : undefined;
   // The virtualizer exposes imperative measurements; React Compiler intentionally skips it.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -578,61 +613,113 @@ export function StaffQueueBoard() {
     attention: items.filter((item) => item.urgency !== "routine").length,
   };
   const activeDepartment = departments.find((department) => department.id === departmentId);
+  const kpis = [
+    { key: "queued", label: "Waiting", value: counts.queued, icon: Users, tone: "wait" },
+    { key: "called", label: "Called", value: counts.called, icon: PhoneCall, tone: "called" },
+    { key: "in_consult", label: "In consultation", value: counts.in_consult, icon: Stethoscope, tone: "consult" },
+  ] as const;
+
+  function primaryAction(item: QueueItem) {
+    if (item.status === "queued") return { name: "call" as const, label: "Call patient", Icon: PhoneCall };
+    if (item.status === "called") return { name: "start" as const, label: "Start consult", Icon: Stethoscope };
+    return { name: "complete" as const, label: "Complete", Icon: CheckCircle2 };
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setAttentionOnly(false);
+    setStatusFilter("all");
+  }
 
   return (
     <section className="staff-queue qb" aria-label="Live patient queue">
       <header className="qb-head">
-        <div>
+        <div className="qb-head-title">
           <h2>
             Queue
             {activeDepartment && <span className="qb-dept-name"> · {activeDepartment.name}</span>}
           </h2>
-          <p>Today's waiting room, in calling order</p>
+          <p>Today's waiting room · calling order</p>
         </div>
         <div className="qb-head-actions">
           <ConnectionIndicator state={connection} />
-          <button type="button" className="qb-btn qb-btn--ghost" onClick={() => void refresh()}>
+          <label className="qb-sound" title="Play a sound when a new alert arrives">
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(event) => setSoundEnabled(event.target.checked)}
+            />
+            {soundEnabled ? <Bell aria-hidden="true" size={16} /> : <BellOff aria-hidden="true" size={16} />}
+            Alert sound
+          </label>
+          <button type="button" className="qb-btn" onClick={() => void refresh()}>
             <RefreshCw aria-hidden="true" size={16} /> Refresh
           </button>
         </div>
       </header>
 
-      <div className="qb-stats" aria-label="Queue summary">
-        {[
-          ["Waiting", counts.queued, "qb-stat--wait"],
-          ["Called", counts.called, "qb-stat--called"],
-          ["In consultation", counts.in_consult, "qb-stat--consult"],
-          ["Priority or urgent", counts.attention, "qb-stat--attention"],
-        ].map(([label, value, tone]) => (
-          <div className={`qb-stat ${tone}`} key={label as string}>
-            <strong>{value}</strong>
-            <span>{label}</span>
-          </div>
+      <div className="qb-stats" role="group" aria-label="Queue summary">
+        {kpis.map(({ key, label, value, icon: Icon, tone }) => (
+          <button
+            type="button"
+            key={key}
+            className={`qb-stat qb-stat--${tone}`}
+            aria-pressed={statusFilter === key}
+            title={`Show ${label.toLowerCase()} patients only`}
+            onClick={() => setStatusFilter(statusFilter === key ? "all" : key)}
+          >
+            <span className="qb-stat-icon" aria-hidden="true">
+              <Icon size={20} />
+            </span>
+            <span className="qb-stat-text">
+              <strong>{value}</strong>
+              <span>{label}</span>
+            </span>
+          </button>
         ))}
+        <button
+          type="button"
+          className="qb-stat qb-stat--attention"
+          aria-pressed={attentionOnly}
+          title="Show priority and urgent patients only"
+          onClick={() => setAttentionOnly(!attentionOnly)}
+        >
+          <span className="qb-stat-icon" aria-hidden="true">
+            <AlertTriangle size={20} />
+          </span>
+          <span className="qb-stat-text">
+            <strong>{counts.attention}</strong>
+            <span>Priority / urgent</span>
+          </span>
+        </button>
       </div>
 
-      <div className="qb-toolbar">
-        <div className="qb-tabs" role="group" aria-label="Department">
-          {departments.map((department) => (
-            <button
-              type="button"
-              key={department.id}
-              aria-pressed={department.id === departmentId}
-              onClick={(event) => {
-                // The tab row scrolls sideways; keep the chosen tab fully in view.
-                event.currentTarget.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-                if (department.id === departmentId) return;
+      <div className="qb-filters" role="search" aria-label="Queue filters">
+        <label className="qb-field">
+          <span>Department</span>
+          <span className="qb-control">
+            <Stethoscope aria-hidden="true" size={16} />
+            <select
+              aria-label="Department"
+              value={departmentId}
+              disabled={departments.length === 0}
+              onChange={(event) => {
                 sequenceRef.current = 0;
-                setDepartmentId(department.id);
+                setDepartmentId(event.target.value);
               }}
             >
-              {department.name}
-            </button>
-          ))}
-        </div>
-        <div className="qb-toolbar-right">
-          <label className="qb-select">
-            Status
+              {departments.length === 0 && <option value="">Loading…</option>}
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
+        <label className="qb-field">
+          <span>Patient status</span>
+          <span className="qb-control">
             <select
               aria-label="Status"
               value={statusFilter}
@@ -643,16 +730,29 @@ export function StaffQueueBoard() {
               <option value="called">Called</option>
               <option value="in_consult">In consultation</option>
             </select>
-          </label>
-          <label className="qb-toggle">
+          </span>
+        </label>
+        <label className="qb-field qb-field--search">
+          <span>Search</span>
+          <span className="qb-control">
+            <Search aria-hidden="true" size={16} />
             <input
-              type="checkbox"
-              checked={soundEnabled}
-              onChange={(event) => setSoundEnabled(event.target.checked)}
+              type="search"
+              value={search}
+              placeholder="Token or complaint…"
+              aria-label="Search token or complaint"
+              onChange={(event) => setSearch(event.target.value)}
             />
-            Alert sound
-          </label>
-        </div>
+          </span>
+        </label>
+        <label className="qb-check">
+          <input
+            type="checkbox"
+            checked={attentionOnly}
+            onChange={(event) => setAttentionOnly(event.target.checked)}
+          />
+          Priority / urgent only
+        </label>
       </div>
 
       {alerts.length > 1 && (
@@ -684,7 +784,7 @@ export function StaffQueueBoard() {
                       : ""}
                   </span>
                 </div>
-                <button type="button" className="qb-btn qb-btn--ghost" onClick={() => void acknowledge(alert.id)}>
+                <button type="button" className="qb-btn" onClick={() => void acknowledge(alert.id)}>
                   Acknowledge
                 </button>
               </article>
@@ -694,214 +794,269 @@ export function StaffQueueBoard() {
       )}
 
       {error && <p className="qb-error" role="alert">{error}</p>}
-      {!queueLoaded && !error && <p role="status">{t("loadingQueue")}</p>}
-      {queueLoaded && departments.length === 0 && !error && <p role="status">{t("noQueueDepartments")}</p>}
-      {departments.length > 0 && items.length === 0 && (
-        <div className="qb-empty" role="status">
-          <Users aria-hidden="true" size={28} />
-          <p>{t("noQueueMatches")}</p>
-        </div>
-      )}
 
-      {items.length > 0 && (
-        <div className="qb-table">
-          <div className="qb-row qb-row--head" aria-hidden="true">
-            <span>Token</span>
-            <span>Patient</span>
-            <span>Complaint</span>
-            <span>Urgency</span>
-            <span>Waiting</span>
-            <span>Status</span>
-            <span className="qb-col-actions">Actions</span>
+      <section className="qb-list" aria-label="Patients in queue">
+        <header className="qb-list-head">
+          <h3>
+            <Users aria-hidden="true" size={18} /> Patients in queue
+            <span className="qb-count">
+              {orderedItems.length === items.length
+                ? `${items.length} ${items.length === 1 ? "patient" : "patients"}`
+                : `${orderedItems.length} of ${items.length}`}
+            </span>
+          </h3>
+          <span className="qb-sort">
+            <ListOrdered aria-hidden="true" size={16} /> Sorted by calling order
+          </span>
+        </header>
+
+        {!queueLoaded && !error && <p className="qb-state" role="status">{t("loadingQueue")}</p>}
+        {queueLoaded && departments.length === 0 && !error && (
+          <p className="qb-state" role="status">{t("noQueueDepartments")}</p>
+        )}
+        {queueLoaded && departments.length > 0 && orderedItems.length === 0 && (
+          <div className="qb-empty" role="status">
+            <Users aria-hidden="true" size={28} />
+            <p>{items.length > 0 ? "No patients match these filters." : t("noQueueMatches")}</p>
+            {filtersActive && (
+              <button type="button" className="qb-btn" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
           </div>
-          <div className="staff-queue-viewport qb-viewport" ref={scrollRef} role="region" aria-label="Queue patients">
-            <div className="staff-queue-virtual" style={{ height: `${virtualizer.getTotalSize()}px` }}>
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const item = orderedItems[virtualRow.index];
-                const busy = working === item.visit_id || Boolean(error);
-                const nextAction =
-                  item.status === "queued"
-                    ? { name: "call" as const, label: "Call" }
-                    : item.status === "called"
-                      ? { name: "start" as const, label: "Start" }
-                      : { name: "complete" as const, label: "Complete" };
-                const caseLink = `/staff/consultations?visit_id=${item.visit_id}&status=${item.status}`;
-                return (
-                  <article
-                    className={`qb-item qb-item--${item.urgency}`}
-                    key={item.visit_id}
-                    data-index={virtualRow.index}
-                    ref={virtualizer.measureElement}
-                    style={{ transform: `translateY(${virtualRow.start}px)` }}
-                  >
-                    <div className="qb-card">
-                    <div className="qb-row">
-                      <div className="qb-token">
-                        <strong>{item.token}</strong>
-                        <span>#{item.position} in line</span>
-                      </div>
-                      <div className="qb-patient">
-                        {item.age_years === null ? "Age —" : `${item.age_years} y`} · {sexLabel(item.sex)}
-                      </div>
-                      <div className="qb-complaint" title={item.complaint}>
-                        {sentenceCase(item.complaint) || <span className="qb-muted">Not recorded</span>}
-                        {item.needs_assistance && (
-                          <span className="qb-flag"><Hand aria-hidden="true" size={13} /> {t("patientNeedsAssistance")}</span>
-                        )}
-                      </div>
-                      <div className="qb-urgency">
-                        <UrgencyBadge level={item.urgency} />
-                        {item.triage && <TriageWhy triage={item.triage} queuedAt={item.queued_at} />}
-                      </div>
-                      <div className="qb-wait">{formatWait(waitMinutes(item.queued_at, now))}</div>
-                      <div>
-                        <span className={`qb-status qb-status--${item.status}`}>{statusLabel(item.status)}</span>
-                      </div>
-                      <div className="qb-col-actions qb-actions">
-                        {canOpenCase && (
-                          <Link className="qb-btn qb-btn--ghost" to={caseLink}>
-                            <FileText aria-hidden="true" size={16} /> {t("openCaseSheet")}
-                          </Link>
-                        )}
-                        <button
-                          type="button"
-                          className="qb-btn qb-btn--primary"
-                          disabled={busy}
-                          onClick={() => void action(item.visit_id, nextAction.name)}
-                        >
-                          {nextAction.label}
-                        </button>
-                        {(item.status !== "in_consult" || canOverride) && (
-                          <Popover
-                            align="end"
-                            triggerClassName="qb-more"
-                            panelClassName="qb-menu"
-                            ariaLabel={`More actions for ${item.token}`}
-                            label={<MoreHorizontal aria-hidden="true" size={18} />}
-                          >
-                            {(closeMenu) => (
-                            <>
-                              {(item.status === "queued" || item.status === "called") && (
-                                <button
-                                  type="button"
-                                  className="qb-btn qb-btn--ghost"
-                                  disabled={busy}
-                                  onClick={() => {
-                                    closeMenu();
-                                    void action(item.visit_id, "no-show");
-                                  }}
-                                >
-                                  Mark no show
-                                </button>
-                              )}
-                              {canOverride && item.status === "queued" && (
-                                <div className="qb-override">
-                                  <strong>Change priority</strong>
-                                  <label>
-                                    Priority
-                                    <select
-                                      value={overrideValues[item.visit_id]?.urgency ?? item.urgency}
-                                      onChange={(event) =>
-                                        setOverrideValues((current) => ({
-                                          ...current,
-                                          [item.visit_id]: {
-                                            urgency: event.target.value,
-                                            reason: current[item.visit_id]?.reason ?? "",
-                                          },
-                                        }))
-                                      }
-                                    >
-                                      <option value="routine">Routine</option>
-                                      <option value="priority">Priority</option>
-                                      <option value="urgent">Urgent</option>
-                                    </select>
-                                  </label>
-                                  <label>
-                                    Reason
-                                    <input
-                                      value={overrideValues[item.visit_id]?.reason ?? ""}
-                                      maxLength={500}
-                                      minLength={5}
-                                      placeholder="At least 5 characters"
-                                      onChange={(event) =>
-                                        setOverrideValues((current) => ({
-                                          ...current,
-                                          [item.visit_id]: {
-                                            urgency: current[item.visit_id]?.urgency ?? item.urgency,
-                                            reason: event.target.value,
-                                          },
-                                        }))
-                                      }
-                                    />
-                                  </label>
-                                  <button
-                                    type="button"
-                                    className="qb-btn qb-btn--primary"
-                                    disabled={busy || (overrideValues[item.visit_id]?.reason.trim().length ?? 0) < 5}
-                                    onClick={() => {
-                                      closeMenu();
-                                      void override(item.visit_id);
-                                    }}
-                                  >
-                                    Apply override
-                                  </button>
-                                </div>
-                              )}
-                            </>
+        )}
+
+        {orderedItems.length > 0 && (
+          <div className="qb-table">
+            <div className="qb-row qb-row--head" aria-hidden="true">
+              <span>Token</span>
+              <span>Patient</span>
+              <span>Complaint</span>
+              <span>Priority</span>
+              <span>Waiting</span>
+              <span>Status</span>
+              <span className="qb-col-actions">Actions</span>
+            </div>
+            <div className="staff-queue-viewport qb-viewport" ref={scrollRef} role="region" aria-label="Queue patients">
+              <div className="staff-queue-virtual" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+                {virtualizer.getVirtualItems().map((virtualRow) => {
+                  const item = orderedItems[virtualRow.index];
+                  const busy = working === item.visit_id || Boolean(error);
+                  const next = primaryAction(item);
+                  const caseLink = `/staff/consultations?visit_id=${item.visit_id}&status=${item.status}`;
+                  return (
+                    <article
+                      className={`qb-item qb-item--${item.urgency}`}
+                      key={item.visit_id}
+                      data-index={virtualRow.index}
+                      ref={virtualizer.measureElement}
+                      style={{ transform: `translateY(${virtualRow.start}px)` }}
+                    >
+                      <div className="qb-card">
+                        <div className="qb-row">
+                          <div className="qb-token">
+                            <strong>{item.token}</strong>
+                            <span>#{item.position} in line</span>
+                          </div>
+                          <div className="qb-patient">
+                            <UserRound aria-hidden="true" size={16} />
+                            <span>
+                              {item.age_years === null ? "Age —" : `${item.age_years} y`} · {sexLabel(item.sex)}
+                            </span>
+                          </div>
+                          <div className="qb-complaint" title={item.complaint}>
+                            <span className="qb-complaint-text">
+                              {sentenceCase(item.complaint) || <span className="qb-muted">Not recorded</span>}
+                            </span>
+                            {item.needs_assistance && (
+                              <span className="qb-flag">
+                                <Hand aria-hidden="true" size={13} /> {t("patientNeedsAssistance")}
+                              </span>
                             )}
-                          </Popover>
-                        )}
-                      </div>
-                    </div>
-                    {item.routing?.needs_nurse_confirmation && (
-                      <div className="qb-route">
-                        <AlertTriangle aria-hidden="true" size={15} />
-                        <span>
-                          Department not confirmed — suggested: <b>{routeLabel(item.routing.department_code)}</b>
-                        </span>
-                        {canOverride ? (
-                          <span className="qb-route-form">
-                            <input
-                              aria-label="Reason"
-                              placeholder="Reason (5+ characters)"
-                              value={routeReasons[item.visit_id] ?? ""}
-                              maxLength={500}
-                              minLength={5}
-                              onChange={(event) =>
-                                setRouteReasons((current) => ({ ...current, [item.visit_id]: event.target.value }))
-                              }
-                            />
+                          </div>
+                          <div className="qb-urgency">
+                            <UrgencyBadge level={item.urgency} />
+                            {item.triage && <TriageWhy triage={item.triage} queuedAt={item.queued_at} />}
+                          </div>
+                          <div className="qb-wait">
+                            <Clock3 aria-hidden="true" size={15} />
+                            {formatWait(waitMinutes(item.queued_at, now))}
+                          </div>
+                          <div className="qb-status-cell">
+                            <span className={`qb-status qb-status--${item.status}`}>{statusLabel(item.status)}</span>
+                          </div>
+                          <div className="qb-col-actions qb-actions">
+                            {canOpenCase && (
+                              <Link className="qb-btn" to={caseLink} title={t("openCaseSheet")}>
+                                <FileText aria-hidden="true" size={16} />
+                                <span className="qb-btn-label">{t("openCaseSheet")}</span>
+                              </Link>
+                            )}
                             <button
                               type="button"
-                              className="qb-btn qb-btn--ghost"
-                              disabled={busy || (routeReasons[item.visit_id]?.trim().length ?? 0) < 5}
-                              onClick={() => void confirmRoute(item.visit_id)}
+                              className="qb-btn qb-btn--primary"
+                              disabled={busy}
+                              onClick={() => void action(item.visit_id, next.name)}
                             >
-                              Confirm department
+                              <next.Icon aria-hidden="true" size={16} />
+                              {next.label}
                             </button>
-                          </span>
-                        ) : (
-                          <span className="qb-muted">A nurse will confirm.</span>
+                            {(item.status !== "in_consult" || canOverride) && (
+                              <Popover
+                                align="end"
+                                triggerClassName="qb-more"
+                                panelClassName="qb-menu"
+                                ariaLabel={`More actions for ${item.token}`}
+                                label={<MoreHorizontal aria-hidden="true" size={18} />}
+                              >
+                                {(closeMenu) => (
+                                  <>
+                                    {(item.status === "queued" || item.status === "called") && (
+                                      <button
+                                        type="button"
+                                        className="qb-btn"
+                                        disabled={busy}
+                                        onClick={() => {
+                                          closeMenu();
+                                          void action(item.visit_id, "no-show");
+                                        }}
+                                      >
+                                        Mark no show
+                                      </button>
+                                    )}
+                                    {canOverride && item.status === "queued" && (
+                                      <div className="qb-override">
+                                        <strong>Change priority</strong>
+                                        <label>
+                                          Priority
+                                          <select
+                                            value={overrideValues[item.visit_id]?.urgency ?? item.urgency}
+                                            onChange={(event) =>
+                                              setOverrideValues((current) => ({
+                                                ...current,
+                                                [item.visit_id]: {
+                                                  urgency: event.target.value,
+                                                  reason: current[item.visit_id]?.reason ?? "",
+                                                },
+                                              }))
+                                            }
+                                          >
+                                            <option value="routine">Routine</option>
+                                            <option value="priority">Priority</option>
+                                            <option value="urgent">Urgent</option>
+                                          </select>
+                                        </label>
+                                        <label>
+                                          Reason
+                                          <input
+                                            value={overrideValues[item.visit_id]?.reason ?? ""}
+                                            maxLength={500}
+                                            minLength={5}
+                                            placeholder="At least 5 characters"
+                                            onChange={(event) =>
+                                              setOverrideValues((current) => ({
+                                                ...current,
+                                                [item.visit_id]: {
+                                                  urgency: current[item.visit_id]?.urgency ?? item.urgency,
+                                                  reason: event.target.value,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                        </label>
+                                        <button
+                                          type="button"
+                                          className="qb-btn qb-btn--primary"
+                                          disabled={busy || (overrideValues[item.visit_id]?.reason.trim().length ?? 0) < 5}
+                                          onClick={() => {
+                                            closeMenu();
+                                            void override(item.visit_id);
+                                          }}
+                                        >
+                                          Apply override
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </Popover>
+                            )}
+                          </div>
+                        </div>
+                        {item.routing?.needs_nurse_confirmation && (
+                          <div className="qb-route">
+                            <AlertTriangle aria-hidden="true" size={15} />
+                            <span>
+                              Department not confirmed — suggested: <b>{routeLabel(item.routing.department_code)}</b>
+                            </span>
+                            {canOverride ? (
+                              <span className="qb-route-form">
+                                <input
+                                  aria-label="Reason"
+                                  placeholder="Reason (5+ characters)"
+                                  value={routeReasons[item.visit_id] ?? ""}
+                                  maxLength={500}
+                                  minLength={5}
+                                  onChange={(event) =>
+                                    setRouteReasons((current) => ({ ...current, [item.visit_id]: event.target.value }))
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="qb-btn"
+                                  disabled={busy || (routeReasons[item.visit_id]?.trim().length ?? 0) < 5}
+                                  onClick={() => void confirmRoute(item.visit_id)}
+                                >
+                                  Confirm department
+                                </button>
+                              </span>
+                            ) : (
+                              <span className="qb-muted">A nurse will confirm.</span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                    </div>
-                  </article>
-                );
-              })}
+                    </article>
+                  );
+                })}
+              </div>
             </div>
+            {nextCursor && (
+              <button
+                type="button"
+                className="qb-btn staff-queue-load-more"
+                disabled={loadingMore}
+                onClick={() => void loadMore()}
+              >
+                {loadingMore ? "Loading…" : "Load more patients"}
+              </button>
+            )}
           </div>
-          {nextCursor && (
-            <button
-              type="button"
-              className="qb-btn qb-btn--ghost staff-queue-load-more"
-              disabled={loadingMore}
-              onClick={() => void loadMore()}
-            >
-              {loadingMore ? "Loading…" : "Load more patients"}
-            </button>
-          )}
-        </div>
+        )}
+      </section>
+
+      {nextPatient && (
+        <section className="qb-next" aria-label="Next action">
+          <div className="qb-next-text">
+            <span className="qb-next-label">
+              <PhoneCall aria-hidden="true" size={16} /> Next to call
+            </span>
+            <strong>{nextPatient.token}</strong>
+            <span>
+              {nextPatient.age_years === null ? "Age —" : `${nextPatient.age_years} y`} · {sexLabel(nextPatient.sex)}
+              {nextPatient.complaint ? ` · ${sentenceCase(nextPatient.complaint)}` : ""}
+            </span>
+          </div>
+          <UrgencyBadge level={nextPatient.urgency} />
+          <button
+            type="button"
+            className="qb-btn qb-btn--primary qb-btn--large"
+            disabled={working === nextPatient.visit_id || Boolean(error)}
+            onClick={() => void action(nextPatient.visit_id, "call")}
+          >
+            <PhoneCall aria-hidden="true" size={18} /> Call {nextPatient.token}
+          </button>
+        </section>
       )}
     </section>
   );

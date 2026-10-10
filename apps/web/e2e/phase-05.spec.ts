@@ -139,8 +139,13 @@ test("staff can call a waiting patient from the queue board", async ({
   });
   await page.goto("/staff");
   await expect.poll(() => queueRequests).toBeGreaterThan(0);
-  await expect(page.getByText("GEN-007")).toBeVisible();
-  await page.getByRole("button", { name: "Call" }).click();
+  await expect(
+    page.getByRole("region", { name: "Queue patients" }).getByText("GEN-007"),
+  ).toBeVisible();
+  await page
+    .getByRole("region", { name: "Queue patients" })
+    .getByRole("button", { name: "Call patient" })
+    .click();
   await expect(
     page
       .getByRole("region", { name: "Queue patients" })

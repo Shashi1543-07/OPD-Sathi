@@ -353,7 +353,7 @@ test("doctor and nurse routes stay inside their role access map", async ({
     );
     await page.goto("/staff/settings");
     await expect(page).toHaveURL(/\/staff\/queue$/);
-    await expect(page.getByRole("heading", { name: "Queue" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /^Queue/ })).toBeVisible();
     await expect(page.getByRole("tablist")).toHaveCount(0);
     await page.close();
   }
