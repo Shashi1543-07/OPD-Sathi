@@ -97,9 +97,42 @@ def _error(
     )
 
 
-def _set_refresh_cookie(response: Response, settings: Settings, value: str) -> None:
+_LEGACY_REFRESH_COOKIE = "osa_refresh"
+
+
+class AccountPayload(StrictPayload):
+    """Which signed-in staff account a browser tab is renewing or signing out."""
+
+    account: UUID | None = None
+
+
+def _refresh_cookie_name(user_id: UUID | str) -> str:
+    """One refresh cookie per staff account, so several staff can work in one browser.
+
+    Each tab tells the server which account it belongs to; without this, every tab shared
+    one cookie and a tab silently became whoever signed in last.
+    """
+    return f"osa_refresh_{UUID(str(user_id)).hex}"
+
+
+def _incoming_refresh_cookie(
+    request: Request, payload: AccountPayload | None
+) -> tuple[str | None, str | None]:
+    """Return (cookie name, value) for the requested account, else the legacy cookie."""
+    if payload is not None and payload.account is not None:
+        name = _refresh_cookie_name(payload.account)
+        value = request.cookies.get(name)
+        if value:
+            return name, value
+    value = request.cookies.get(_LEGACY_REFRESH_COOKIE)
+    return (_LEGACY_REFRESH_COOKIE, value) if value else (None, None)
+
+
+def _set_refresh_cookie(
+    response: Response, settings: Settings, value: str, user_id: UUID | str
+) -> None:
     response.set_cookie(
-        "osa_refresh",
+        _refresh_cookie_name(user_id),
         value,
         max_age=settings.refresh_token_hours * 60 * 60,
         path="/auth",
@@ -109,9 +142,9 @@ def _set_refresh_cookie(response: Response, settings: Settings, value: str) -> N
     )
 
 
-def _clear_refresh_cookie(response: Response, settings: Settings) -> None:
+def _clear_refresh_cookie(response: Response, settings: Settings, name: str) -> None:
     response.delete_cookie(
-        "osa_refresh",
+        name,
         path="/auth",
         secure=settings.app_env != "development",
         httponly=True,
@@ -326,7 +359,7 @@ async def login(payload: LoginPayload, request: Request, response: Response) -> 
             "The hospital, email, or password could not be verified.",
         )
 
-    _set_refresh_cookie(response, settings, refresh_value)
+    _set_refresh_cookie(response, settings, refresh_value, user["id"])
     token = issue_access_token(
         subject=user["id"],
         role=user["role"],
@@ -348,7 +381,9 @@ async def login(payload: LoginPayload, request: Request, response: Response) -> 
 
 
 @router.post("/auth/refresh")
-async def refresh(request: Request, response: Response) -> dict[str, Any]:
+async def refresh(
+    request: Request, response: Response, payload: AccountPayload | None = None
+) -> dict[str, Any]:
     settings: Settings = request.app.state.settings
     await _limit_request(
         request,
@@ -358,7 +393,7 @@ async def refresh(request: Request, response: Response) -> dict[str, Any]:
         window_seconds=60,
         fail_closed=False,
     )
-    refresh_value = request.cookies.get("osa_refresh")
+    cookie_name, refresh_value = _incoming_refresh_cookie(request, payload)
     if not refresh_value:
         raise _error(401, "UNAUTHENTICATED", "Sign-in required", "Your session has expired.")
 
@@ -512,7 +547,10 @@ async def refresh(request: Request, response: Response) -> dict[str, Any]:
 
     if failure or access_token is None or user is None:
         raise _error(401, "UNAUTHENTICATED", "Sign-in required", "Your session has expired.")
-    _set_refresh_cookie(response, settings, new_refresh)
+    _set_refresh_cookie(response, settings, new_refresh, user["id"])
+    if cookie_name == _LEGACY_REFRESH_COOKIE:
+        # Move a session from the old shared cookie to its own per-account cookie.
+        _clear_refresh_cookie(response, settings, _LEGACY_REFRESH_COOKIE)
     return {
         "access_token": access_token,
         "token_type": TokenScheme.BEARER.value,
@@ -528,7 +566,9 @@ async def refresh(request: Request, response: Response) -> dict[str, Any]:
 
 
 @router.post("/auth/logout", status_code=204)
-async def logout(request: Request, response: Response) -> Response:
+async def logout(
+    request: Request, response: Response, payload: AccountPayload | None = None
+) -> Response:
     settings: Settings = request.app.state.settings
     await _limit_request(
         request,
@@ -538,7 +578,7 @@ async def logout(request: Request, response: Response) -> Response:
         window_seconds=60,
         fail_closed=False,
     )
-    refresh_value = request.cookies.get("osa_refresh")
+    cookie_name, refresh_value = _incoming_refresh_cookie(request, payload)
     if refresh_value:
         token_hash = digest_secret(refresh_value)
         async with request.app.state.engine.begin() as connection:
@@ -579,7 +619,8 @@ async def logout(request: Request, response: Response) -> Response:
                     resource_type="refresh_token",
                     resource_id=token["id"],
                 )
-    _clear_refresh_cookie(response, settings)
+    if cookie_name is not None:
+        _clear_refresh_cookie(response, settings, cookie_name)
     response.status_code = 204
     return response
 

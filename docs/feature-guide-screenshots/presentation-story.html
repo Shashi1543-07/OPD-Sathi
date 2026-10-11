@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OPD Saathi — The Story</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  :root {
+    --navy: #0b2545; --teal: #0f766e; --teal-tint: #e6f6f4; --ink: #1f2937; --muted: #5b6474;
+    --line: #dde3ea; --soft: #f6f8fa; --red: #b42318; --red-tint: #fdecea; --amber: #b45309;
+    --amber-tint: #fff4e5; --violet: #4338ca; --violet-tint: #eef0ff; --green: #166534; --green-tint: #e8f6ec;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; color: var(--ink); font: 10.4pt/1.5 "Segoe UI", "Nirmala UI", Arial, sans-serif; background: #fff; }
+  h1, h2, h3, h4 { color: var(--navy); line-height: 1.2; margin: 0; }
+  h2 { font-size: 20pt; font-weight: 800; letter-spacing: -0.01em; }
+  h3 { font-size: 12.5pt; font-weight: 700; margin: 14px 0 6px; }
+  h4 { font-size: 10.5pt; font-weight: 700; margin: 10px 0 4px; }
+  p { margin: 0 0 7px; }
+  ul, ol { margin: 0 0 8px; padding-left: 18px; }
+  li { margin: 2px 0; }
+  strong { color: var(--navy); }
+  .page { break-after: page; }
+  .page:last-child { break-after: auto; }
+  .kicker { color: var(--teal); font-size: 8.5pt; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 4px; }
+  .lead { color: var(--muted); font-size: 11pt; margin: 6px 0 12px; }
+  .section-head { border-bottom: 3px solid var(--teal); padding-bottom: 8px; margin-bottom: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; break-inside: avoid; }
+  .card h4 { margin-top: 0; }
+  .card.teal { background: var(--teal-tint); border-color: #b9e3dd; }
+  .card.navy { background: var(--navy); border-color: var(--navy); color: #e8eef6; }
+  .card.navy h4, .card.navy strong { color: #fff; }
+  .shot { margin: 8px 0 4px; break-inside: avoid; }
+  .shot img { width: 100%; display: block; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 2px 6px rgba(11,37,69,0.08); }
+  .shot figcaption { color: var(--muted); font-size: 8.6pt; margin-top: 4px; }
+  .shot.phone img { width: 62%; margin: 0 auto; }
+  .shot.phone figcaption { text-align: center; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .say { border-left: 4px solid var(--teal); background: var(--teal-tint); border-radius: 0 8px 8px 0; padding: 8px 12px; margin: 10px 0; break-inside: avoid; }
+  .say::before { content: "Say it in the PPT"; display: block; color: var(--teal); font-size: 8pt; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
+  .note { border-left: 4px solid var(--amber); background: var(--amber-tint); border-radius: 0 8px 8px 0; padding: 8px 12px; margin: 10px 0; font-size: 9.6pt; break-inside: avoid; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.4pt; margin: 6px 0 10px; break-inside: auto; }
+  th, td { border-bottom: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); color: var(--navy); font-size: 8.4pt; letter-spacing: 0.04em; text-transform: uppercase; }
+  tr { break-inside: avoid; }
+  .tag { display: inline-block; border-radius: 999px; padding: 0 7px; font-size: 8.2pt; font-weight: 700; }
+  .t-teal { background: var(--teal-tint); color: var(--teal); }
+  .t-red { background: var(--red-tint); color: var(--red); }
+  .t-amber { background: var(--amber-tint); color: var(--amber); }
+  .t-violet { background: var(--violet-tint); color: var(--violet); }
+  .t-green { background: var(--green-tint); color: var(--green); }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps > li { counter-increment: s; position: relative; padding-left: 30px; margin: 6px 0; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 21px; height: 21px; border-radius: 50%; background: var(--teal); color: #fff; font-size: 9pt; font-weight: 800; text-align: center; line-height: 21px; }
+  .flow { display: flex; align-items: stretch; gap: 6px; margin: 10px 0; }
+  .flow > div { flex: 1; border-radius: 10px; padding: 9px 8px; text-align: center; background: var(--soft); border: 1px solid var(--line); font-size: 9pt; }
+  .flow > div b { display: block; color: var(--navy); font-size: 10pt; margin-bottom: 2px; }
+  .flow > i { align-self: center; color: var(--teal); font-style: normal; font-weight: 800; }
+  .num { font-size: 22pt; font-weight: 800; color: var(--teal); line-height: 1; }
+  .small { font-size: 8.8pt; color: var(--muted); }
+  /* Cover */
+  .cover { height: 265mm; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(160deg, #0b2545 0%, #0e3a5a 55%, #0f766e 100%); color: #fff; border-radius: 14px; padding: 26mm 18mm 18mm; margin: -2mm; }
+  .cover h1 { color: #fff; font-size: 40pt; font-weight: 800; letter-spacing: -0.02em; }
+  .cover .sub { font-size: 15pt; color: #cfe7e4; margin-top: 10px; max-width: 150mm; }
+  .cover .tagline { margin-top: 26px; font-size: 11pt; color: #e8f1f8; max-width: 150mm; }
+  .cover .badges span { display: inline-block; border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; padding: 3px 10px; margin: 0 6px 6px 0; font-size: 9pt; color: #fff; }
+  .cover .foot { font-size: 9pt; color: #bcd3e6; }
+  .toc { columns: 2; column-gap: 18px; }
+  .toc li { break-inside: avoid; margin: 3px 0; }
+  .arch { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 10px; align-items: center; margin: 8px 0 12px; }
+  .arch .box { border: 1.5px solid var(--teal); border-radius: 10px; padding: 8px 10px; background: #fff; font-size: 9pt; text-align: center; }
+  .arch .box b { display: block; color: var(--navy); }
+  .arch .col { display: grid; gap: 8px; }
+  code { font-family: Consolas, "Cascadia Mono", monospace; font-size: 8.8pt; background: var(--soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; }
+  pre { font-family: Consolas, "Cascadia Mono", monospace; font-size: 8.6pt; line-height: 1.45; background: #0f1e33; color: #e6eef8; border-radius: 8px; padding: 8px 11px; margin: 6px 0 10px; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  pre .c { color: #8fb3d9; }
+  td code, li code, p code { white-space: nowrap; }
+  .cmd td:first-child { width: 41%; }
+  .cmd td:first-child code { white-space: normal; }
+  .hosp { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 8px 0 12px; }
+  .hosp .h { border: 1.5px solid var(--teal); border-radius: 10px; padding: 8px 10px; font-size: 9pt; background: #fff; }
+  .hosp .h b { display: block; color: var(--navy); margin-bottom: 3px; }
+  .hosp .h span { display: block; border-top: 1px dashed var(--line); padding-top: 3px; margin-top: 3px; }
+
+  .behind { border-left: 4px solid var(--violet); background: var(--violet-tint); border-radius: 0 8px 8px 0; padding: 7px 11px; margin: 6px 0 10px; font-size: 9.3pt; break-inside: avoid; }
+  .behind b:first-child { display: block; color: var(--violet); font-size: 8pt; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
+  .behind strong { color: var(--violet); }
+  table.stack td:first-child { width: 24%; }
+  table.stack td:nth-child(2) { width: 36%; }
+  table.stack { font-size: 8.7pt; }
+  table.stack td { padding: 4px 6px; }
+  .compact li { font-size: 9.6pt; margin: 1px 0; }
+  table.qa td { font-size: 9.2pt; }
+  .say::before { content: "Say it on stage"; }
+</style>
+</head>
+<body>
+<!-- ============ COVER ============ -->
+<section class="page">
+  <div class="cover">
+    <div>
+      <div class="kicker" style="color:#8fe0d5">The OPD Saathi story · Smart India Hackathon SIH26047 · Patient Case-Taking Software</div>
+      <h1>OPD Saathi</h1>
+      <p class="sub">Every patient heard — in their own language — before they reach the doctor.</p>
+      <p class="tagline">A multilingual, voice-first check-in kiosk, a fair live queue and a one-page English case sheet for crowded government OPDs. This document tells the whole story: the need, the people it serves, a full end-to-end journey, every feature, the queuing algorithm, security, scale, design and the technology behind each part — with the reason we chose it.</p>
+    </div>
+    <div class="badges">
+      <span>Hindi · Marathi · English</span><span>Tap, speak or type</span><span>Fair, explainable queue</span>
+      <span>AI that assists, never decides</span><span>Encrypted, per-hospital data</span><span>Works without internet</span>
+      <span>One setup per hospital</span><span>History only — no diagnosis</span>
+    </div>
+    <div class="foot">Prepared 11 October 2026 from the code on the main branch (after pull request #9). All patients, staff and hospitals shown are fictional.</div>
+  </div>
+</section>
+
+<!-- ============ PITCH ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">In one minute</div><h2>The pitch</h2></div>
+  <p class="lead">A patient walks into a government OPD. Instead of standing in a line to repeat their story to a busy doctor in a language they may not share, they spend three to five minutes at a kiosk — tapping, speaking or typing in Hindi, Marathi or English. Before they sit down, the doctor already has a clean English case sheet, the nurse can see who needs attention first, and the patient can follow their turn on their own phone.</p>
+  <div class="grid3">
+    <div class="card teal"><h4>For patients</h4><p>Their language, their words, a fair place in line and a live token on their phone. No login, no app, no reading needed.</p></div>
+    <div class="card teal"><h4>For doctors and nurses</h4><p>History collected before the consultation, warning signs surfaced first, and a live queue that explains every position.</p></div>
+    <div class="card teal"><h4>For the hospital</h4><p>Reports on waits, load and languages; staff, kiosk and department management; patient data that never leaves its own server.</p></div>
+  </div>
+  <h3>What makes it different</h3>
+  <table>
+    <tr><th style="width:30%">Idea</th><th>Why it matters</th></tr>
+    <tr><td><strong>Safety before questions</strong></td><td>Six danger signs are asked first. A patient with chest discomfort alerts the nurse within seconds, not after a full interview.</td></tr>
+    <tr><td><strong>A queue anyone can audit</strong></td><td>Every position comes with a "Why?" that lists each point. The sickest go first, but no one waits forever, and typing "10/10" cannot jump the line.</td></tr>
+    <tr><td><strong>AI as a checker, not a decider</strong></td><td>AI translates, summarises and double-checks. Safety rules decide, AI can only add caution, and staff confirm. Everything still works with AI switched off.</td></tr>
+    <tr><td><strong>Built for real hospitals</strong></td><td>Each hospital runs its own copy with its own database; kiosks keep working when the internet does not; data is encrypted and walled off per hospital inside the database itself.</td></tr>
+    <tr><td><strong>Inclusive by design</strong></td><td>Voice in three languages, big buttons, high contrast, call-staff on every screen, and nurse-assisted registration for anyone who cannot use the kiosk.</td></tr>
+  </table>
+  <div class="grid3" style="margin-top:8px">
+    <div class="card"><div class="num">3–5 min</div><strong>typical kiosk check-in</strong><p class="small">8–15 adaptive questions, mostly one tap each (demo history averages 4.7 minutes).</p></div>
+    <div class="card"><div class="num">1,000+</div><strong>automated checks</strong><p class="small">814 server tests, 54 web tests, 132 browser tests, plus synthetic evaluations — all passing.</p></div>
+    <div class="card"><div class="num">0</div><strong>diagnoses made</strong><p class="small">By design. OPD Saathi collects history; clinicians decide.</p></div>
+  </div>
+</section>
+
+<!-- ============ PROBLEM ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">1 · The need</div><h2>A morning in a government OPD</h2></div>
+  <p class="lead">The registration counter opens and the corridor is already full. Most of the problems below are familiar to anyone who has stood in that corridor.</p>
+  <div class="grid2">
+    <div class="card">
+      <h4>What patients face</h4>
+      <ul>
+        <li><strong>Language.</strong> A Marathi-speaking grandmother, a Hindi-speaking labourer and an English-speaking student meet the same doctor. Describing symptoms well in a second language is hard, and details get lost.</li>
+        <li><strong>Literacy.</strong> Many patients cannot fill a form. Paper slips and long questionnaires exclude them.</li>
+        <li><strong>Uncertainty.</strong> Nobody knows their turn or how long the wait is, so everyone crowds the doctor's door and no one can step away.</li>
+        <li><strong>Fairness.</strong> "Why was that person called before me?" — without an answer, trust falls and arguments rise.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>What clinicians face</h4>
+      <ul>
+        <li><strong>Very little time per patient.</strong> Much of it goes on basic questions — since when, how bad, which medicines, any allergies — before real examination starts.</li>
+        <li><strong>Unstructured history.</strong> The story arrives in pieces, in different languages, with nothing written down.</li>
+        <li><strong>Hidden urgency.</strong> A patient with a warning sign can sit quietly in the line behind twenty routine visits.</li>
+        <li><strong>No picture of the day.</strong> Administrators cannot see waiting times, department load or language mix to plan staff.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>The problem statement we answered</h3>
+  <div class="card navy"><p style="margin:0">SIH26047 — <strong>Patient Case-Taking Software</strong>: collect a structured patient history before the consultation, in the patient's language, and help staff manage the OPD queue — without diagnosing or recommending treatment.</p></div>
+  <h3>What a good answer has to do</h3>
+  <ol class="steps">
+    <li>Take history <strong>in the patient's language</strong>, in a way that works for people who cannot read.</li>
+    <li>Catch <strong>danger signs immediately</strong>, not at the end.</li>
+    <li>Hand the doctor a <strong>short, structured English summary</strong> — with the patient's own words a click away.</li>
+    <li>Make the queue <strong>live, fair and explainable</strong>, and tell patients where they stand.</li>
+    <li>Be <strong>safe, private and affordable</strong> for public hospitals: no diagnosis, encrypted data, works on ordinary hardware and without reliable internet.</li>
+  </ol>
+  <div class="say">The problem is not a lack of doctors' skill — it is the minutes lost to collecting history, the language gap, and a queue nobody can see. OPD Saathi gives those minutes back.</div>
+</section>
+
+<!-- ============ SOCIAL CAUSE ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">2 · Social impact</div><h2>Who we serve, and why it matters</h2></div>
+  <p class="lead">Public OPDs serve the people with the fewest alternatives. Every design decision starts from them.</p>
+  <table>
+    <tr><th style="width:24%">Person</th><th>What OPD Saathi changes for them</th></tr>
+    <tr><td><strong>Elderly patients</strong></td><td>Large 64-pixel buttons, every screen read aloud, high-contrast mode, a "Call staff" button everywhere, and the 75+ age group counted in the fair queue.</td></tr>
+    <tr><td><strong>Patients who cannot read</strong></td><td>Most answers are one tap on a picture-like choice; they can also just speak. The whole history is read back to them before they confirm it.</td></tr>
+    <tr><td><strong>Speakers of Hindi or Marathi</strong></td><td>The entire kiosk, consent, questions, read-back and status page are in their language. The doctor reads English but can open the patient's original words at any time.</td></tr>
+    <tr><td><strong>Mothers, infants and pregnant women</strong></td><td>Infants, young children and pregnancy add points to the triage score, so they get a fair head start without anyone having to argue for it.</td></tr>
+    <tr><td><strong>The seriously ill</strong></td><td>Danger signs come first and alert staff in real time; urgent patients go to the front of the queue.</td></tr>
+    <tr><td><strong>Anyone who cannot use a kiosk</strong></td><td>A nurse can register them (assisted registration) with the same consent, safety checks and queue.</td></tr>
+    <tr><td><strong>Doctors and nurses</strong></td><td>Less time on routine questions, more on examination and care; a calmer waiting room because patients can see their turn.</td></tr>
+    <tr><td><strong>Hospital administrators</strong></td><td>Evidence for planning — waits, consultation times, department load and language mix — without extra data entry.</td></tr>
+  </table>
+  <div class="grid2">
+    <div class="card teal">
+      <h4>Dignity and trust</h4>
+      <ul>
+        <li>The patient tells their story in their own words and confirms it.</li>
+        <li>Patients never see a "severity score" or a disease name — only neutral, respectful wording.</li>
+        <li>Consent comes first, in plain language, and saying "No, I need staff help" is always possible.</li>
+      </ul>
+    </div>
+    <div class="card teal">
+      <h4>Fit for public health</h4>
+      <ul>
+        <li>Runs on ordinary PCs and tablets inside the hospital; no per-patient cost without AI.</li>
+        <li>Patient data stays in the hospital's own building and database.</li>
+        <li>Ready for more Indian languages — the whole app is translation-driven.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="say">OPD Saathi is built for the patient who is old, unwell, cannot read, or does not speak the doctor's language — and it treats them with the same dignity and fairness as everyone else in the line.</div>
+</section>
+
+<!-- ============ JOURNEY OVERVIEW ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">3 · The solution</div><h2>One system, one patient journey</h2></div>
+  <div class="flow">
+    <div><b>Kiosk</b>Language, consent, age/sex, danger signs, 8–15 questions, read-back</div><i>→</i>
+    <div><b>Token + QR</b>Department, place in line, live phone status</div><i>→</i>
+    <div><b>Nurse</b>Live fair queue, alerts, call next</div><i>→</i>
+    <div><b>Doctor</b>English case sheet, transcript, edits, PDF</div><i>→</i>
+    <div><b>Admin</b>Reports, staff, kiosks, departments</div>
+  </div>
+  <div class="arch">
+    <div class="col">
+      <div class="box"><b>Patient kiosks</b>any tablet / PC browser</div>
+      <div class="box"><b>Patient's phone</b>QR status page</div>
+      <div class="box"><b>Staff browsers</b>laptop, tablet, phone</div>
+    </div>
+    <div class="col">
+      <div class="box" style="background:var(--teal-tint)"><b>React web app (PWA)</b>one app for kiosk, status page and staff · works offline for the short form</div>
+      <div class="box" style="background:var(--navy);color:#e8eef6;border-color:var(--navy)"><b style="color:#fff">FastAPI server</b>interview engine · safety rules · triage · routing · queue · case sheets · reports · live updates</div>
+      <div class="box"><b>Background worker (ARQ)</b>publishes queue changes, refreshes reports, closes old days</div>
+    </div>
+    <div class="col">
+      <div class="box"><b>PostgreSQL 16</b>records, encrypted fields, per-hospital row-level security</div>
+      <div class="box"><b>Redis 7</b>live queue, sessions, rate limits (+ a separate cache)</div>
+      <div class="box"><b>Optional AI &amp; voice</b>Gemini · Sarvam (Saaras, Bulbul)</div>
+    </div>
+  </div>
+  <p>Everything is one web application served by the hospital's own server. Kiosks, staff screens and patients' phones are just browsers. All of it starts with one command inside Docker.</p>
+  <h3>Five audiences, one source of truth</h3>
+  <table>
+    <tr><th style="width:18%">Who</th><th style="width:22%">Where</th><th>What they do</th></tr>
+    <tr><td><strong>Patient</strong></td><td>Kiosk <code>/kiosk</code></td><td>Checks in by tapping, speaking or typing; gets a token and a QR code.</td></tr>
+    <tr><td><strong>Patient's phone</strong></td><td>QR → <code>/s/&lt;token&gt;</code></td><td>Live place in line, estimated wait, Waiting → Called → With doctor → Done.</td></tr>
+    <tr><td><strong>Nurse</strong></td><td>Queue, Patients</td><td>Runs the live queue, answers alerts, calls patients, registers those who need help.</td></tr>
+    <tr><td><strong>Doctor</strong></td><td>Queue, Consultations</td><td>Reads and corrects the case sheet, starts and finishes consultations, prints a PDF.</td></tr>
+    <tr><td><strong>Administrator</strong></td><td>Reports, Settings</td><td>Sees how the OPD is doing; manages staff, kiosks and departments.</td></tr>
+  </table>
+  <div class="say">One React app, one Python server, one database per hospital — the kiosk, the nurse's queue, the doctor's case sheet and the patient's phone all see the same live truth.</div>
+</section>
+
+<!-- ============ WORKFLOW 1 ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">4 · End-to-end workflow</div><h2>Sunita's visit — 9:12 to 9:16 at the kiosk</h2></div>
+  <p class="lead">Sunita, 34, has had fever and cough for three days. She speaks Marathi and reads little English. Follow her through the system — and see what happens behind each screen.</p>
+  <div class="pair">
+    <figure class="shot"><img src="k1-welcome.png"><figcaption>9:12 — The kiosk shows the hospital's name. She taps मराठी (Marathi), then Start.</figcaption></figure>
+    <figure class="shot"><img src="k2-consent.png"><figcaption>9:12 — Consent is read aloud (shown here in English). "No, I need staff help" is always there.</figcaption></figure>
+  </div>
+  <div class="behind"><b>Behind the scenes</b> The kiosk is a browser that was set up once with a one-time activation link and keeps itself signed in with its own device key. Pressing Start asks the <strong>FastAPI</strong> server to open a visit; the server checks the kiosk is still in service, creates the visit in <strong>PostgreSQL</strong> and a short-lived session in <strong>Redis</strong>. The consent text is versioned and hashed, so the exact words she agreed to are recorded. The screen is read aloud by <strong>Sarvam Bulbul</strong> (natural Indian voices), or by the computer's own voice when there is no internet.</div>
+  <div class="pair">
+    <figure class="shot"><img src="k3-details.png"><figcaption>9:13 — Only age and sex are required; a phone number is optional.</figcaption></figure>
+    <figure class="shot"><img src="k4-danger.png"><figcaption>9:13 — Six danger-sign tiles come before any question. She taps "None of these".</figcaption></figure>
+  </div>
+  <div class="behind"><b>Behind the scenes</b> Had she tapped "Chest discomfort", the server would raise an <strong>urgent red flag</strong>, write it to the database and publish it instantly to every nurse's screen over a <strong>WebSocket</strong> — before a single history question is asked. Names and phone numbers are encrypted with <strong>AES-256-GCM</strong> before they are stored.</div>
+</section>
+
+<!-- ============ WORKFLOW 2 ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">4 · End-to-end workflow (continued)</div><h2>Questions that adapt, and a history she confirms</h2></div>
+  <div class="pair">
+    <figure class="shot"><img src="k5-question1.png"><figcaption>9:14 — "What is troubling you?" She taps Fever and Cough, or taps the mic and speaks.</figcaption></figure>
+    <figure class="shot"><img src="k6-question5.png"><figcaption>9:14 — The next questions follow her answer: fever pattern, cough, breathing.</figcaption></figure>
+  </div>
+  <div class="behind"><b>Behind the scenes</b> The <strong>interview engine</strong> builds 8–15 questions from 13 topic modules (fever, breathing, stomach, pain, urine, skin, injury, sleep, past illness, medicines, allergies, family, other) and skips what does not apply — no pregnancy questions for men or children. When she speaks, her browser streams 16 kHz audio over a WebSocket to the server, which relays it to <strong>Sarvam Saaras</strong> (real-time Indian-language speech recognition); her words appear on screen for her to check. With a key, <strong>Google Gemini</strong> picks the most useful next question and may add one short follow-up — always validated against the question bank. <strong>15 safety rules</strong> scan every answer in every language: "blood in phlegm" would raise a flag immediately.</div>
+  <div class="pair">
+    <figure class="shot"><img src="k7-review.png"><figcaption>9:15 — The whole history is read back in her language (shown here in English). "Change" beside every answer.</figcaption></figure>
+    <figure class="shot"><img src="k8-token.png"><figcaption>9:16 — Token, department, place in line and a QR code. The screen resets for the next patient.</figcaption></figure>
+  </div>
+  <div class="behind"><b>Behind the scenes</b> Confirming runs four things at once: the <strong>routing engine</strong> picks the department from her complaint (keyword rules in all three languages, with paediatric routing under 14); the <strong>triage scorer</strong> computes her 0–100 score; a <strong>case sheet</strong> is assembled in English with her original Marathi kept beside each field; and the visit is placed in the department's queue — a <strong>Redis sorted set</strong> updated by an atomic Lua script — with the next daily token number (MED-016).</div>
+  <div class="say">Sunita answered in Marathi, mostly by tapping, and heard her own history read back before confirming it. Four minutes later the doctor has it in English.</div>
+</section>
+
+<!-- ============ WORKFLOW 3 ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">4 · End-to-end workflow (continued)</div><h2>9:16 — Her phone, and the nurse's screen</h2></div>
+  <div style="display:grid;grid-template-columns:0.62fr 1.38fr;gap:12px;align-items:start">
+    <figure class="shot phone" style="margin:0"><img src="p1-status-phone.png" style="width:100%"><figcaption>She scans the QR: place in line, estimated wait, progress — in her language.</figcaption></figure>
+    <figure class="shot" style="margin:0"><img src="s1-queue.png"><figcaption>The nurse's live queue for General Medicine: counters, filters, alerts, fair calling order and "Next to call".</figcaption></figure>
+  </div>
+  <div class="behind"><b>Behind the scenes</b> The phone page holds an open <strong>Server-Sent Events</strong> stream, so it updates by itself the moment the queue moves — no refresh, no app, no login, and no personal or health details on the page. The nurse's screen uses a <strong>WebSocket</strong>: when any visit changes, the server writes the change to an <strong>outbox table</strong> in the same database transaction, the <strong>ARQ worker</strong> relays it through <strong>Redis pub/sub</strong> within about two seconds, and every open staff screen updates. If Redis were ever lost, the whole queue is rebuilt from PostgreSQL. The estimated wait is a five-minute range (for example 15–20 min), calculated from the last 20 consultation times and the number of doctors working.</div>
+  <div class="grid2">
+    <div class="card">
+      <h4>What the nurse can do</h4>
+      <ul>
+        <li>Call the next patient, start and complete consultations, mark no-shows.</li>
+        <li>Acknowledge alerts: red flags, "Patient asked for help", "AI suggests this patient may be more urgent — please confirm".</li>
+        <li>Change priority — only with a written reason, kept in the audit log.</li>
+        <li>Confirm the department when the routing was unsure; register a patient who needs help.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Built for a busy desk</h4>
+      <ul>
+        <li>Four counters (Waiting, Called, In consultation, Priority/urgent) double as filters.</li>
+        <li>Search by token or complaint; optional alert sound; works on phones too.</li>
+        <li>A 5,000-patient list applies an urgent change in about 22 ms (virtualised list).</li>
+        <li>Unfinished visits from earlier days close automatically overnight.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WORKFLOW 4 ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">4 · End-to-end workflow (continued)</div><h2>9:41 — The doctor's case sheet</h2></div>
+  <figure class="shot" style="width:90%;margin-left:auto;margin-right:auto"><img src="s3-consult-overview.png"><figcaption>Overview: red flags first, an AI-assisted summary clearly marked "not verified by staff", the complaint and the consultation workflow.</figcaption></figure>
+  <div class="pair">
+    <figure class="shot"><img src="s4-consult-history.png"><figcaption>Full history, every field editable, with its source and the patient's own words.</figcaption></figure>
+    <figure class="shot"><img src="s5-consult-transcript.png"><figcaption>The unchangeable interview transcript in the patient's own language, with how each answer was given.</figcaption></figure>
+  </div>
+  <div class="behind"><b>Behind the scenes</b> The case sheet is stored as validated JSON with a version number. Every doctor edit creates a new version marked <strong>Staff-verified</strong>; if two people edit at once, the second is told instead of silently overwriting (optimistic concurrency with ETags). The <strong>PDF</strong> is rendered on the server by <strong>WeasyPrint</strong> with Indian-language fonts. The AI summary is produced by <strong>Gemini</strong> only from her answers, passed through an <strong>output guard</strong> that rejects any diagnosis, treatment advice, dose or link — and it stays labelled unverified until a person checks it.</div>
+  <div class="say">The doctor opens one page: urgent warnings first, an English summary, and Sunita's own Marathi words one click away. Every correction is versioned and audited.</div>
+</section>
+
+<!-- ============ WORKFLOW 5 ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">4 · End-to-end workflow (continued)</div><h2>End of day — reports and administration</h2></div>
+  <figure class="shot"><img src="s9-reports.png"><figcaption>Reports for the last 30 days of the demo hospital: visits, average wait, consultation time, urgent cases, edit rate, interview time, estimated time saved, daily trend, languages and department load.</figcaption></figure>
+  <div class="behind"><b>Behind the scenes</b> Reports read from a pre-computed PostgreSQL <strong>materialized view</strong> that the worker refreshes every five minutes, so even 100,000 visits summarise in about 2 ms. Filters for period and department drive every card, the chart and the CSV export together. "Estimated time saved" is clearly labelled as an estimate (visits × the minutes the hospital assumes each kiosk interview saves).</div>
+  <div class="pair">
+    <figure class="shot"><img src="s12-settings-kiosks.png"><figcaption>Settings → Kiosks: live connection, patients registered per kiosk, a kiosk waiting for setup.</figcaption></figure>
+    <figure class="shot"><img src="s16-activation-code.png"><figcaption>A one-time activation code with Copy code and Copy setup link; valid for 24 hours.</figcaption></figure>
+  </div>
+  <p>The administrator adds doctors, nurses and departments, registers each kiosk and sets it up by opening one link on the device. Kiosks report in every minute; a replaced device gets a new code for the same kiosk, keeping its history. Staff, kiosks and departments can be turned off or deleted — deleting never erases medical history.</p>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section class="page compact">
+  <div class="section-head"><div class="kicker">5 · Every feature</div><h2>The complete feature list</h2></div>
+  <div class="grid2">
+    <div class="card">
+      <h4>Patient kiosk</h4>
+      <ul>
+        <li>Hindi, Marathi, English; switch language on any screen.</li>
+        <li>Consent first, read aloud, versioned and recorded.</li>
+        <li>Age and sex only; optional phone and SMS opt-in.</li>
+        <li>Six danger-sign tiles before any question → instant urgent alert.</li>
+        <li>8–15 adaptive questions from 13 modules; one tap, speak, or type.</li>
+        <li>Live speech-to-text shown for checking; Listen button on every question.</li>
+        <li>Photo of an old prescription → medicines read automatically (AI).</li>
+        <li>Back, Stop and exit, idle reset, Call staff on every screen.</li>
+        <li>Read-back in the patient's language with Change on every answer.</li>
+        <li>Token, department, place in line, QR code, printable slip.</li>
+        <li>High contrast, 64-px buttons, voice guidance toggle.</li>
+        <li>Offline short form: encrypted on the device, synced later.</li>
+        <li>Shows its own hospital's name; stays signed in by itself.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Patient phone</h4>
+      <ul>
+        <li>QR status page — no app, no login, no personal details.</li>
+        <li>Live position, wait range and 4-step progress, in their language.</li>
+        <li>Optional SMS / WhatsApp updates (provider ready, off by default).</li>
+      </ul>
+      <h4>Nurse</h4>
+      <ul>
+        <li>Live fair queue per department with counters, filters and search.</li>
+        <li>Real-time alerts with the patient's own words; acknowledge; alert sound.</li>
+        <li>Call, start, complete, no-show; "Next to call" panel.</li>
+        <li>Priority override with mandatory reason; department confirmation.</li>
+        <li>"Why?" breakdown of every score.</li>
+        <li>Patients register: every visit by period, status, urgency, department.</li>
+        <li>Assisted registration with the same consent and safety steps.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Doctor</h4>
+      <ul>
+        <li>Four-tab case sheet: Overview, History, Transcript, Notes.</li>
+        <li>Red flags first with evidence; AI brief marked unverified.</li>
+        <li>Every field shows its source, confidence and original words.</li>
+        <li>Edit with versioning, conflict protection and unsaved-change warning.</li>
+        <li>PDF download and print; keyboard shortcuts.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Administrator and platform</h4>
+      <ul>
+        <li>Reports: 8 cards, daily trend, languages, department load, CSV export.</li>
+        <li>Hospital-wide "time saved" setting with who changed it.</li>
+        <li>Users, kiosks, departments: create, turn off, delete (history kept).</li>
+        <li>Kiosk setup links, new codes any time, online status, per-kiosk counts.</li>
+        <li>One-command install per hospital; many hospitals fully isolated.</li>
+        <li>Audit log of every important action.</li>
+        <li>Installable PWA; responsive from 320 px phones to 1600 px desktops.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUEUE ALGORITHM ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">6 · The queuing algorithm</div><h2>Fair, explainable, and impossible to game</h2></div>
+  <p class="lead">A simple "first come, first served" line ignores the sick. A pure "sickest first" line can make a routine patient wait all day. OPD Saathi uses a <strong>virtual arrival time</strong>: each patient is placed as if they had arrived a little earlier — by an amount their triage score earns, with a hard limit.</p>
+  <div class="card navy" style="margin-bottom:10px">
+    <p style="margin:0;font-size:11pt"><strong>Queue position = arrival time − head start</strong> &nbsp;·&nbsp; head start = 0.6 minutes × score, never more than 45 minutes &nbsp;·&nbsp; <strong>urgent patients go to the front</strong>.</p>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h4>Step 1 — the triage score (0–100, staff only)</h4>
+      <ul>
+        <li><strong>Red flags</strong>: urgent flag or danger tile 70; priority flag 30; +5 for each further flag (max +15).</li>
+        <li><strong>Warning answers</strong> tapped by the patient: blood in phlegm +25, blood in urine +12, breathless +10, very little urine +10… all together at most 25.</li>
+        <li><strong>Vulnerability</strong>: infant under 1 +20, child 1–4 +10, aged 75+ +12, 65–74 +8, pregnant +12.</li>
+        <li><strong>Onset</strong>: started today +6, 1–3 days +3.</li>
+        <li><strong>Self-rating</strong> 7–10/10: only +1 to +4, and nothing for problems lasting months.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Step 2 — level and head start</h4>
+      <ul>
+        <li><span class="tag t-red">Urgent</span> any urgent red flag or score ≥ 70 → front of the queue, in arrival order.</li>
+        <li><span class="tag t-amber">Priority</span> score 30–69 → head start 18–41 minutes.</li>
+        <li><span class="tag t-green">Routine</span> score below 30 → head start 0–17 minutes.</li>
+        <li>The level bands guarantee a nurse's override always wins over the points.</li>
+        <li><strong>AI is a checker</strong>: an AI flag counts as priority at most, can only raise urgency, and must quote the patient.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>A worked example — General Medicine, one morning</h3>
+  <table>
+    <tr><th>Patient</th><th>Arrived</th><th>What the kiosk recorded</th><th>Score · level</th><th>Head start</th><th>Virtual time</th><th>Called</th></tr>
+    <tr><td>Mr Rao, 68</td><td>9:40</td><td>Tapped "Chest discomfort"</td><td>urgent</td><td>front</td><td>—</td><td><strong>1st</strong></td></tr>
+    <tr><td>Meena, 26</td><td>9:20</td><td>Pregnant (+12) + priority red flag (+30)</td><td>42 · priority</td><td>25 min</td><td>8:55</td><td><strong>2nd</strong></td></tr>
+    <tr><td>Ravi, 30</td><td>9:05</td><td>Fever started today (+6), shivering (+4)</td><td>10 · routine</td><td>6 min</td><td>8:59</td><td><strong>3rd</strong></td></tr>
+    <tr><td>Ramesh, 45</td><td>9:00</td><td>Knee pain for 2 weeks</td><td>0 · routine</td><td>0</td><td>9:00</td><td><strong>4th</strong></td></tr>
+    <tr><td>Baby Aarav, 8 months</td><td>9:30</td><td>Infant (+20), fever today (+6)</td><td>26 · routine</td><td>16 min</td><td>9:14</td><td><strong>5th</strong></td></tr>
+  </table>
+  <div class="grid3">
+    <div class="card"><h4>No one waits forever</h4><p class="small">Ramesh can only be passed by someone who arrived less than 45 minutes after him, or by an urgent case. Everyone else stays behind him.</p></div>
+    <div class="card"><h4>Can't be gamed</h4><p class="small">Typing "10/10" with no other signs earns 4 points — a 2-minute head start. Real warning signs, age and pregnancy are what count.</p></div>
+    <div class="card"><h4>Fully explainable</h4><p class="small">"Why?" shows every line above to staff. Weights live in one readable file marked for clinician review.</p></div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="section-head"><div class="kicker">6 · The queuing algorithm (continued)</div><h2>Explainable on screen, fast in memory</h2></div>
+  <figure class="shot" style="width:70%;margin-left:auto;margin-right:auto"><img src="s2-queue-why.png"><figcaption>"Why?" on a queue row: the score, the level, every point with its reason, the head start it earned, and the AI check.</figcaption></figure>
+  <div class="grid2">
+    <div class="card">
+      <h4>Estimated wait, honestly</h4>
+      <ul>
+        <li>Average consultation = mean of the last 20 consultations in that department (default 4 minutes until five exist), bounded to 1–15 minutes.</li>
+        <li>Baseline = (patients ahead) × average ÷ doctors working.</li>
+        <li>Shown as a range — −25 % to +25 %, rounded to 5 minutes — so we never promise false precision. Example: 4 ahead, 2 doctors, 8-minute consultations → "15–20 min".</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>How it runs</h4>
+      <ul>
+        <li>Each department's queue is a <strong>Redis sorted set</strong> ordered by virtual time — insert and reorder in O(log n).</li>
+        <li>Changes are applied by <strong>atomic Lua scripts</strong>, so two nurses clicking at once can never corrupt the order.</li>
+        <li><strong>PostgreSQL</strong> stays the source of truth; an <strong>outbox</strong> guarantees every change reaches Redis and the screens, and the queue can be rebuilt from the database at any time.</li>
+        <li>Urgent changes reach staff screens within about two seconds; a 5,000-row list re-renders in ~22 ms.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="say">Our queue is fair and explainable: urgent first, a bounded head start for the vulnerable and the unwell, a hard 45-minute cap so no one waits forever, a self-rating that can't cheat — and a "Why?" for every position.</div>
+</section>
+
+<!-- ============ AI ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">7 · AI and voice</div><h2>AI that assists, never decides</h2></div>
+  <p class="lead">AI makes OPD Saathi smarter in the patient's language — but every core feature works without it, and it is never allowed to diagnose, advise, or lower urgency.</p>
+  <table>
+    <tr><th style="width:22%">Service</th><th>What it does in OPD Saathi</th><th style="width:27%">Without it</th></tr>
+    <tr><td><strong>Sarvam Saaras</strong><br><span class="small">real-time speech-to-text (saaras v3 realtime; v4 for clips)</span></td><td>Turns spoken Hindi, Marathi and English answers into text while the patient speaks, keeping the original script. Built in India for Indian languages and accents.</td><td>The browser's own speech recognition (Chrome/Edge), or tap/type.</td></tr>
+    <tr><td><strong>Sarvam Bulbul</strong><br><span class="small">text-to-speech (bulbul v3)</span></td><td>Reads every screen, question and the patient's read-back aloud in natural Indian voices.</td><td>The computer's built-in voice.</td></tr>
+    <tr><td><strong>Google Gemini</strong><br><span class="small">Flash-Lite models, structured JSON output</span></td><td>Translates free-text answers to English; writes the doctor's 2–3 line brief; chooses the most useful next question and short follow-ups; reads old prescription photos; gives a second opinion on warning signs; reviews the triage after check-in.</td><td>Question bank order, bilingual answer bank for translation, safety rules only.</td></tr>
+  </table>
+  <div class="grid2">
+    <div class="card">
+      <h4>Guard-rails on every AI call</h4>
+      <ul>
+        <li>Names and identifiers are <strong>removed before</strong> anything is sent; prompts and replies are not logged.</li>
+        <li>Answers must match a strict JSON schema and are validated again on our side.</li>
+        <li>An <strong>output guard</strong> rejects any text that diagnoses, advises treatment, gives a dose or contains a link.</li>
+        <li>AI red flags must quote the patient's actual words, count as priority at most, and only ever raise urgency.</li>
+        <li>2.5-second deadline, one retry, a circuit breaker, and at most 30 calls per check-in — if AI is slow or down, the kiosk quietly continues with the question bank.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Why these providers</h4>
+      <ul>
+        <li><strong>Sarvam</strong> is an Indian AI company whose speech models are trained for Indian languages, accents and code-mixed speech — exactly our patients. Its real-time stream shows words as they are spoken.</li>
+        <li><strong>Gemini Flash-Lite</strong> is fast and low-cost, supports guaranteed JSON output, and handles Hindi and Marathi well — suited to many short tasks per patient.</li>
+        <li>Every provider sits behind a small adapter, so a hospital can switch providers — or run with none — without touching the rest of the system.</li>
+        <li>AI is switched on per installation with keys, and each hospital can opt out.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="say">AI translates, summarises and double-checks — but rules decide, AI can only add caution, staff confirm, and the hospital can run the whole system with AI switched off.</div>
+</section>
+
+<!-- ============ SECURITY ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">8 · Security and privacy</div><h2>Built for health data, layer by layer</h2></div>
+  <table>
+    <tr><th style="width:22%">Layer</th><th>How OPD Saathi protects it</th></tr>
+    <tr><td><strong>Data at rest</strong></td><td>Names, phone numbers, answers and case sheets are encrypted field by field with <strong>AES-256-GCM</strong>, each value bound to its own row and column so it cannot be copied elsewhere. Phone lookups use a keyed <strong>HMAC-SHA256</strong> digest, never the number itself.</td></tr>
+    <tr><td><strong>Hospital isolation</strong></td><td><strong>PostgreSQL row-level security</strong> is forced on all 17 tables: the database itself refuses to return another hospital's rows, even if the application had a bug. Verified live: a second hospital could not read, call, change or delete anything of the first.</td></tr>
+    <tr><td><strong>Staff sign-in</strong></td><td>Passwords hashed with <strong>Argon2id</strong>. Signed 10-minute access tokens (JWT) kept only in memory; a rotating refresh cookie that is httpOnly and SameSite=Strict, with reuse detection that revokes the whole session. Five wrong passwords lock the account for 15 minutes.</td></tr>
+    <tr><td><strong>Kiosks</strong></td><td>One-time activation codes that expire after 24 hours and are stored only as hashes; each kiosk then holds its own device key. Turning a kiosk off, deleting it or re-pairing it cuts the old device off immediately.</td></tr>
+    <tr><td><strong>Access control</strong></td><td>Five roles (admin, doctor, nurse, kiosk, patient); every one of the 55 private API endpoints checks the role; a patient token sees only its own visit; nobody can lock themselves out.</td></tr>
+    <tr><td><strong>Abuse and mistakes</strong></td><td>Rate limits on sign-in and kiosk activation (Redis sliding window); every change carries an <strong>idempotency key</strong>, so a double tap or retried request never creates two visits; strict input validation and request-size limits; CSV exports protected from spreadsheet formula tricks.</td></tr>
+    <tr><td><strong>Browser</strong></td><td>A strict <strong>Content-Security-Policy</strong>, no framing, no-sniff and no-referrer headers; staff tokens never stored in the browser; the offline form is encrypted on the device with a key that cannot be exported.</td></tr>
+    <tr><td><strong>Accountability</strong></td><td>An append-only <strong>audit log</strong> records sign-ins, edits, overrides (with reasons), kiosk activations and admin changes. Deleting a record archives it, so medical history is never lost.</td></tr>
+    <tr><td><strong>Secrets</strong></td><td>Each installation generates its own passwords, encryption and signing keys; production start-up refuses weak or default keys.</td></tr>
+    <tr><td><strong>Every change, checked</strong></td><td>GitHub Actions run <strong>bandit</strong> and <strong>semgrep</strong> code scanning, <strong>pip-audit</strong> and <strong>npm audit</strong> dependency checks and <strong>gitleaks</strong> secret scanning; code cannot reach the main branch unless all pass.</td></tr>
+  </table>
+  <div class="grid2">
+    <div class="card teal"><h4>Privacy by design</h4><p>Only age and sex are required. The phone status page shows no name or health details. Patient data stays on the hospital's own server. An optional retention tool removes old transcripts and pseudonymises patients.</p></div>
+    <div class="card teal"><h4>Clinical safety by design</h4><p>No diagnosis, disease names, medicines or advice anywhere. Danger signs first. Uncertainty always escalates. The patient confirms the read-back; doctors can correct anything.</p></div>
+  </div>
+</section>
+
+<!-- ============ SCALE ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">9 · Scalability and reliability</div><h2>From one kiosk to many hospitals</h2></div>
+  <div class="grid2">
+    <div class="card">
+      <h4>Many kiosks, one queue</h4>
+      <p>Any number of kiosks per hospital feed the same department queues. Tokens are numbered per department per day, whichever kiosk was used. Each kiosk shows its hospital's name and reports online/offline every minute.</p>
+    </div>
+    <div class="card">
+      <h4>Many hospitals, fully separate</h4>
+      <p>Each hospital gets its own installation and database — set up with one command. Several hospitals can also share one server (for example a district hosting its PHCs), separated by the database's row-level security.</p>
+    </div>
+    <div class="card">
+      <h4>Built to scale out</h4>
+      <ul>
+        <li>The API is stateless: run more copies behind a load balancer.</li>
+        <li>Queues in Redis sorted sets (O(log n)); reports from a pre-computed view.</li>
+        <li>Virtualised lists keep staff screens fast with thousands of rows.</li>
+        <li>Two Redis instances: durable state (append-only file) and a separate, size-bounded cache.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Built not to break</h4>
+      <ul>
+        <li><strong>Outbox pattern</strong>: queue changes are written in the same transaction as the visit, then delivered — nothing is lost if a service restarts.</li>
+        <li>The live queue can be rebuilt from PostgreSQL at any time.</li>
+        <li>Idempotency keys stop duplicate visits from retries.</li>
+        <li>5-second database statement timeout; services restart automatically.</li>
+        <li>Offline kiosk form when the network fails.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Works where the internet does not</h3>
+  <table>
+    <tr><th style="width:30%">Situation</th><th>What happens</th></tr>
+    <tr><td><strong>Internet down, hospital network up</strong></td><td>Everything keeps working — check-in, queue, case sheets, reports — because kiosks talk to the hospital's own server. Only AI, natural voices and voice typing pause; patients tap or type.</td></tr>
+    <tr><td><strong>Kiosk cannot reach the server</strong></td><td>The app is cached on the kiosk (PWA service worker), so it still opens. Within about 10 seconds it offers a short form, encrypted on the device (AES-256-GCM, IndexedDB), with a provisional token. It syncs automatically when the link returns — never creating a duplicate.</td></tr>
+    <tr><td><strong>Slow networks</strong></td><td>The app is downloaded once and cached; afterwards only small JSON messages travel. Kiosks stay signed in through outages.</td></tr>
+  </table>
+  <h3>Measured</h3>
+  <ul>
+    <li>Reports summary over 100,000 visits: 1.88 ms (95th percentile) on a laptop.</li>
+    <li>5,000-patient queue: urgent update applied in about 22 ms.</li>
+    <li>Lighthouse accessibility 100 on kiosk and status pages.</li>
+  </ul>
+  <div class="note">Honest note: these are laptop measurements and a small load smoke test, not a certified capacity figure. The path to larger scale (connection pooling, read replicas, managed database) is documented.</div>
+</section>
+
+<!-- ============ DESIGN ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">10 · Design</div><h2>Designed for people under pressure</h2></div>
+  <div class="grid2">
+    <div class="card">
+      <h4>For patients</h4>
+      <ul>
+        <li>One question per screen, big tappable answers (minimum 64 × 64 px).</li>
+        <li>A six-step progress bar on every screen: Agree → Details → Safety check → Questions → Review → Token.</li>
+        <li>Everything read aloud; high-contrast mode; plain, neutral wording.</li>
+        <li>Mistakes are easy to undo: Back, Change, Stop and exit.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>For staff</h4>
+      <ul>
+        <li>What matters first: red flags at the top, one main action per patient.</li>
+        <li>Same layout on laptop, tablet and phone; never scrolls sideways (checked at 7 widths from 320 to 1600 px).</li>
+        <li>Clear status colours, counters that filter, and confirmation before anything risky.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Accessible and inclusive</h4>
+      <ul>
+        <li>Zero serious accessibility issues in automated (axe) scans.</li>
+        <li>All colour pairs pass WCAG AA contrast — checked in CI.</li>
+        <li>About 830 translated phrases per language, kept in sync by a CI check.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Clean engineering</h4>
+      <ul>
+        <li>Clear modules: interview engine, safety rules, routing, triage, queue, case sheets — each testable on its own.</li>
+        <li>Every AI and voice provider behind a small adapter.</li>
+        <li>Typed end to end: the API's schema generates the web app's TypeScript types.</li>
+        <li>Rules and weights in readable files for clinicians to review.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="pair">
+    <figure class="shot"><img src="s11-settings-users.png"><figcaption>Administration keeps forms on the left and the list on the right; headings stay put while lists scroll.</figcaption></figure>
+    <figure class="shot"><img src="s15-kiosk-menu.png"><figcaption>Rare actions live in a ⋯ menu; risky ones always ask first.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ============ TECH STACK ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">11 · Technology</div><h2>The tech stack — what each part does, and why</h2></div>
+  <h3>Front end (what everyone sees)</h3>
+  <table class="stack">
+    <tr><th>Technology</th><th>Its job in OPD Saathi</th><th>Why we chose it</th></tr>
+    <tr><td><strong>React 18 + TypeScript</strong></td><td>All screens: kiosk, phone status page, staff workspace.</td><td>One component-based app for every audience; TypeScript catches mistakes before they reach a patient.</td></tr>
+    <tr><td><strong>Vite</strong></td><td>Builds and serves the web app.</td><td>Very fast builds and a small, split production bundle for slow kiosks.</td></tr>
+    <tr><td><strong>PWA (vite-plugin-pwa, Workbox)</strong></td><td>Caches the app on kiosks; offline short form.</td><td>Kiosks keep opening without a network; installs like an app with no app store.</td></tr>
+    <tr><td><strong>IndexedDB + Web Crypto</strong></td><td>Stores offline check-ins encrypted on the kiosk.</td><td>Built into every browser; AES-GCM with a key that cannot be exported.</td></tr>
+    <tr><td><strong>i18next</strong></td><td>Hindi, Marathi and English text everywhere.</td><td>Mature translation library; adding a language means adding one file.</td></tr>
+    <tr><td><strong>TanStack Query &amp; Virtual</strong></td><td>Data fetching/caching; very long queue lists.</td><td>Keeps screens fresh without reloads; renders only visible rows of a 5,000-row list.</td></tr>
+    <tr><td><strong>Zustand</strong></td><td>Small shared state (language, kiosk preferences).</td><td>Tiny and simple compared to heavier state libraries.</td></tr>
+    <tr><td><strong>Web Speech API</strong></td><td>Browser voice when no AI keys are set.</td><td>Free fallback built into Chrome/Edge.</td></tr>
+  </table>
+  <h3>Back end (the brain)</h3>
+  <table class="stack">
+    <tr><th>Technology</th><th>Its job in OPD Saathi</th><th>Why we chose it</th></tr>
+    <tr><td><strong>Python 3.12 + FastAPI</strong></td><td>The API: interview engine, safety rules, triage, routing, queue, case sheets, reports, auth.</td><td>Async and fast; first-class WebSockets; Python suits rules and AI work; automatic API documentation.</td></tr>
+    <tr><td><strong>Pydantic</strong></td><td>Validates every request, case sheet and AI reply.</td><td>Strict schemas reject bad or unexpected data before it is stored.</td></tr>
+    <tr><td><strong>SQLAlchemy 2 + asyncpg</strong></td><td>Talks to PostgreSQL.</td><td>Non-blocking database access with parameterised queries (no SQL injection).</td></tr>
+    <tr><td><strong>Alembic</strong></td><td>Database migrations (16 so far).</td><td>Every hospital's database upgrades safely and repeatably.</td></tr>
+    <tr><td><strong>WebSockets &amp; Server-Sent Events</strong></td><td>Live staff queue and alerts; patient phone status; streaming voice.</td><td>Instant updates without page refresh; SSE is light enough for any phone.</td></tr>
+    <tr><td><strong>ARQ worker</strong></td><td>Relays queue changes, refreshes reports every 5 min, closes old days.</td><td>Async background jobs on the Redis we already run — no extra broker.</td></tr>
+    <tr><td><strong>WeasyPrint</strong></td><td>Case sheet PDFs.</td><td>Renders HTML to print-quality PDF with Hindi/Marathi fonts, on the server.</td></tr>
+    <tr><td><strong>Argon2, PyJWT, cryptography</strong></td><td>Password hashing, sign-in tokens, field encryption.</td><td>Current, well-reviewed standards: Argon2id, HS256 JWT, AES-256-GCM.</td></tr>
+    <tr><td><strong>Gunicorn + Uvicorn</strong></td><td>Runs the API with several worker processes.</td><td>Production-grade process manager for async Python.</td></tr>
+  </table>
+</section>
+
+<section class="page">
+  <div class="section-head"><div class="kicker">11 · Technology (continued)</div><h2>Data, AI, infrastructure and quality</h2></div>
+  <table class="stack">
+    <tr><th>Technology</th><th>Its job in OPD Saathi</th><th>Why we chose it</th></tr>
+    <tr><td><strong>PostgreSQL 16</strong></td><td>The source of truth: hospitals, staff, kiosks, visits, case sheets, audit log; report views.</td><td>Reliable relational database with <strong>row-level security</strong> for hospital isolation, JSON columns for case sheets, and materialized views for fast reports.</td></tr>
+    <tr><td><strong>Redis 7 (state)</strong></td><td>Live queues (sorted sets + Lua), kiosk sessions, rate limits, idempotency, pub/sub for live updates.</td><td>In-memory speed for the queue; atomic scripts so concurrent clicks cannot corrupt order; durable append-only file.</td></tr>
+    <tr><td><strong>Redis 7 (cache)</strong></td><td>Short-lived AI response cache.</td><td>Kept separate and size-bounded, so cache pressure never touches the queue.</td></tr>
+    <tr><td><strong>Sarvam Saaras / Bulbul</strong></td><td>Indian-language speech-to-text and text-to-speech.</td><td>Built for Indian languages and accents; real-time streaming.</td></tr>
+    <tr><td><strong>Google Gemini (google-genai)</strong></td><td>Translation, summary, next question, prescription reading, second opinion.</td><td>Fast, low-cost Flash-Lite models with guaranteed JSON output.</td></tr>
+    <tr><td><strong>Docker + Docker Compose</strong></td><td>Packages the database, both Redis instances, API, worker and web server.</td><td>The same system runs identically on any laptop or hospital server; one command to start; services restart by themselves.</td></tr>
+    <tr><td><strong>nginx</strong></td><td>Serves the web app and forwards <code>/api</code> to the server.</td><td>Fast static hosting, one address for kiosks and phones, security headers.</td></tr>
+    <tr><td><strong>PowerShell setup scripts</strong></td><td><code>start-demo.ps1</code> and <code>setup-hospital.ps1</code>.</td><td>Hospital IT can install and update with one command on Windows.</td></tr>
+    <tr><td><strong>Prometheus + Grafana</strong> (optional)</td><td>Request metrics and dashboards.</td><td>Standard open-source monitoring when a hospital wants it.</td></tr>
+    <tr><td><strong>pytest, Vitest, Playwright, axe</strong></td><td>814 server tests, 54 web tests, 132 browser tests, accessibility scans.</td><td>Every feature is checked automatically in a real browser, in three languages.</td></tr>
+    <tr><td><strong>ruff, mypy (strict), ESLint</strong></td><td>Code quality and type checking.</td><td>Catches bugs before tests even run.</td></tr>
+    <tr><td><strong>GitHub Actions</strong></td><td>Runs every check on every change; protects the main branch.</td><td>Nothing reaches main unless backend, frontend and security jobs pass.</td></tr>
+    <tr><td><strong>bandit, semgrep, pip-audit, npm audit, gitleaks</strong></td><td>Security scanning of code, dependencies and secrets.</td><td>Security is checked automatically, not occasionally.</td></tr>
+    <tr><td><strong>k6</strong></td><td>Load smoke tests.</td><td>Simple scripted load testing.</td></tr>
+  </table>
+  <div class="say">A modern, open, mostly free stack: React for every screen, Python FastAPI for the rules, PostgreSQL for safe records, Redis for a live queue, Sarvam and Gemini for Indian-language AI — all packaged in Docker and started with one command.</div>
+</section>
+
+<!-- ============ DEPLOYMENT ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">12 · Deployment</div><h2>How a hospital gets OPD Saathi</h2></div>
+  <p class="lead">Each hospital gets its own installation on a PC or server inside the hospital. Patient data never leaves the building, and the OPD keeps running when the internet does not.</p>
+  <ol class="steps">
+    <li><strong>Prepare a server</strong> on the hospital network with Docker; give it a fixed local address.</li>
+    <li><strong>Run one command</strong> — <code>.\setup-hospital.ps1</code>. It creates fresh secrets and encryption keys, builds and starts the database, Redis, API, worker and web app, and asks for the hospital's name and first administrator. It also creates the 8 standard departments.</li>
+    <li><strong>The administrator signs in</strong> and adds doctors, nurses and departments in Settings.</li>
+    <li><strong>Each kiosk is set up</strong> by registering it and opening its setup link once on the device; it then stays signed in and appears as Online.</li>
+    <li><strong>Optional</strong>: add Gemini and Sarvam keys for AI and natural voices; set up HTTPS for voice on every kiosk; schedule backups.</li>
+  </ol>
+  <div class="grid2">
+    <div class="card teal"><h4>One installation per hospital (recommended)</h4><p>Own server, own database, own keys. Best for privacy and for hospitals with unreliable internet.</p></div>
+    <div class="card"><h4>Several hospitals on one server</h4><p>For example a district hosting its PHCs. Each hospital is added with one command and separated by row-level security.</p></div>
+  </div>
+  <figure class="shot" style="width:72%;margin-left:auto;margin-right:auto"><img src="s18-department-in-use.png"><figcaption>Administration protects the hospital from mistakes: a department with open visits or staff cannot be deleted.</figcaption></figure>
+</section>
+
+<!-- ============ PROOF ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">13 · Evidence</div><h2>Proof that it works</h2></div>
+  <div class="grid3">
+    <div class="card"><div class="num">814</div><strong>server tests</strong><p class="small">plus database integration tests for sign-in, kiosks, isolation and offline replay</p></div>
+    <div class="card"><div class="num">132</div><strong>browser tests</strong><p class="small">real screens, 3 languages, 7 screen widths, accessibility scans</p></div>
+    <div class="card"><div class="num">54</div><strong>web unit tests</strong><p class="small">queue, case sheet, reports, settings, kiosk</p></div>
+  </div>
+  <h3>Synthetic evaluations</h3>
+  <table>
+    <tr><th>Check</th><th style="width:20%">Result</th></tr>
+    <tr><td>Interview scenarios completed correctly</td><td>30 / 30</td></tr>
+    <tr><td>Department routing test cases</td><td>96 / 96</td></tr>
+    <tr><td>Red flags that must be caught</td><td>60 / 60</td></tr>
+    <tr><td>Negations not falsely flagged ("no chest pain")</td><td>50 / 50</td></tr>
+    <tr><td>History extraction with zero invented fields</td><td>100 / 100</td></tr>
+    <tr><td>Adversarial prompts blocked by the AI output guard</td><td>100 / 100</td></tr>
+    <tr><td>Urgency never decreases when a warning sign is added</td><td>500 / 500</td></tr>
+    <tr><td>Second hospital fully isolated from the first (live check)</td><td>20 / 20</td></tr>
+    <tr><td>Kiosk set-up, renewal, re-pairing and delete rules (live check)</td><td>35 / 35</td></tr>
+  </table>
+  <h3>Quality gates on every change</h3>
+  <p>Backend, frontend and security jobs in GitHub Actions — tests, type checks, migrations up and down, accessibility, contrast, translations, generated API types, code and dependency scanning, secret scanning. The main branch only accepts changes that pass all of them.</p>
+  <div class="note">These are synthetic tests: they prove the software behaves as designed. Clinical accuracy still needs review by clinicians and native speakers.</div>
+</section>
+
+<!-- ============ IMPACT ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">14 · Impact</div><h2>What changes on day one</h2></div>
+  <table>
+    <tr><th style="width:24%">Before</th><th style="width:38%">With OPD Saathi</th><th>Who benefits</th></tr>
+    <tr><td>History taken by the doctor, question by question</td><td>History ready before the consultation, in English, with the patient's own words</td><td>Doctors get time back for examination and care</td></tr>
+    <tr><td>Patients struggle in a second language</td><td>Check-in in Hindi, Marathi or English, by tap or voice</td><td>Patients who cannot read or speak the doctor's language</td></tr>
+    <tr><td>Serious patients wait unnoticed</td><td>Danger signs first; urgent alert to staff in seconds</td><td>The seriously ill</td></tr>
+    <tr><td>"Why were they called first?"</td><td>A fair, explainable queue with "Why?" on every position</td><td>Everyone in the waiting room; staff</td></tr>
+    <tr><td>Crowding at the doctor's door</td><td>A live token on the patient's own phone</td><td>Patients, families, nurses</td></tr>
+    <tr><td>No data to plan staffing</td><td>Reports on waits, load, languages and time saved</td><td>Administrators and health officials</td></tr>
+  </table>
+  <h3>Time saved — an estimate</h3>
+  <p>Reports multiply visits by the minutes of history-taking each kiosk interview is assumed to save. With the demo's assumption of 3 minutes, 4,580 visits in 30 days come to about 229 doctor-hours. Each hospital sets its own assumption, and the screen labels it as an estimate.</p>
+  <h3>Where it goes next</h3>
+  <ol class="steps">
+    <li>Clinician and native-speaker review of all questions, rules and weights.</li>
+    <li>A pilot in one OPD department with real kiosks and staff feedback.</li>
+    <li>Doctor's notes and e-prescription fields; SMS provider connected.</li>
+    <li>ABHA / ABDM and hospital information system integration.</li>
+    <li>More Indian languages — the app is built for it.</li>
+  </ol>
+  <div class="say">OPD Saathi gives doctors back the minutes spent collecting history, gives patients a voice in their own language, and gives everyone a queue they can trust.</div>
+</section>
+
+<!-- ============ LIMITATIONS ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">15 · Honest status</div><h2>What is not done yet</h2></div>
+  <p class="lead">Being clear about limits makes the story stronger, not weaker.</p>
+  <table>
+    <tr><th style="width:30%">Item</th><th>Status</th></tr>
+    <tr><td><strong>Clinical review</strong></td><td>Questions, safety rules, triage weights and consent text are drafts awaiting clinician and native-speaker sign-off.</td></tr>
+    <tr><td><strong>Doctor's notes</strong></td><td>Examination findings and plan are recorded in the hospital's own system for now.</td></tr>
+    <tr><td><strong>HTTPS on hospital networks</strong></td><td>Needed for voice on kiosks other than the server itself; tapping and typing work everywhere today.</td></tr>
+    <tr><td><strong>A few admin screens</strong></td><td>Editing a staff member's details, resetting a password and switching AI on/off per hospital are supported by the server but have no screen yet.</td></tr>
+    <tr><td><strong>Integrations</strong></td><td>No ABHA/ABDM, FHIR or hospital-system connection yet; SMS needs a provider account.</td></tr>
+    <tr><td><strong>Real-world testing</strong></td><td>Load numbers are laptop measurements; first-time patients still need to be observed using the kiosk without coaching.</td></tr>
+  </table>
+</section>
+
+<!-- ============ TALK ============ -->
+<section class="page">
+  <div class="section-head"><div class="kicker">16 · For the presentation</div><h2>A 10-minute talk and live demo</h2></div>
+  <table>
+    <tr><th style="width:11%">Time</th><th style="width:30%">Section</th><th>Say / show</th></tr>
+    <tr><td>0:00</td><td>The need</td><td>The OPD corridor: languages, literacy, minutes lost to history-taking, an invisible queue. (Chapter 1)</td></tr>
+    <tr><td>1:00</td><td>Who we serve</td><td>Elderly, non-readers, Hindi/Marathi speakers, mothers and infants, the seriously ill. (Chapter 2)</td></tr>
+    <tr><td>1:45</td><td>Live demo: kiosk</td><td>Tap मराठी → consent read aloud → age/sex → "None of these" → tap Fever + Cough, speak one answer → read-back → token + QR. Scan the QR with a phone.</td></tr>
+    <tr><td>4:00</td><td>Live demo: staff</td><td>New token in the queue in English; click "Why?"; open the case sheet; show the transcript tab.</td></tr>
+    <tr><td>5:00</td><td>The urgent moment</td><td>New check-in → tap "Chest discomfort" → the urgent alert appears instantly on the staff screen.</td></tr>
+    <tr><td>5:45</td><td>The fair queue</td><td>Virtual arrival time, the 45-minute cap, "10/10 can't cheat" — the worked example. (Chapter 6)</td></tr>
+    <tr><td>6:45</td><td>AI that assists</td><td>Sarvam for Indian-language voice, Gemini for translation and summaries, guard-rails, works without AI. (Chapter 7)</td></tr>
+    <tr><td>7:30</td><td>Secure and scalable</td><td>Encryption, row-level security, many kiosks one queue, one install per hospital, works offline. (Chapters 8–9, 12)</td></tr>
+    <tr><td>8:30</td><td>Tech and proof</td><td>The stack in one line; 1,000+ automated checks; evaluation scores. (Chapters 11, 13)</td></tr>
+    <tr><td>9:15</td><td>Impact and next steps</td><td>Time back for doctors, voice for patients, a queue to trust; clinician review and a pilot next. (Chapter 14)</td></tr>
+  </table>
+  <h3>Before you start</h3>
+  <ul>
+    <li>Run <code>.\start-demo.ps1 -NoBuild</code>; kiosk full-screen (F11) in one window, staff workspace signed in as doctor01 or admin in another.</li>
+    <li>Laptop and phone on your own hotspot (for the QR scan and for AI/voice).</li>
+    <li>If the internet fails, tap instead of speaking — everything else still works.</li>
+  </ul>
+</section>
+
+<section class="page">
+  <div class="section-head"><div class="kicker">16 · For the presentation (continued)</div><h2>Questions the judges may ask</h2></div>
+  <table class="qa">
+    <tr><th style="width:34%">Question</th><th>Answer</th></tr>
+    <tr><td><strong>Does it diagnose?</strong></td><td>No — by design. It collects history and flags warning signs for staff. An output guard blocks any AI text that diagnoses or advises treatment.</td></tr>
+    <tr><td><strong>What if the AI is wrong?</strong></td><td>AI can only add caution: its flags count as priority at most, must quote the patient, and staff confirm. Safety rules decide. The AI summary is marked unverified until a person checks it.</td></tr>
+    <tr><td><strong>What if there is no internet?</strong></td><td>Kiosks talk to the hospital's own server, so check-in and the queue keep working. If even the local network fails, the kiosk switches to an encrypted offline form that syncs later.</td></tr>
+    <tr><td><strong>Can someone jump the queue?</strong></td><td>No. The self-rating is worth at most 4 of 100 points; priority comes from real signs, age and pregnancy; the head start is capped at 45 minutes; overrides need a written reason and are audited.</td></tr>
+    <tr><td><strong>How is patient data protected?</strong></td><td>Field-level AES-256-GCM encryption, per-hospital row-level security in the database, Argon2id passwords, short-lived tokens, an audit log, and data that stays on the hospital's own server.</td></tr>
+    <tr><td><strong>How does it scale?</strong></td><td>Any number of kiosks feed one queue per department; queues live in Redis sorted sets; the API is stateless and can be replicated; each hospital is a separate installation set up with one command.</td></tr>
+    <tr><td><strong>What does it cost to run?</strong></td><td>The stack is open-source and runs on an ordinary PC. Without AI there is no per-patient cost; AI adds small per-call costs on fast, low-cost models, and each hospital can switch it off.</td></tr>
+    <tr><td><strong>What about people who cannot use a kiosk?</strong></td><td>Voice, big buttons and Call staff help most; anyone else is registered by a nurse with the same consent and safety steps.</td></tr>
+    <tr><td><strong>Why Sarvam and Gemini?</strong></td><td>Sarvam's speech models are built for Indian languages and accents with real-time streaming; Gemini Flash-Lite is fast, low-cost and returns strict JSON. Both sit behind adapters and can be replaced.</td></tr>
+    <tr><td><strong>Is it deployed?</strong></td><td>It is designed to be installed per hospital on its own server — one command (<code>setup-hospital.ps1</code>). Today we show it on a laptop, exactly as it would run on a hospital PC.</td></tr>
+    <tr><td><strong>What's next?</strong></td><td>Clinician review, a one-department pilot, doctor's notes, ABHA/ABDM integration and more languages.</td></tr>
+  </table>
+  <p class="small" style="margin-top:12px">OPD Saathi collects history for clinical staff. It does not diagnose or recommend treatment. All patients, staff and hospitals shown in this document are fictional.</p>
+</section>
+
+</body>
+</html>

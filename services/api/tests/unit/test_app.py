@@ -238,8 +238,11 @@ def test_refresh_cookie_is_secure_outside_local_development():
     from app.api.v1.auth import _set_refresh_cookie
 
     response = Response()
-    _set_refresh_cookie(response, Settings(app_env="test"), "synthetic-refresh-token")
+    user_id = "22222222-2222-4222-8222-222222222222"
+    _set_refresh_cookie(response, Settings(app_env="test"), "synthetic-refresh-token", user_id)
     cookie_header = response.headers["set-cookie"].lower()
+    # One cookie per staff account, so several staff can work in one browser.
+    assert cookie_header.startswith("osa_refresh_22222222222242228222222222222222=")
     assert "secure" in cookie_header
     assert "httponly" in cookie_header
     assert "samesite=strict" in cookie_header

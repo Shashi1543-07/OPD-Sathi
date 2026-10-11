@@ -1129,6 +1129,14 @@ export interface components {
              */
             generated_at: string;
         };
+        /**
+         * AccountPayload
+         * @description Which signed-in staff account a browser tab is renewing or signing out.
+         */
+        AccountPayload: {
+            /** Account */
+            account?: string | null;
+        };
         /** AddOrReplace */
         AddOrReplace: {
             /**
@@ -1727,7 +1735,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AccountPayload"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -1740,6 +1752,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     logout_auth_logout_post: {
@@ -1749,7 +1770,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AccountPayload"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {
@@ -1757,6 +1782,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

@@ -1114,6 +1114,15 @@ async def staff_queue_socket(
                                 "'AI_TRIAGE_REVIEW')) "
                                 "AND e.acknowledged_at IS NULL "
                                 "AND e.created_at <= now() - interval '60 seconds' "
+                                # Same rule as GET /alerts: only patients still in the
+                                # building. Without it, every unacknowledged alert from
+                                # finished or cancelled visits (even past days) came back
+                                # each minute and filled the board with stale alerts.
+                                "AND (v.status IN ('registering', 'awaiting_confirmation', "
+                                "'queued', 'called', 'in_consult') "
+                                "OR (v.status = 'cancelled' AND v.token_label IS NULL "
+                                "AND e.level = 'urgent' "
+                                "AND e.created_at > now() - interval '2 hours')) "
                                 "ORDER BY e.created_at LIMIT 100"
                             ),
                             {"hospital_id": hospital_id, "department_id": department_id},

@@ -474,5 +474,7 @@
   "confirmDeleteDepartments": "It is removed from this list and from staff and kiosk choices. Past visits keep its name. Patients still waiting and staff assigned to it must be moved first.",
   "kioskRegistrations": "Patients registered: {{today}} today · {{total}} in all",
   "kioskCodePending": "Waiting for setup",
-  "kioskCodePendingUntil": "Setup code valid until {{when}}"
+  "kioskCodePendingUntil": "Setup code valid until {{when}}",
+  "useAnotherAccount": "Use another account",
+  "useAnotherAccountHint": "Sign in as someone else in this tab. This account stays signed in on its other tabs."
 }
