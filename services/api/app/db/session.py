@@ -36,6 +36,7 @@ async def set_secret_lookup_scope(
     if setting not in {
         "app.refresh_token_hash",
         "app.kiosk_activation_hash",
+        "app.kiosk_secret_hash",
         "app.status_token_hash",
     }:
         raise ValueError("unsupported secret lookup scope")

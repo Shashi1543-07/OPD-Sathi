@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { LanguageSelector } from "../components/ui";
-import { intake } from "../lib/intake";
+import { intake, useKioskHospitalName } from "../lib/intake";
 import { useLanguageStore } from "../languageStore";
 
 export function KioskWelcome() {
@@ -16,12 +16,15 @@ export function KioskWelcome() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [activated, setActivated] = useState(intake.isKioskActivated());
+  const hospitalName = useKioskHospitalName();
 
   // Setup convenience: open /kiosk?activate=<one-time code> once on the kiosk device.
+  // A setup link always wins over an earlier pairing in this browser (a deleted or
+  // replaced kiosk); the old pairing is kept only if the new code fails.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const code = params.get("activate");
-    if (!code || activated) return;
+    if (!code) return;
     params.delete("activate");
     navigate({ pathname: "/kiosk", search: params.toString() }, { replace: true });
     void Promise.resolve()
@@ -29,7 +32,10 @@ export function KioskWelcome() {
         setBusy(true);
         return intake.activate(code.trim());
       })
-      .then(() => setActivated(true))
+      .then(() => {
+        setError("");
+        setActivated(true);
+      })
       .catch((cause: unknown) =>
         setError(cause instanceof Error ? cause.message : t("errorTitle", { ns: "kiosk" })),
       )
@@ -69,7 +75,7 @@ export function KioskWelcome() {
   return (
     <main className="kiosk-main">
       <section className="welcome-card">
-        <p className="eyebrow">{t("clinicName", { ns: "kiosk" })}</p>
+        {hospitalName && <p className="eyebrow">{hospitalName}</p>}
         <h1>{t("welcome", { ns: "common" })}</h1>
         <p className="welcome-intro">{t("chooseLanguage", { ns: "kiosk" })}</p>
         <LanguageSelector />

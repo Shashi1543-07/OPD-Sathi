@@ -154,10 +154,11 @@ async def test_offline_replay_survives_api_restart_without_duplicate_visit() -> 
             await connection.execute(
                 text("DELETE FROM audit_log WHERE hospital_id = :id"), {"id": hospital_id}
             )
-            await connection.execute(text("DELETE FROM kiosks WHERE id = :id"), {"id": kiosk_id})
             await connection.execute(
                 text("DELETE FROM visits WHERE hospital_id = :id"), {"id": hospital_id}
             )
+            # Visits record their kiosk, so the kiosk goes after them.
+            await connection.execute(text("DELETE FROM kiosks WHERE id = :id"), {"id": kiosk_id})
             await connection.execute(
                 text("DELETE FROM patients WHERE hospital_id = :id"), {"id": hospital_id}
             )

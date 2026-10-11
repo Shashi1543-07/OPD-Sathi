@@ -310,7 +310,10 @@ async def staff_queue(
                         "SELECT id, code, name_en FROM departments "
                         "WHERE hospital_id = :hospital_id "
                         "AND is_active = true AND (:is_admin = true OR "
-                        "id = CAST(:department_id AS uuid)) ORDER BY name_en, id"
+                        "id = CAST(:department_id AS uuid)) "
+                        # General Medicine first: kiosks send patients there by default,
+                        # so it is the busiest queue and the one the board opens on.
+                        "ORDER BY CASE WHEN code = 'GENMED' THEN 0 ELSE 1 END, name_en, id"
                     ),
                     {
                         "hospital_id": hospital_id,

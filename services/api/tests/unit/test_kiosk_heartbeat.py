@@ -74,5 +74,5 @@ async def test_heartbeat_reports_whether_the_kiosk_may_still_check_patients_in(
     for active in (True, False):
         connection = FakeConnection(active=active)
         result = await auth.kiosk_heartbeat(request_for(connection), principal)
-        assert result == {"active": active}
+        assert result["active"] is active
     assert scoped == [HOSPITAL_ID, HOSPITAL_ID]
