@@ -887,37 +887,41 @@ class IntakeRepository:
         replaced since: re-pairing a kiosk with a new activation code moves ``paired_at``.
         The few seconds of slack absorb clock differences between API and database.
         """
-        sql = (
-            "SELECT EXISTS (SELECT 1 FROM kiosks WHERE hospital_id = :hospital_id "
-            "AND id = :kiosk_id AND is_active = true AND deleted_at IS NULL "
-            "AND secret_hash IS NOT NULL"
+        result = await self.connection.scalar(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM kiosks WHERE hospital_id = :hospital_id "
+                "AND id = :kiosk_id AND is_active = true AND deleted_at IS NULL "
+                "AND secret_hash IS NOT NULL "
+                "AND (CAST(:issued_at AS double precision) IS NULL OR paired_at IS NULL "
+                "OR paired_at <= to_timestamp(CAST(:issued_at AS double precision)) "
+                "+ interval '5 seconds'))"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "kiosk_id": kiosk_id,
+                "issued_at": float(issued_at) if issued_at is not None else None,
+            },
         )
-        params: dict[str, Any] = {"hospital_id": hospital_id, "kiosk_id": kiosk_id}
-        if issued_at is not None:
-            sql += (
-                " AND (paired_at IS NULL OR "
-                "paired_at <= to_timestamp(:issued_at) + interval '5 seconds')"
-            )
-            params["issued_at"] = float(issued_at)
-        result = await self.connection.scalar(text(sql + ")"), params)
         return bool(result)
 
     async def kiosk_unavailable_reason(
         self, *, hospital_id: UUID, kiosk_id: UUID, issued_at: int | None = None
     ) -> str:
         """Why a kiosk failed ``kiosk_is_active``: "off" when only switched off, else "unpaired"."""
-        sql = (
-            "SELECT is_active FROM kiosks WHERE hospital_id = :hospital_id AND id = :kiosk_id "
-            "AND deleted_at IS NULL AND secret_hash IS NOT NULL"
+        is_active = await self.connection.scalar(
+            text(
+                "SELECT is_active FROM kiosks WHERE hospital_id = :hospital_id "
+                "AND id = :kiosk_id AND deleted_at IS NULL AND secret_hash IS NOT NULL "
+                "AND (CAST(:issued_at AS double precision) IS NULL OR paired_at IS NULL "
+                "OR paired_at <= to_timestamp(CAST(:issued_at AS double precision)) "
+                "+ interval '5 seconds')"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "kiosk_id": kiosk_id,
+                "issued_at": float(issued_at) if issued_at is not None else None,
+            },
         )
-        params: dict[str, Any] = {"hospital_id": hospital_id, "kiosk_id": kiosk_id}
-        if issued_at is not None:
-            sql += (
-                " AND (paired_at IS NULL OR "
-                "paired_at <= to_timestamp(:issued_at) + interval '5 seconds')"
-            )
-            params["issued_at"] = float(issued_at)
-        is_active = await self.connection.scalar(text(sql), params)
         return "off" if is_active is False else "unpaired"
 
     async def touch_kiosk(
