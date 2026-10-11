@@ -9,7 +9,8 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import get_settings
@@ -48,10 +49,24 @@ async def _create_admin(
                     "A new hospital can only be created when --hospital-id is omitted."
                 )
             if hospital is None:
-                await connection.execute(
-                    text("INSERT INTO hospitals (id, name, code) VALUES (:id, :name, :code)"),
-                    {"id": selected_hospital_id, "name": hospital_name, "code": hospital_code},
-                )
+                try:
+                    async with connection.begin_nested():
+                        await connection.execute(
+                            text(
+                                "INSERT INTO hospitals (id, name, code) "
+                                "VALUES (:id, :name, :code)"
+                            ),
+                            {
+                                "id": selected_hospital_id,
+                                "name": hospital_name,
+                                "code": hospital_code,
+                            },
+                        )
+                except IntegrityError as exc:
+                    raise SystemExit(
+                        f"A hospital with the code {hospital_code!r} already exists. "
+                        "Choose another code."
+                    ) from exc
             user_id = uuid7()
             await connection.execute(
                 text(
@@ -81,7 +96,93 @@ async def _create_admin(
     return selected_hospital_id
 
 
-async def _create_kiosk(*, hospital_id: UUID, label: str) -> str:
+async def _setup_hospital(
+    *,
+    hospital_name: str,
+    hospital_code: str,
+    admin_name: str,
+    admin_email: str,
+    admin_password: str,
+    standard_departments: bool,
+) -> UUID:
+    """Onboard a hospital: its record, first administrator and starting departments.
+
+    The standard departments use the codes the routing rules know (GENMED, ORTHO, ENT,
+    OBG, PAED, DERM, OPHTH, SURG), so kiosks route patients from the first day. The
+    hospital's administrator can rename, deactivate or delete them and add their own.
+    """
+    hospital_id = await _create_admin(
+        hospital_id=None,
+        hospital_name=hospital_name,
+        hospital_code=hospital_code,
+        name=admin_name,
+        email=admin_email,
+        password=admin_password,
+    )
+    if not standard_departments:
+        return hospital_id
+    engine = create_async_engine(get_settings().migrations_database_url)
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            for code, prefix, en, hi, mr in _DEMO_DEPARTMENTS:
+                await connection.execute(
+                    text(
+                        "INSERT INTO departments (id, hospital_id, code, token_prefix, name_en, "
+                        "name_hi, name_mr) VALUES (:id, :hospital_id, :code, :prefix, :en, "
+                        ":hi, :mr) ON CONFLICT DO NOTHING"
+                    ),
+                    {
+                        "id": uuid7(),
+                        "hospital_id": hospital_id,
+                        "code": code,
+                        "prefix": prefix,
+                        "en": en,
+                        "hi": hi,
+                        "mr": mr,
+                    },
+                )
+            await connection.execute(
+                text(
+                    "INSERT INTO audit_log "
+                    "(id, hospital_id, actor_type, action, resource_type, resource_id, "
+                    "request_id, meta) VALUES (:id, :hospital_id, 'system', "
+                    "'bootstrap.departments.created', 'hospital', :hospital_id, "
+                    "'operator-cli', '{}'::jsonb)"
+                ),
+                {"id": uuid7(), "hospital_id": hospital_id},
+            )
+    finally:
+        await engine.dispose()
+    return hospital_id
+
+
+def _read_new_password() -> str:
+    """ADMIN_PASSWORD (for scripted installs) or an interactive, confirmed prompt."""
+    password = os.getenv("ADMIN_PASSWORD", "")
+    if password:
+        return password
+    while True:
+        password = getpass.getpass("Administrator password (12+ characters): ")
+        if len(password) < 12:
+            print("Use at least 12 characters.")
+            continue
+        if getpass.getpass("Type it again: ") == password:
+            return password
+        print("The two passwords did not match. Try again.")
+
+
+def _activation_expiry() -> datetime:
+    return datetime.now(UTC) + timedelta(hours=get_settings().kiosk_activation_code_hours)
+
+
+async def _create_kiosk(*, hospital_id: UUID, label: str, reuse: bool = False) -> str:
+    """Return a one-time activation code for a new kiosk.
+
+    With ``reuse``, an existing kiosk with the same label gets the fresh code instead, so
+    running the demo again re-pairs the same kiosk (same id and history) rather than
+    piling up a new kiosk record each time.
+    """
     settings = get_settings()
     code = create_opaque_secret()
     kiosk_id = uuid7()
@@ -95,26 +196,65 @@ async def _create_kiosk(*, hospital_id: UUID, label: str) -> str:
             )
             if hospital is None:
                 raise SystemExit("Hospital does not exist; create the first admin for it first.")
-            await connection.execute(
-                text(
-                    "INSERT INTO kiosks (id, hospital_id, label, activation_code_hash) "
-                    "VALUES (:id, :hospital_id, :label, :activation_hash)"
-                ),
-                {
-                    "id": kiosk_id,
-                    "hospital_id": hospital_id,
-                    "label": label,
-                    "activation_hash": digest_secret(code),
-                },
+            existing = (
+                await connection.scalar(
+                    text(
+                        "SELECT id FROM kiosks WHERE hospital_id = :hospital_id "
+                        "AND label = :label AND deleted_at IS NULL "
+                        "ORDER BY created_at, id LIMIT 1"
+                    ),
+                    {"hospital_id": hospital_id, "label": label},
+                )
+                if reuse
+                else None
             )
+            if existing is not None:
+                kiosk_id = existing
+                await connection.execute(
+                    text(
+                        "UPDATE kiosks SET activation_code_hash = :activation_hash, "
+                        "activation_code_expires_at = :expires_at, is_active = true "
+                        "WHERE hospital_id = :hospital_id AND id = :id"
+                    ),
+                    {
+                        "activation_hash": digest_secret(code),
+                        "expires_at": _activation_expiry(),
+                        "hospital_id": hospital_id,
+                        "id": kiosk_id,
+                    },
+                )
+            else:
+                await connection.execute(
+                    text(
+                        "INSERT INTO kiosks (id, hospital_id, label, activation_code_hash, "
+                        "activation_code_expires_at) "
+                        "VALUES (:id, :hospital_id, :label, :activation_hash, :expires_at)"
+                    ),
+                    {
+                        "id": kiosk_id,
+                        "hospital_id": hospital_id,
+                        "label": label,
+                        "activation_hash": digest_secret(code),
+                        "expires_at": _activation_expiry(),
+                    },
+                )
             await connection.execute(
                 text(
                     "INSERT INTO audit_log "
                     "(id, hospital_id, actor_type, action, resource_type, resource_id, "
-                    "request_id, meta) VALUES (:id, :hospital_id, 'system', 'kiosk.provisioned', "
+                    "request_id, meta) VALUES (:id, :hospital_id, 'system', :action, "
                     "'kiosk', :kiosk_id, 'operator-cli', '{}'::jsonb)"
                 ),
-                {"id": uuid7(), "hospital_id": hospital_id, "kiosk_id": kiosk_id},
+                {
+                    "id": uuid7(),
+                    "hospital_id": hospital_id,
+                    "kiosk_id": kiosk_id,
+                    "action": (
+                        "kiosk.activation_code_issued"
+                        if existing is not None
+                        else "kiosk.provisioned"
+                    ),
+                },
             )
     finally:
         await engine.dispose()
@@ -168,7 +308,7 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                         "INSERT INTO departments (id, hospital_id, code, token_prefix, name_en, "
                         "name_hi, name_mr) VALUES (:id, :hospital_id, :code, :prefix, :en, :hi, "
                         ":mr) "
-                        "ON CONFLICT (hospital_id, code) DO NOTHING"
+                        "ON CONFLICT DO NOTHING"
                     ),
                     {
                         "id": stable_uuid7(f"{hospital_id}:department:{code}"),
@@ -198,7 +338,7 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                     await connection.execute(
                         text(
                             "SELECT lower(email) AS email FROM users "
-                            "WHERE hospital_id = :hospital_id"
+                            "WHERE hospital_id = :hospital_id AND deleted_at IS NULL"
                         ),
                         {"hospital_id": hospital_id},
                     )
@@ -207,6 +347,8 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                 .all()
             )
             existing_emails = set(existing)
+            # The demo roster: one administrator, one doctor per department (doctor01 is
+            # General Medicine) and five nurses who work General Medicine with doctor01.
             users = [("admin", "Demo Administrator", admin_email, admin_password, None)]
             users.extend(
                 (
@@ -214,9 +356,9 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                     f"Demo Doctor {index:02d}",
                     f"doctor{index:02d}@demo.opdsathi.test",
                     staff_password,
-                    doctor_department_ids[(index - 1) % len(doctor_department_ids)],
+                    department_id,
                 )
-                for index in range(1, 13)
+                for index, department_id in enumerate(doctor_department_ids, start=1)
             )
             users.extend(
                 (
@@ -226,7 +368,20 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                     staff_password,
                     general_medicine_id,
                 )
-                for index in range(1, 4)
+                for index in range(1, 6)
+            )
+            # Earlier demo seeds made a second doctor for some departments; retire them.
+            roster = [email for role, _name, email, _password, _department in users]
+            await connection.execute(
+                text(
+                    "UPDATE users SET deleted_at = now(), is_active = false "
+                    "WHERE hospital_id = :hospital_id AND deleted_at IS NULL "
+                    "AND role IN ('doctor', 'nurse') "
+                    "AND lower(email) LIKE '%@demo.opdsathi.test' "
+                    "AND (lower(email) LIKE 'doctor%' OR lower(email) LIKE 'nurse%') "
+                    "AND lower(email) NOT IN :roster"
+                ).bindparams(bindparam("roster", expanding=True)),
+                {"hospital_id": hospital_id, "roster": roster},
             )
             for role, name, email, password, department_id in users:
                 if email in existing_emails:
@@ -235,7 +390,7 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                         text(
                             "UPDATE users SET password_hash = :password_hash, failed_logins = 0, "
                             "locked_until = NULL WHERE hospital_id = :hospital_id "
-                            "AND lower(email) = :email"
+                            "AND lower(email) = :email AND deleted_at IS NULL"
                         ),
                         {
                             "password_hash": hash_password(password),
@@ -247,8 +402,8 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                         await connection.execute(
                             text(
                                 "UPDATE users SET department_id = :department_id "
-                                "WHERE hospital_id = :hospital_id AND lower(email) = :email "
-                                "AND role = 'doctor'"
+                            "WHERE hospital_id = :hospital_id AND lower(email) = :email "
+                            "AND role = 'doctor' AND deleted_at IS NULL"
                             ),
                             {
                                 "department_id": department_id,
@@ -284,14 +439,16 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                 new_kiosk_codes.append(activation_code)
                 await connection.execute(
                     text(
-                        "INSERT INTO kiosks (id, hospital_id, label, activation_code_hash) "
-                        "VALUES (:id, :hospital_id, :label, :activation_hash)"
+                        "INSERT INTO kiosks (id, hospital_id, label, activation_code_hash, "
+                        "activation_code_expires_at) "
+                        "VALUES (:id, :hospital_id, :label, :activation_hash, :expires_at)"
                     ),
                     {
                         "id": uuid7(),
                         "hospital_id": hospital_id,
                         "label": f"Demo kiosk {index}",
                         "activation_hash": digest_secret(activation_code),
+                        "expires_at": _activation_expiry(),
                     },
                 )
     finally:
@@ -745,6 +902,19 @@ def main() -> None:
     admin.add_argument("--hospital-code")
     admin.add_argument("--name")
     admin.add_argument("--email")
+    setup = commands.add_parser(
+        "setup-hospital",
+        help="Onboard a new hospital: its first administrator and standard departments",
+    )
+    setup.add_argument("--name", help="Hospital name, as shown on its kiosks")
+    setup.add_argument("--code", help="Short unique code, e.g. gmc-nagpur")
+    setup.add_argument("--admin-name")
+    setup.add_argument("--admin-email")
+    setup.add_argument(
+        "--no-standard-departments",
+        action="store_true",
+        help="Start with no departments (the administrator creates them)",
+    )
     kiosk = commands.add_parser("create-kiosk", help="Create a one-time kiosk activation code")
     kiosk.add_argument("--hospital-id", type=UUID, required=True)
     kiosk.add_argument("--label", required=True)
@@ -793,7 +963,9 @@ def main() -> None:
         return
     if args.command == "demo-kiosk":
         demo_hospital = stable_uuid7("opd-saathi:demo-nagpur-government")
-        code = asyncio.run(_create_kiosk(hospital_id=demo_hospital, label="Demo kiosk"))
+        code = asyncio.run(
+            _create_kiosk(hospital_id=demo_hospital, label="Demo kiosk", reuse=True)
+        )
         base = str(args.web_url).split(",")[0].rstrip("/")
         print("Open this link once on the kiosk device to activate it:")
         print(f"  {base}/kiosk?activate={code}")
@@ -815,6 +987,38 @@ def main() -> None:
         return
     if args.command == "clear-bulk":
         asyncio.run(_demo_history("bulk"))
+        return
+    if args.command == "setup-hospital":
+        hospital_name = args.name or input("Hospital name (shown on its kiosks): ").strip()
+        hospital_code = (
+            args.code or input("Short unique hospital code (e.g. gmc-nagpur): ").strip()
+        ).lower()
+        admin_name = args.admin_name or input("Administrator's full name: ").strip()
+        admin_email = args.admin_email or input("Administrator's email: ").strip()
+        if not all((hospital_name, hospital_code, admin_name, admin_email)):
+            raise SystemExit("Hospital name, code, administrator name and email are required.")
+        password = _read_new_password()
+        try:
+            hospital_id = asyncio.run(
+                _setup_hospital(
+                    hospital_name=hospital_name,
+                    hospital_code=hospital_code,
+                    admin_name=admin_name,
+                    admin_email=admin_email,
+                    admin_password=password,
+                    standard_departments=not args.no_standard_departments,
+                )
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        print(f"Hospital ready: {hospital_name} ({hospital_id})")
+        print(f"Administrator: {admin_email.strip().lower()}")
+        if not args.no_standard_departments:
+            print(f"Departments: {len(_DEMO_DEPARTMENTS)} standard departments created.")
+        print(
+            "Next: sign in at /staff, then use Settings to add staff accounts and to "
+            "register each kiosk (each one gets its own activation code)."
+        )
         return
     if args.command == "create-admin":
         hospital_name = args.hospital_name

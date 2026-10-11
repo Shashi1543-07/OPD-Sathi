@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import type { Language } from "../i18n";
 import { apiOrigin, apiSocketUrl } from "./api";
 import { staffAuth } from "./auth";
@@ -5,7 +6,13 @@ import type { OfflineSubmission } from "./offlineOutbox";
 import type { SpeechCapabilities } from "./voice";
 
 const kioskKey = "osa.kiosk.access";
+/** The long-lived device secret from activation; it renews the short-lived access token. */
+const deviceKey = "osa.kiosk.device";
+/** The name of the hospital this kiosk belongs to, shown on screen and on token slips. */
+const hospitalKey = "osa.kiosk.hospital";
 const patientKey = "osa.patient.session";
+/** Renew the kiosk token this long before it expires, so a patient never meets an expired one. */
+const RENEW_BEFORE_MS = 30 * 60_000;
 
 type Session = {
   visit_id: string;
@@ -72,24 +79,129 @@ export type IntakeResponse = {
   draft?: string | number | null;
 };
 
-// The kiosk device token survives tab restarts; it expires server-side (KIOSK_TOKEN_HOURS).
-function getKioskToken() {
+// Kiosk credentials survive tab restarts and reboots. The access token expires server-side
+// (KIOSK_TOKEN_HOURS); the device secret renews it for as long as the kiosk stays in service.
+function readKioskValue(key: string) {
   try {
-    return localStorage.getItem(kioskKey) ?? sessionStorage.getItem(kioskKey);
+    return localStorage.getItem(key) ?? sessionStorage.getItem(key);
   } catch {
-    return sessionStorage.getItem(kioskKey);
+    return sessionStorage.getItem(key);
   }
 }
 
-function setKioskToken(token: string | null) {
+function writeKioskValue(key: string, value: string | null) {
   try {
-    if (token) localStorage.setItem(kioskKey, token);
-    else localStorage.removeItem(kioskKey);
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
   } catch {
     // Fall back to the tab-scoped store below.
   }
-  if (token) sessionStorage.setItem(kioskKey, token);
-  else sessionStorage.removeItem(kioskKey);
+  if (value) sessionStorage.setItem(key, value);
+  else sessionStorage.removeItem(key);
+}
+
+const getKioskToken = () => readKioskValue(kioskKey);
+const setKioskToken = (token: string | null) => writeKioskValue(kioskKey, token);
+const getDeviceSecret = () => readKioskValue(deviceKey);
+
+const hospitalListeners = new Set<() => void>();
+
+function rememberHospital(name: string | null | undefined) {
+  const next = name?.trim() || null;
+  if (next === readKioskValue(hospitalKey)) return;
+  writeKioskValue(hospitalKey, next);
+  hospitalListeners.forEach((listener) => listener());
+}
+
+/** This kiosk's hospital name, or null before the kiosk is set up. */
+export function useKioskHospitalName(): string | null {
+  return useSyncExternalStore(
+    (listener) => {
+      hospitalListeners.add(listener);
+      return () => hospitalListeners.delete(listener);
+    },
+    () => readKioskValue(hospitalKey),
+  );
+}
+
+/** Forget this kiosk's pairing: it shows the activation screen until set up again. */
+function forgetKiosk() {
+  setKioskToken(null);
+  writeKioskValue(deviceKey, null);
+  rememberHospital(null);
+}
+
+function tokenExpiresAt(token: string): number | null {
+  try {
+    const payload = token.split(".")[1];
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as {
+      exp?: number;
+    };
+    return typeof claims.exp === "number" ? claims.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+let renewal: Promise<string | null> | null = null;
+
+/**
+ * A kiosk access token to use now, renewed with the device secret when it is missing or
+ * close to expiry (or always, with `force`). The pairing is dropped only when the server
+ * says this device is no longer paired (deleted, or set up on another device); network
+ * errors and a turned-off kiosk keep it, so the kiosk recovers on its own.
+ */
+async function kioskToken(force = false): Promise<string | null> {
+  const token = getKioskToken();
+  const secret = getDeviceSecret();
+  if (!secret) return token;
+  const expiresAt = token ? tokenExpiresAt(token) : null;
+  if (!force && token && expiresAt !== null && expiresAt - Date.now() > RENEW_BEFORE_MS) {
+    return token;
+  }
+  renewal ??= call<{ access_token: string; hospital_name?: string }>("/kiosks/token", {
+    method: "POST",
+    body: JSON.stringify({ device_secret: secret }),
+  })
+    .then((response) => {
+      setKioskToken(response.access_token);
+      rememberHospital(response.hospital_name);
+      return response.access_token;
+    })
+    .catch((cause: unknown) => {
+      if (cause instanceof IntakeRequestError && cause.status === 401) {
+        forgetKiosk();
+        return null;
+      }
+      return getKioskToken();
+    })
+    .finally(() => {
+      renewal = null;
+    });
+  return renewal;
+}
+
+/** A kiosk-authenticated request that renews the token and retries once if it was refused. */
+async function kioskCall<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = await kioskToken();
+  try {
+    return await call<T>(path, options, token ?? undefined);
+  } catch (cause) {
+    if (!(cause instanceof IntakeRequestError)) throw cause;
+    if (cause.status === 401) {
+      // Without a device secret (activated before renewal existed) there is no way back.
+      if (!getDeviceSecret()) {
+        setKioskToken(null);
+        throw cause;
+      }
+      const renewed = await kioskToken(true);
+      if (!renewed || renewed === token) throw cause;
+      return call<T>(path, options, renewed);
+    }
+    // Refused while signed in: find out whether this device was replaced or the kiosk deleted.
+    if (cause.code === "KIOSK_NOT_READY") await kioskToken(true);
+    throw cause;
+  }
 }
 
 function getPatientSession(): Session | null {
@@ -161,55 +273,57 @@ function connectAudio(onMessage: (message: MessageEvent<string>) => void) {
 }
 
 export const intake = {
-  isKioskActivated: () => Boolean(getKioskToken()),
+  isKioskActivated: () => Boolean(getKioskToken() || getDeviceSecret()),
   kioskAccessToken: getKioskToken,
   submitOffline: (submission: OfflineSubmission) =>
-    call<{
+    kioskCall<{
       confirmed: boolean;
       token: string;
       status_token: string;
       status_url: string;
       position: number | null;
+    }>("/intake/offline-submissions", {
+      method: "POST",
+      headers: { "Idempotency-Key": submission.idempotency_key },
+      body: JSON.stringify(submission),
+    }),
+  activate: async (activationCode: string) => {
+    const response = await call<{
+      access_token: string;
+      device_secret: string;
+      hospital_name?: string;
     }>(
-      "/intake/offline-submissions",
+      "/kiosks/activate",
       {
         method: "POST",
-        headers: { "Idempotency-Key": submission.idempotency_key },
-        body: JSON.stringify(submission),
+        body: JSON.stringify({ activation_code: activationCode }),
       },
-      getKioskToken() ?? undefined,
-    ),
-  activate: async (activationCode: string) => {
-    const response = await call<{ access_token: string }>("/kiosks/activate", {
-      method: "POST",
-      body: JSON.stringify({ activation_code: activationCode }),
-    });
+    );
     setKioskToken(response.access_token);
+    writeKioskValue(deviceKey, response.device_secret);
+    rememberHospital(response.hospital_name);
   },
-  forgetKiosk: () => setKioskToken(null),
+  forgetKiosk,
   /** Tells the server this kiosk is switched on, so administrators can see it online. */
   heartbeat: async () => {
-    const token = getKioskToken();
+    const token = await kioskToken();
     if (!token) return;
     try {
-      await call<{ active: boolean }>("/kiosks/heartbeat", { method: "POST" }, token);
+      const beat = await call<{ active: boolean; hospital_name?: string }>(
+        "/kiosks/heartbeat",
+        { method: "POST" },
+        token,
+      );
+      rememberHospital(beat.hospital_name);
     } catch {
       // Offline or briefly unreachable: the next beat will report it.
     }
   },
   start: async (language: Language) => {
-    let response: Session & { consent: ConsentCopy };
-    try {
-      response = await call<Session & { consent: ConsentCopy }>(
-        "/intake/sessions",
-        { method: "POST", body: JSON.stringify({ language }) },
-        getKioskToken() ?? undefined,
-      );
-    } catch (cause) {
-      // An expired or revoked kiosk token: return the kiosk to activation.
-      if (cause instanceof IntakeRequestError && cause.status === 401) setKioskToken(null);
-      throw cause;
-    }
+    const response = await kioskCall<Session & { consent: ConsentCopy }>("/intake/sessions", {
+      method: "POST",
+      body: JSON.stringify({ language }),
+    });
     sessionStorage.setItem(patientKey, JSON.stringify(response));
     return response;
   },

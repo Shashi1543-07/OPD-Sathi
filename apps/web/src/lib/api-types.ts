@@ -87,8 +87,38 @@ export interface paths {
         /**
          * Kiosk Heartbeat
          * @description Called by an open kiosk about once a minute so administrators can see it is online.
+         *
+         *     It also returns the hospital's name, so a renamed hospital shows up on its kiosks.
          */
         post: operations["kiosk_heartbeat_kiosks_heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/kiosks/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Renew Kiosk Token
+         * @description Give a paired kiosk device a new access token in exchange for its device secret.
+         *
+         *     Access tokens stay short-lived; the device secret (issued once at activation and kept
+         *     on the device) lets a kiosk stay signed in for as long as an administrator keeps it in
+         *     service, without anyone typing an activation code again. Deleting or re-pairing the
+         *     kiosk invalidates the secret at once (401: the device forgets it). A deactivated kiosk
+         *     is refused with 403 but keeps its secret, so activating it again needs no new code.
+         *     The secret is not rotated on use, so a renewal lost to a flaky hospital network never
+         *     strands the kiosk.
+         */
+        post: operations["renew_kiosk_token_kiosks_token_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -264,6 +294,55 @@ export interface paths {
         head?: never;
         /** Patch Kiosk */
         patch: operations["patch_kiosk_admin_kiosks__resource_id__patch"];
+        trace?: never;
+    };
+    "/admin/kiosks/{resource_id}/activation-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Kiosk Activation Code
+         * @description Issue a fresh one-time activation code for an existing kiosk.
+         *
+         *     Codes are stored only as hashes, so an earlier code can never be shown again; instead
+         *     an administrator can get a new one for the same kiosk whenever a device needs setting
+         *     up. The kiosk keeps its id, label and registration history.
+         */
+        post: operations["issue_kiosk_activation_code_admin_kiosks__resource_id__activation_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/{resource}/{resource_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Resource
+         * @description Delete a department, staff account or kiosk for administrators.
+         *
+         *     The record is archived, not erased: past visits, case sheets and the audit trail keep
+         *     pointing at it. It disappears from administration, can no longer sign in or be chosen,
+         *     and its email, code or token prefix can be used again. A department is only deleted
+         *     once no patient visit in it is still open and no staff member is assigned to it.
+         */
+        delete: operations["delete_resource_admin__resource___resource_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/analytics/summary": {
@@ -1282,6 +1361,11 @@ export interface components {
             /** Is Active */
             is_active?: boolean | null;
         };
+        /** KioskTokenPayload */
+        KioskTokenPayload: {
+            /** Device Secret */
+            device_secret: string;
+        };
         /** LanguagePayload */
         LanguagePayload: {
             /**
@@ -1692,8 +1776,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: boolean;
+                        [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    renew_kiosk_token_kiosks_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskTokenPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2053,6 +2172,73 @@ export interface operations {
                 "application/json": components["schemas"]["KioskPatch"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_kiosk_activation_code_admin_kiosks__resource_id__activation_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_resource_admin__resource___resource_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: "departments" | "users" | "kiosks";
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

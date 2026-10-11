@@ -2,16 +2,22 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNod
 import { useTranslation } from "react-i18next";
 import {
   Building2,
+  Check,
+  Copy,
   Eye,
   EyeOff,
   KeyRound,
+  Link2,
   Monitor,
+  MoreHorizontal,
   Network,
   PlusCircle,
   Search,
+  Trash2,
   UserRound,
   Users,
 } from "lucide-react";
+import { Popover } from "../components/ui/Popover";
 import type { StaffRole } from "../lib/auth";
 import { staffAuth } from "../lib/auth";
 
@@ -38,12 +44,22 @@ type Kiosk = {
   label: string;
   is_active: boolean;
   last_seen_at: string | null;
+  paired_at?: string | null;
   created_at?: string | null;
+  activation_pending?: boolean;
+  activation_code_expires_at?: string | null;
+  registrations_today?: number;
+  registrations_total?: number;
 };
 type Page<T> = { items: T[]; next_cursor: string | null };
-type Activation = { kiosk: string; code: string } | null;
+type Activation = { kiosk: string; code: string; expiresAt: string | null } | null;
 type Filters = { search: string; role: string; status: string };
-type Pending = { resource: Resource; item: { id: string; is_active: boolean }; name: string };
+type Pending = {
+  action: "deactivate" | "delete";
+  resource: Resource;
+  item: { id: string; is_active: boolean };
+  name: string;
+};
 
 const resources: Resource[] = ["users", "kiosks", "departments"];
 const TAB_ICON: Record<Resource, typeof Users> = {
@@ -98,6 +114,7 @@ export function AdminConsole() {
   });
   const [pending, setPending] = useState<Pending | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const baseId = useId();
   const tabRefs = useRef<Partial<Record<Resource, HTMLButtonElement | null>>>({});
 
@@ -197,13 +214,20 @@ export function AdminConsole() {
           "Idempotency-Key": crypto.randomUUID(),
         },
         body: JSON.stringify(payload),
-      })) as { id: string; activation_code?: string; label?: string };
+      })) as {
+        id: string;
+        activation_code?: string;
+        activation_code_expires_at?: string | null;
+        label?: string;
+      };
       formElement.reset();
       setShowPassword(false);
       if (created.activation_code) {
+        setCopied(null);
         setActivation({
           kiosk: created.label ?? t("newKiosk"),
           code: created.activation_code,
+          expiresAt: created.activation_code_expires_at ?? null,
         });
         setResource("kiosks");
         await load("kiosks");
@@ -241,8 +265,66 @@ export function AdminConsole() {
 
   /** Deactivating asks first; activating again is harmless and happens at once. */
   function requestToggle(item: { id: string; is_active: boolean }, name: string) {
-    if (item.is_active) setPending({ resource, item, name });
+    if (item.is_active) setPending({ action: "deactivate", resource, item, name });
     else void toggle(resource, item);
+  }
+
+  async function remove(target: Resource, item: { id: string }) {
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await request(`/admin/${target}/${item.id}`, {
+        method: "DELETE",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+      });
+      if (target === "kiosks") setActivation(null);
+      setNotice(t("adminDeleted"));
+      await load(target);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("adminRequestError"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** A fresh one-time code for an existing kiosk: same kiosk, same history, new device. */
+  async function issueCode(kiosk: Kiosk) {
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const issued = (await request(`/admin/kiosks/${kiosk.id}/activation-code`, {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+      })) as { activation_code?: string; activation_code_expires_at?: string; label?: string };
+      if (issued.activation_code) {
+        setCopied(null);
+        setActivation({
+          kiosk: issued.label ?? kiosk.label,
+          code: issued.activation_code,
+          expiresAt: issued.activation_code_expires_at ?? null,
+        });
+      }
+      await load("kiosks");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("adminRequestError"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const activationLink = (code: string) =>
+    `${window.location.origin}/kiosk?activate=${encodeURIComponent(code)}`;
+
+  async function copy(kind: "code" | "link", value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(kind);
+    } catch {
+      // Clipboard blocked (e.g. plain http on another device): the code is still selectable.
+      setError(t("copyFailed"));
+    }
   }
 
   const departmentById = useMemo(
@@ -337,6 +419,52 @@ export function AdminConsole() {
       {item.is_active ? t("deactivate") : t("activate")}
     </button>
   );
+  const rowActions = (
+    item: { id: string; is_active: boolean },
+    name: string,
+    options: { self?: boolean; kiosk?: Kiosk } = {},
+  ) => (
+    <span className="adm-actions">
+      {toggleButton(item, name, options.self)}
+      <Popover
+        label={<MoreHorizontal aria-hidden="true" size={16} />}
+        ariaLabel={t("moreActionsFor", { name })}
+        triggerClassName="adm-more"
+        panelClassName="adm-menu"
+        align="end"
+      >
+        {(close) => (
+          <>
+            {options.kiosk && (
+              <button
+                type="button"
+                disabled={saving || !item.is_active}
+                title={item.is_active ? undefined : t("newCodeNeedsActive")}
+                onClick={() => {
+                  close();
+                  void issueCode(options.kiosk as Kiosk);
+                }}
+              >
+                <KeyRound aria-hidden="true" size={15} /> {t("newActivationCode")}
+              </button>
+            )}
+            <button
+              type="button"
+              className="is-danger"
+              disabled={saving || options.self}
+              title={options.self ? t("cannotDeleteSelf") : undefined}
+              onClick={() => {
+                close();
+                setPending({ action: "delete", resource, item, name });
+              }}
+            >
+              <Trash2 aria-hidden="true" size={15} /> {t("deleteRecord")}
+            </button>
+          </>
+        )}
+      </Popover>
+    </span>
+  );
 
   let rows: ReactNode;
   let head: ReactNode;
@@ -373,7 +501,7 @@ export function AdminConsole() {
             {item.department_id ? departmentLabel(departmentById.get(item.department_id)) : t("noDepartment")}
           </td>
           <td data-label={t("statusColumn")}>{statusPill(item.is_active)}</td>
-          <td className="adm-col-action">{toggleButton(item, item.name, self)}</td>
+          <td className="adm-col-action">{rowActions(item, item.name, { self })}</td>
         </tr>
       );
     });
@@ -397,6 +525,12 @@ export function AdminConsole() {
             <span className="adm-person-text">
               <strong>{item.label}</strong>
               <span title={item.id}>{t("kioskId", { id: item.id.slice(-8) })}</span>
+              <span>
+                {t("kioskRegistrations", {
+                  today: item.registrations_today ?? 0,
+                  total: item.registrations_total ?? 0,
+                })}
+              </span>
             </span>
           </span>
         </td>
@@ -414,12 +548,21 @@ export function AdminConsole() {
                     {t("kioskLastSeenAt", { when: ago(item.last_seen_at) })}
                   </span>
                 )}
+                {item.activation_pending && (
+                  <span className="adm-muted">
+                    {item.activation_code_expires_at
+                      ? t("kioskCodePendingUntil", {
+                          when: dateTime.format(new Date(item.activation_code_expires_at)),
+                        })
+                      : t("kioskCodePending")}
+                  </span>
+                )}
               </span>
             );
           })()}
         </td>
         <td data-label={t("statusColumn")}>{statusPill(item.is_active)}</td>
-        <td className="adm-col-action">{toggleButton(item, item.label)}</td>
+        <td className="adm-col-action">{rowActions(item, item.label, { kiosk: item })}</td>
       </tr>
     ));
   } else {
@@ -457,7 +600,7 @@ export function AdminConsole() {
           </span>
         </td>
         <td data-label={t("statusColumn")}>{statusPill(item.is_active)}</td>
-        <td className="adm-col-action">{toggleButton(item, item.name_en)}</td>
+        <td className="adm-col-action">{rowActions(item, item.name_en)}</td>
       </tr>
     ));
   }
@@ -524,16 +667,30 @@ export function AdminConsole() {
         aria-labelledby={`${baseId}-tab-${resource}`}
       >
         <div className="adm-side">
-          {activation && (
+          {activation && resource === "kiosks" && (
             <aside className="adm-activation" aria-live="polite">
               <h3>
                 <KeyRound aria-hidden="true" size={17} /> {t("activationCodeTitle")}
               </h3>
               <p>{t("activationCodeOnce", { kiosk: activation.kiosk })}</p>
               <code>{activation.code}</code>
-              <button type="button" onClick={() => setActivation(null)}>
-                {t("dismissActivation")}
-              </button>
+              {activation.expiresAt && (
+                <p>{t("activationCodeExpires", { when: dateTime.format(new Date(activation.expiresAt)) })}</p>
+              )}
+              <div className="adm-activation-actions">
+                <button type="button" onClick={() => void copy("code", activation.code)}>
+                  {copied === "code" ? <Check aria-hidden="true" size={15} /> : <Copy aria-hidden="true" size={15} />}
+                  {copied === "code" ? t("copied") : t("copyCode")}
+                </button>
+                <button type="button" onClick={() => void copy("link", activationLink(activation.code))}>
+                  {copied === "link" ? <Check aria-hidden="true" size={15} /> : <Link2 aria-hidden="true" size={15} />}
+                  {copied === "link" ? t("copied") : t("copySetupLink")}
+                </button>
+                <button type="button" onClick={() => setActivation(null)}>
+                  {t("dismissActivation")}
+                </button>
+              </div>
+              <p>{t("activationCodeHowTo")}</p>
             </aside>
           )}
           <form className="adm-card adm-form" onSubmit={(event) => void create(event)}>
@@ -762,9 +919,17 @@ export function AdminConsole() {
             aria-labelledby={`${baseId}-confirm`}
             aria-describedby={`${baseId}-confirm-text`}
           >
-            <h3 id={`${baseId}-confirm`}>{t("confirmDeactivateTitle", { name: pending.name })}</h3>
+            <h3 id={`${baseId}-confirm`}>
+              {pending.action === "delete"
+                ? t("confirmDeleteTitle", { name: pending.name })
+                : t("confirmDeactivateTitle", { name: pending.name })}
+            </h3>
             <p id={`${baseId}-confirm-text`}>
-              {pending.resource === "users" ? t("confirmDeactivateUser") : t("confirmDeactivateOther")}
+              {pending.action === "delete"
+                ? t(`confirmDelete${cap(pending.resource)}`)
+                : pending.resource === "users"
+                  ? t("confirmDeactivateUser")
+                  : t("confirmDeactivateOther")}
             </p>
             <div className="rp-dialog-actions">
               <button type="button" autoFocus onClick={() => setPending(null)}>
@@ -776,10 +941,11 @@ export function AdminConsole() {
                 onClick={() => {
                   const target = pending;
                   setPending(null);
-                  void toggle(target.resource, target.item);
+                  if (target.action === "delete") void remove(target.resource, target.item);
+                  else void toggle(target.resource, target.item);
                 }}
               >
-                {t("deactivate")}
+                {pending.action === "delete" ? t("deleteRecord") : t("deactivate")}
               </button>
             </div>
           </section>

@@ -11,7 +11,7 @@ import {
 } from "../components/ui";
 import { AudioPrompt } from "../components/ui/AudioPrompt";
 import { apiOrigin } from "../lib/api";
-import { intake } from "../lib/intake";
+import { intake, useKioskHospitalName } from "../lib/intake";
 import { useKioskPrefs } from "../lib/kioskPrefs";
 import { stopSpeaking } from "../lib/voice";
 import "./screens.css";
@@ -27,6 +27,7 @@ export function KioskShell() {
   const location = useLocation();
   const judgeMode = new URLSearchParams(location.search).get("demo") === "1";
   const hospitalLogo = import.meta.env.VITE_HOSPITAL_LOGO_URL?.trim();
+  const hospitalName = useKioskHospitalName();
   const [warning, setWarning] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -154,7 +155,7 @@ export function KioskShell() {
           )}
           <div>
             <strong>{t("appName")}</strong>
-            <small>{t("clinicName", { ns: "kiosk" })}</small>
+            {hospitalName && <small>{hospitalName}</small>}
           </div>
         </div>
         <div className="kiosk-tools">

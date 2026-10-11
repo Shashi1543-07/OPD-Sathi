@@ -50,6 +50,36 @@ class KioskActivationPayload(StrictPayload):
     activation_code: str = Field(min_length=40, max_length=64)
 
 
+class KioskTokenPayload(StrictPayload):
+    device_secret: str = Field(min_length=40, max_length=64)
+
+
+async def _hospital_name(connection: Any, hospital_id: UUID) -> str:
+    """The kiosk shows its own hospital's name (each hospital's kiosks are its own)."""
+    name = await connection.scalar(
+        text("SELECT name FROM hospitals WHERE id = :hospital_id"),
+        {"hospital_id": hospital_id},
+    )
+    return str(name or "")
+
+
+def _kiosk_token_response(
+    settings: Settings, *, kiosk_id: UUID, hospital_id: UUID
+) -> dict[str, Any]:
+    token = issue_access_token(
+        subject=kiosk_id,
+        role="kiosk",
+        hospital_id=hospital_id,
+        settings=settings,
+        lifetime=timedelta(hours=settings.kiosk_token_hours),
+    )
+    return {
+        "access_token": token,
+        "token_type": TokenScheme.BEARER.value,
+        "expires_in": settings.kiosk_token_hours * 60 * 60,
+    }
+
+
 def _error(
     status: int,
     code: str,
@@ -190,7 +220,8 @@ async def login(payload: LoginPayload, request: Request, response: Response) -> 
                 text(
                     "SELECT id, hospital_id, role, name, email, password_hash, failed_logins, "
                     "locked_until, is_active FROM users "
-                    "WHERE hospital_id = :hospital_id AND lower(email) = :email FOR UPDATE"
+                    "WHERE hospital_id = :hospital_id AND lower(email) = :email "
+                    "AND deleted_at IS NULL FOR UPDATE"
                 ),
                 {"hospital_id": payload.hospital_id, "email": payload.email},
             )
@@ -557,18 +588,111 @@ async def logout(request: Request, response: Response) -> Response:
 async def kiosk_heartbeat(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_kiosk())],
-) -> dict[str, bool]:
-    """Called by an open kiosk about once a minute so administrators can see it is online."""
+) -> dict[str, Any]:
+    """Called by an open kiosk about once a minute so administrators can see it is online.
+
+    It also returns the hospital's name, so a renamed hospital shows up on its kiosks.
+    """
     try:
         hospital_id, kiosk_id = UUID(principal["hospital_id"]), UUID(principal["sub"])
     except (KeyError, TypeError, ValueError) as exc:
         raise _error(401, "UNAUTHENTICATED", "Sign-in required", "The session is invalid.") from exc
+    issued_at = principal.get("iat")
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         active = await IntakeRepository(connection, request.app.state.settings).touch_kiosk(
-            hospital_id=hospital_id, kiosk_id=kiosk_id
+            hospital_id=hospital_id,
+            kiosk_id=kiosk_id,
+            issued_at=issued_at if isinstance(issued_at, int) else None,
         )
-    return {"active": active}
+        hospital_name = await _hospital_name(connection, hospital_id)
+    return {"active": active, "hospital_name": hospital_name}
+
+
+@router.post("/kiosks/token")
+async def renew_kiosk_token(
+    payload: KioskTokenPayload,
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Give a paired kiosk device a new access token in exchange for its device secret.
+
+    Access tokens stay short-lived; the device secret (issued once at activation and kept
+    on the device) lets a kiosk stay signed in for as long as an administrator keeps it in
+    service, without anyone typing an activation code again. Deleting or re-pairing the
+    kiosk invalidates the secret at once (401: the device forgets it). A deactivated kiosk
+    is refused with 403 but keeps its secret, so activating it again needs no new code.
+    The secret is not rotated on use, so a renewal lost to a flaky hospital network never
+    strands the kiosk.
+    """
+    settings: Settings = request.app.state.settings
+    await _limit_request(
+        request,
+        response,
+        name="kiosk-token",
+        limit=120,
+        window_seconds=60,
+        fail_closed=False,
+    )
+    secret_hash = digest_secret(payload.device_secret)
+    kiosk: dict[str, Any] | None = None
+    async with request.app.state.engine.begin() as connection:
+        await set_secret_lookup_scope(
+            connection, setting="app.kiosk_secret_hash", secret_hash=secret_hash
+        )
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT id, hospital_id, is_active FROM kiosks "
+                        "WHERE secret_hash = :secret_hash AND deleted_at IS NULL LIMIT 1"
+                    ),
+                    {"secret_hash": secret_hash},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is not None and not row["is_active"]:
+            raise _error(
+                403,
+                "KIOSK_TURNED_OFF",
+                "Kiosk turned off",
+                "An administrator has turned this kiosk off. Ask staff to turn it on again.",
+            )
+        if row is not None:
+            kiosk = dict(row)
+            await set_hospital_scope(connection, kiosk["hospital_id"])
+            await connection.execute(
+                text(
+                    "UPDATE kiosks SET last_seen_at = now() "
+                    "WHERE hospital_id = :hospital_id AND id = :id"
+                ),
+                {"hospital_id": kiosk["hospital_id"], "id": kiosk["id"]},
+            )
+            await audit(
+                connection,
+                request,
+                hospital_id=kiosk["hospital_id"],
+                actor_type="kiosk",
+                actor_id=kiosk["id"],
+                action="kiosk.token_renewed",
+                resource_type="kiosk",
+                resource_id=kiosk["id"],
+            )
+            kiosk["hospital_name"] = await _hospital_name(connection, kiosk["hospital_id"])
+    if kiosk is None:
+        raise _error(
+            401,
+            "KIOSK_NOT_PAIRED",
+            "Kiosk sign-in ended",
+            "This kiosk was deleted or set up on another device. "
+            "Ask an administrator for a new activation code.",
+        )
+    return {
+        **_kiosk_token_response(settings, kiosk_id=kiosk["id"], hospital_id=kiosk["hospital_id"]),
+        "hospital_name": kiosk["hospital_name"],
+    }
 
 
 @router.post("/kiosks/activate")
@@ -600,7 +724,9 @@ async def activate_kiosk(
                 await connection.execute(
                     text(
                         "SELECT id, hospital_id FROM kiosks "
-                        "WHERE activation_code_hash = :activation_hash AND is_active = true LIMIT 1"
+                        "WHERE activation_code_hash = :activation_hash AND is_active = true "
+                        "AND deleted_at IS NULL AND (activation_code_expires_at IS NULL "
+                        "OR activation_code_expires_at > now()) LIMIT 1"
                     ),
                     {"activation_hash": activation_hash},
                 )
@@ -616,7 +742,7 @@ async def activate_kiosk(
                         text(
                             "SELECT id, hospital_id FROM kiosks WHERE id = :id "
                             "AND activation_code_hash = :activation_hash "
-                            "AND is_active = true FOR UPDATE"
+                            "AND is_active = true AND deleted_at IS NULL FOR UPDATE"
                         ),
                         {"id": kiosk["id"], "activation_hash": activation_hash},
                     )
@@ -628,13 +754,15 @@ async def activate_kiosk(
                 await connection.execute(
                     text(
                         "UPDATE kiosks SET activation_code_hash = NULL, "
-                        "secret_hash = :secret_hash, last_seen_at = now() WHERE id = :id"
+                        "activation_code_expires_at = NULL, secret_hash = :secret_hash, "
+                        "paired_at = now(), last_seen_at = now() WHERE id = :id"
                     ),
                     {"secret_hash": digest_secret(device_secret), "id": kiosk["id"]},
                 )
                 claims = {
                     "id": kiosk["id"],
                     "hospital_id": kiosk["hospital_id"],
+                    "hospital_name": await _hospital_name(connection, kiosk["hospital_id"]),
                 }
                 await audit(
                     connection,
@@ -651,18 +779,14 @@ async def activate_kiosk(
             401,
             "INVALID_ACTIVATION_CODE",
             "Kiosk activation failed",
-            "The activation code is invalid or has already been used.",
+            "The activation code is invalid, expired, or has already been used. "
+            "Ask an administrator for a new one.",
         )
-    token = issue_access_token(
-        subject=claims["id"],
-        role="kiosk",
-        hospital_id=claims["hospital_id"],
-        settings=settings,
-        lifetime=timedelta(hours=settings.kiosk_token_hours),
-    )
     return {
-        "access_token": token,
-        "token_type": TokenScheme.BEARER.value,
-        "expires_in": settings.kiosk_token_hours * 60 * 60,
+        **_kiosk_token_response(
+            settings, kiosk_id=claims["id"], hospital_id=claims["hospital_id"]
+        ),
+        "kiosk_id": str(claims["id"]),
+        "hospital_name": claims["hospital_name"],
         "device_secret": device_secret,
     }

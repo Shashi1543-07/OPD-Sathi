@@ -24,6 +24,7 @@ import {
   type DangerTile as DangerOption,
   type IntakeResponse,
   type Question,
+  useKioskHospitalName,
 } from "../lib/intake";
 import { useLanguageStore } from "../languageStore";
 import type { Language } from "../i18n";
@@ -540,6 +541,7 @@ export function KioskIntake() {
   const { t } = useTranslation(["intake", "kiosk"]);
   const navigate = useNavigate();
   const setLanguage = useLanguageStore((state) => state.setLanguage);
+  const hospitalName = useKioskHospitalName();
   const session = useMemo(() => intake.session(), []);
   const [consent, setConsent] = useState<ConsentCopy | undefined>(session?.consent);
   const language: Language = consent?.language ?? "en";
@@ -1258,7 +1260,7 @@ export function KioskIntake() {
             </div>
             <p className="intake-lead">{t("waitHint")}</p>
             <p className="intake-ticket-meta print-only">
-              {t("clinicName", { ns: "kiosk" })} ·{" "}
+              {hospitalName ? `${hospitalName} · ` : ""}
               {ticket.issuedAt.toLocaleString(language === "en" ? "en-IN" : `${language}-IN`, {
                 dateStyle: "medium",
                 timeStyle: "short",

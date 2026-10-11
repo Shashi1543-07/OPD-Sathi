@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     access_token_minutes: int = 10
     refresh_token_hours: int = 8
     kiosk_token_hours: int = 12
+    # How long a one-time kiosk activation code can be used before an admin must issue another.
+    kiosk_activation_code_hours: int = 24
     patient_session_hours: int = 2
     max_request_body_bytes: int = 1_048_576
     # Lets the staff sign-in page offer a hospital picker instead of a raw ID field.
@@ -124,8 +126,18 @@ class Settings(BaseSettings):
             raise ValueError("SARVAM_API_KEY is required when TTS_PROVIDER=sarvam")
         if self.access_token_minutes != 10:
             raise ValueError("staff access tokens must expire after 10 minutes")
-        if min(self.refresh_token_hours, self.kiosk_token_hours, self.patient_session_hours) < 1:
-            raise ValueError("refresh, kiosk, and patient token lifetimes must be positive")
+        if (
+            min(
+                self.refresh_token_hours,
+                self.kiosk_token_hours,
+                self.kiosk_activation_code_hours,
+                self.patient_session_hours,
+            )
+            < 1
+        ):
+            raise ValueError(
+                "refresh, kiosk, activation-code, and patient token lifetimes must be positive"
+            )
         if not self.jwt_issuer.strip() or not self.jwt_audience.strip():
             raise ValueError("JWT_ISSUER and JWT_AUDIENCE must not be empty")
         if self.app_env == "production" and (

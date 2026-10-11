@@ -1,11 +1,13 @@
 """Audited, tenant-scoped administrator CRUD for core reference data."""
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.config import Settings
 from app.core.audit import audit
@@ -18,6 +20,12 @@ from app.db.session import set_hospital_scope
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _admin_principal = require_role("admin")
+AdminResource = Literal["departments", "users", "kiosks"]
+_ALREADY_EXISTS = {
+    "departments": "A department with this code or token prefix already exists.",
+    "users": "A staff account with this email already exists.",
+    "kiosks": "This kiosk already exists.",
+}
 
 
 class Payload(BaseModel):
@@ -119,6 +127,37 @@ def _not_found() -> ApiProblemError:
     )
 
 
+def _conflict(code: str, title: str, detail: str) -> ApiProblemError:
+    return ApiProblemError(status=409, code=code, title=title, detail=detail)
+
+
+def _already_exists(resource: str) -> ApiProblemError:
+    return _conflict("ALREADY_EXISTS", "Already exists", _ALREADY_EXISTS[resource])
+
+
+def _unknown_department() -> ApiProblemError:
+    return ApiProblemError(
+        status=422,
+        code="VALIDATION_FAILED",
+        title="Unknown department",
+        detail="Choose a department that still exists.",
+    )
+
+
+def _activation_expiry(settings: Settings) -> datetime:
+    return datetime.now(UTC) + timedelta(hours=settings.kiosk_activation_code_hours)
+
+
+def _refuse_self(resource: str, resource_id: UUID, actor_id: UUID, action: str) -> None:
+    """Administrators cannot lock themselves out, so a hospital always keeps one admin."""
+    if resource == "users" and resource_id == actor_id:
+        raise _conflict(
+            "CANNOT_CHANGE_SELF",
+            "Not allowed on your own account",
+            f"You can't {action} your own account. Ask another administrator.",
+        )
+
+
 @router.get("/ai-settings")
 async def get_ai_settings(
     request: Request,
@@ -131,7 +170,8 @@ async def get_ai_settings(
             text("SELECT llm_enabled FROM hospital_ai_settings WHERE hospital_id = :hospital_id"),
             {"hospital_id": hospital_id},
         )
-    return {"llm_enabled": enabled is True}
+    # No saved choice means AI is on (as intake applies it) until an admin switches it off.
+    return {"llm_enabled": enabled is not False}
 
 
 @router.patch("/ai-settings")
@@ -167,7 +207,7 @@ async def patch_ai_settings(
 
 @router.get("/{resource}")
 async def list_resource(
-    resource: Literal["departments", "users", "kiosks"],
+    resource: AdminResource,
     request: Request,
     principal: Annotated[dict[str, Any], Depends(_admin_principal)],
     limit: int = Query(default=50, ge=1, le=100),
@@ -205,14 +245,23 @@ async def _create(
     if resource == "users":
         payload = {**payload, "password_hash": hash_password(payload.pop("password"))}
     if resource == "kiosks":
-        payload = {**payload, "activation_code_hash": digest_secret(activation_code or "")}
+        payload = {
+            **payload,
+            "activation_code_hash": digest_secret(activation_code or ""),
+            "activation_code_expires_at": _activation_expiry(settings),
+        }
 
     async def operation() -> dict[str, Any]:
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
-            record = await AdminRepository(connection, settings).create(
-                resource, hospital_id=hospital_id, values=payload
-            )
+            try:
+                record = await AdminRepository(connection, settings).create(
+                    resource, hospital_id=hospital_id, values=payload
+                )
+            except IntegrityError as exc:
+                raise _already_exists(resource) from exc
+            except LookupError as exc:
+                raise _unknown_department() from exc
             await audit(
                 connection,
                 request,
@@ -282,16 +331,23 @@ async def _patch(
     if resource == "users" and "email" in payload and payload["email"] is not None:
         payload["email"] = payload["email"].strip().lower()
     hospital_id, actor_id = _identity(principal)
+    if payload.get("is_active") is False:
+        _refuse_self(resource, resource_id, actor_id, "deactivate")
 
     async def operation() -> dict[str, Any]:
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
-            updated = await AdminRepository(connection, request.app.state.settings).patch(
-                resource,
-                hospital_id=hospital_id,
-                resource_id=resource_id,
-                values=payload,
-            )
+            try:
+                updated = await AdminRepository(connection, request.app.state.settings).patch(
+                    resource,
+                    hospital_id=hospital_id,
+                    resource_id=resource_id,
+                    values=payload,
+                )
+            except IntegrityError as exc:
+                raise _already_exists(resource) from exc
+            except LookupError as exc:
+                raise _unknown_department() from exc
             if updated is None:
                 raise _not_found()
             await audit(
@@ -349,4 +405,135 @@ async def patch_kiosk(
 ) -> dict[str, Any]:
     return await _patch(
         "kiosks", resource_id, payload.model_dump(exclude_unset=True), request, principal
+    )
+
+
+@router.post("/kiosks/{resource_id}/activation-code")
+async def issue_kiosk_activation_code(
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Issue a fresh one-time activation code for an existing kiosk.
+
+    Codes are stored only as hashes, so an earlier code can never be shown again; instead
+    an administrator can get a new one for the same kiosk whenever a device needs setting
+    up. The kiosk keeps its id, label and registration history.
+    """
+    hospital_id, actor_id = _identity(principal)
+    settings: Settings = request.app.state.settings
+    activation_code = create_opaque_secret()
+    expires_at = _activation_expiry(settings)
+
+    async def operation() -> dict[str, Any]:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            kiosk = await AdminRepository(connection, settings).issue_kiosk_code(
+                hospital_id=hospital_id,
+                kiosk_id=resource_id,
+                activation_code_hash=digest_secret(activation_code),
+                expires_at=expires_at,
+            )
+            if kiosk is None:
+                exists = await connection.scalar(
+                    text(
+                        "SELECT EXISTS (SELECT 1 FROM kiosks WHERE hospital_id = :hospital_id "
+                        "AND id = :id AND deleted_at IS NULL)"
+                    ),
+                    {"hospital_id": hospital_id, "id": resource_id},
+                )
+                if exists:
+                    raise _conflict(
+                        "KIOSK_INACTIVE",
+                        "Kiosk is turned off",
+                        "Activate this kiosk before setting up a device for it.",
+                    )
+                raise _not_found()
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user",
+                actor_id=actor_id,
+                action="admin.kiosks.activation_code_issued",
+                resource_type="kiosk",
+                resource_id=resource_id,
+            )
+            return {
+                "id": str(resource_id),
+                "label": kiosk["label"],
+                "activation_code": activation_code,
+                "activation_code_expires_at": expires_at.isoformat(),
+            }
+
+    return await IdempotencyStore(request.app.state.redis_state).execute(
+        request,
+        hospital_id=hospital_id,
+        actor_id=actor_id,
+        body={},
+        operation=operation,
+        response_fields_once=frozenset({"activation_code"}),
+    )
+
+
+@router.delete("/{resource}/{resource_id}")
+async def delete_resource(
+    resource: AdminResource,
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Delete a department, staff account or kiosk for administrators.
+
+    The record is archived, not erased: past visits, case sheets and the audit trail keep
+    pointing at it. It disappears from administration, can no longer sign in or be chosen,
+    and its email, code or token prefix can be used again. A department is only deleted
+    once no patient visit in it is still open and no staff member is assigned to it.
+    """
+    hospital_id, actor_id = _identity(principal)
+    _refuse_self(resource, resource_id, actor_id, "delete")
+
+    async def operation() -> dict[str, Any]:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            repository = AdminRepository(connection, request.app.state.settings)
+            blockers = await repository.blockers(
+                resource, hospital_id=hospital_id, resource_id=resource_id
+            )
+            if blockers:
+                parts = []
+                if blockers.get("open_visits"):
+                    parts.append(f"{blockers['open_visits']} open patient visit(s)")
+                if blockers.get("assigned_staff"):
+                    parts.append(f"{blockers['assigned_staff']} staff member(s) assigned")
+                raise _conflict(
+                    "DEPARTMENT_IN_USE",
+                    "Department still in use",
+                    "This department has "
+                    + " and ".join(parts)
+                    + ". Finish those visits and move its staff to another department "
+                    "first. To stop new patients right away, deactivate it instead.",
+                )
+            if not await repository.archive(
+                resource, hospital_id=hospital_id, resource_id=resource_id
+            ):
+                raise _not_found()
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user",
+                actor_id=actor_id,
+                action=f"admin.{resource}.deleted",
+                resource_type=resource.rstrip("s"),
+                resource_id=resource_id,
+            )
+            return {"id": str(resource_id), "deleted": True}
+
+    return await IdempotencyStore(request.app.state.redis_state).execute(
+        request,
+        hospital_id=hospital_id,
+        actor_id=actor_id,
+        body={},
+        operation=operation,
     )

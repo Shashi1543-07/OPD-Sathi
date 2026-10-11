@@ -60,6 +60,7 @@ const { intakeMock, voiceMock, IntakeRequestErrorMock, captured } = vi.hoisted((
 vi.mock("../lib/intake", () => ({
   intake: intakeMock,
   IntakeRequestError: IntakeRequestErrorMock,
+  useKioskHospitalName: () => "Test Hospital",
 }));
 vi.mock("../lib/voice", () => ({
   browserRecognitionAvailable: () => false,

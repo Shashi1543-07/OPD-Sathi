@@ -25,16 +25,20 @@ async def _list_page(
     cursor: str | None,
     cursor_key: bytes,
     columns: tuple[str, ...],
+    exclude_archived: bool = False,
 ) -> Page[dict[str, Any]]:
     if not 1 <= limit <= 100:
         raise ValueError("limit must be between 1 and 100")
-    relation = table(table_name, *[column(name) for name in (*columns, "hospital_id")])
+    extra = ("hospital_id", "deleted_at") if exclude_archived else ("hospital_id",)
+    relation = table(table_name, *[column(name) for name in (*columns, *extra)])
     statement = (
         select(*(relation.c[name] for name in columns))
         .where(relation.c.hospital_id == bindparam("hospital_id"))
         .order_by(relation.c.created_at.asc(), relation.c.id.asc())
         .limit(bindparam("fetch_limit"))
     )
+    if exclude_archived:
+        statement = statement.where(relation.c.deleted_at.is_(None))
     query_params: dict[str, Any] = {"hospital_id": hospital_id, "fetch_limit": limit + 1}
     if cursor:
         position = decode_cursor(cursor, key=cursor_key)
@@ -57,6 +61,18 @@ async def _list_page(
             CursorPosition(created_at=last["created_at"], id=last["id"]), key=cursor_key
         )
     return Page(items=visible, next_cursor=next_cursor, limit=limit)
+
+
+class KioskUnavailableError(LookupError):
+    """A kiosk may not start a check-in; ``reason`` says why.
+
+    "unpaired": deleted, never set up, or replaced by another device (set it up again);
+    "off": turned off by an administrator (still paired).
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"kiosk is {reason}")
+        self.reason = reason
 
 
 class PatientRepository:
@@ -200,14 +216,16 @@ class VisitRepository:
         status: str = "registering",
         urgency: str = "routine",
         language: str = "en",
+        kiosk_id: UUID | None = None,
     ) -> UUID:
         visit_id = uuid7()
         now = datetime.now(UTC)
         await self.connection.execute(
             text(
                 "INSERT INTO visits (id, hospital_id, patient_id, department_id, service_date, "
-                "status, urgency, language, registered_at) VALUES (:id, :hospital_id, "
-                ":patient_id, :department_id, :service_date, :status, :urgency, :language, :now)"
+                "status, urgency, language, registered_at, kiosk_id) VALUES (:id, :hospital_id, "
+                ":patient_id, :department_id, :service_date, :status, :urgency, :language, :now, "
+                ":kiosk_id)"
             ),
             {
                 "id": visit_id,
@@ -219,6 +237,7 @@ class VisitRepository:
                 "urgency": urgency,
                 "language": language,
                 "now": now,
+                "kiosk_id": kiosk_id,
             },
         )
         return visit_id
@@ -859,19 +878,55 @@ class IntakeRepository:
         )
         return department_id if isinstance(department_id, UUID) else None
 
-    async def kiosk_is_active(self, *, hospital_id: UUID, kiosk_id: UUID) -> bool:
-        result = await self.connection.scalar(
-            text(
-                "SELECT EXISTS (SELECT 1 FROM kiosks WHERE hospital_id = :hospital_id "
-                "AND id = :kiosk_id AND is_active = true AND secret_hash IS NOT NULL)"
-            ),
-            {"hospital_id": hospital_id, "kiosk_id": kiosk_id},
+    async def kiosk_is_active(
+        self, *, hospital_id: UUID, kiosk_id: UUID, issued_at: int | None = None
+    ) -> bool:
+        """True while the kiosk is in service and paired to a device.
+
+        ``issued_at`` (the token's ``iat``) also rejects tokens issued to a device that was
+        replaced since: re-pairing a kiosk with a new activation code moves ``paired_at``.
+        The few seconds of slack absorb clock differences between API and database.
+        """
+        sql = (
+            "SELECT EXISTS (SELECT 1 FROM kiosks WHERE hospital_id = :hospital_id "
+            "AND id = :kiosk_id AND is_active = true AND deleted_at IS NULL "
+            "AND secret_hash IS NOT NULL"
         )
+        params: dict[str, Any] = {"hospital_id": hospital_id, "kiosk_id": kiosk_id}
+        if issued_at is not None:
+            sql += (
+                " AND (paired_at IS NULL OR "
+                "paired_at <= to_timestamp(:issued_at) + interval '5 seconds')"
+            )
+            params["issued_at"] = float(issued_at)
+        result = await self.connection.scalar(text(sql + ")"), params)
         return bool(result)
 
-    async def touch_kiosk(self, *, hospital_id: UUID, kiosk_id: UUID) -> bool:
+    async def kiosk_unavailable_reason(
+        self, *, hospital_id: UUID, kiosk_id: UUID, issued_at: int | None = None
+    ) -> str:
+        """Why a kiosk failed ``kiosk_is_active``: "off" when only switched off, else "unpaired"."""
+        sql = (
+            "SELECT is_active FROM kiosks WHERE hospital_id = :hospital_id AND id = :kiosk_id "
+            "AND deleted_at IS NULL AND secret_hash IS NOT NULL"
+        )
+        params: dict[str, Any] = {"hospital_id": hospital_id, "kiosk_id": kiosk_id}
+        if issued_at is not None:
+            sql += (
+                " AND (paired_at IS NULL OR "
+                "paired_at <= to_timestamp(:issued_at) + interval '5 seconds')"
+            )
+            params["issued_at"] = float(issued_at)
+        is_active = await self.connection.scalar(text(sql), params)
+        return "off" if is_active is False else "unpaired"
+
+    async def touch_kiosk(
+        self, *, hospital_id: UUID, kiosk_id: UUID, issued_at: int | None = None
+    ) -> bool:
         """Note that an active kiosk is online. Writes at most once a minute per kiosk."""
-        if not await self.kiosk_is_active(hospital_id=hospital_id, kiosk_id=kiosk_id):
+        if not await self.kiosk_is_active(
+            hospital_id=hospital_id, kiosk_id=kiosk_id, issued_at=issued_at
+        ):
             return False
         await self.connection.execute(
             text(
@@ -884,10 +939,16 @@ class IntakeRepository:
         return True
 
     async def create_session(
-        self, *, hospital_id: UUID, language: str, kiosk_id: UUID
+        self, *, hospital_id: UUID, language: str, kiosk_id: UUID, issued_at: int | None = None
     ) -> tuple[UUID, UUID]:
-        if not await self.touch_kiosk(hospital_id=hospital_id, kiosk_id=kiosk_id):
-            raise LookupError("kiosk is inactive")
+        if not await self.touch_kiosk(
+            hospital_id=hospital_id, kiosk_id=kiosk_id, issued_at=issued_at
+        ):
+            raise KioskUnavailableError(
+                await self.kiosk_unavailable_reason(
+                    hospital_id=hospital_id, kiosk_id=kiosk_id, issued_at=issued_at
+                )
+            )
         department_id = await self.connection.scalar(
             text(
                 "SELECT id FROM departments WHERE hospital_id = :hospital_id AND is_active = true "
@@ -909,6 +970,7 @@ class IntakeRepository:
             department_id=department_id,
             service_date=datetime.now(ZoneInfo("Asia/Kolkata")).date(),
             language=language,
+            kiosk_id=kiosk_id,
         )
         return visit_id, patient_id
 
@@ -1147,7 +1209,12 @@ class DepartmentRepository:
 
 
 class AdminRepository:
-    """Small allow-listed CRUD surface for administrator-managed records."""
+    """Small allow-listed CRUD surface for administrator-managed records.
+
+    Records are never physically deleted: visits, case sheets and the audit log refer to
+    them. ``archive`` marks a record deleted; archived records are inactive, left out of
+    every administration list, and cannot be updated again.
+    """
 
     _LISTS: dict[str, tuple[str, ...]] = {
         "departments": (
@@ -1161,8 +1228,10 @@ class AdminRepository:
             "created_at",
         ),
         "users": ("id", "role", "name", "email", "department_id", "is_active", "created_at"),
-        "kiosks": ("id", "label", "is_active", "last_seen_at", "created_at"),
+        "kiosks": ("id", "label", "is_active", "last_seen_at", "paired_at", "created_at"),
     }
+    # Visits in these states are still being looked after by their department.
+    _LIVE_VISIT_STATES = ("registering", "awaiting_confirmation", "queued", "called", "in_consult")
 
     def __init__(self, connection: AsyncConnection, settings: Settings):
         self.connection = connection
@@ -1173,7 +1242,7 @@ class AdminRepository:
     ) -> Page[dict[str, Any]]:
         if resource not in self._LISTS:
             raise ValueError("unsupported admin resource")
-        return await _list_page(
+        page = await _list_page(
             self.connection,
             table_name=resource,
             hospital_id=hospital_id,
@@ -1181,7 +1250,58 @@ class AdminRepository:
             cursor=cursor,
             cursor_key=self.settings.cursor_hmac_key.encode(),
             columns=self._LISTS[resource],
+            exclude_archived=True,
         )
+        if resource == "kiosks" and page.items:
+            await self._add_kiosk_details(hospital_id, page)
+        return page
+
+    async def _add_kiosk_details(self, hospital_id: UUID, page: Page[dict[str, Any]]) -> None:
+        """Pending-code state and registration counts for one page of kiosks (one query)."""
+        statement = text(
+            "SELECT k.id, "
+            "(k.activation_code_hash IS NOT NULL AND (k.activation_code_expires_at IS NULL "
+            "OR k.activation_code_expires_at > now())) AS activation_pending, "
+            "k.activation_code_expires_at, "
+            "(SELECT count(*) FROM visits v WHERE v.hospital_id = k.hospital_id "
+            "AND v.kiosk_id = k.id AND v.service_date = :today) AS registrations_today, "
+            "(SELECT count(*) FROM visits v WHERE v.hospital_id = k.hospital_id "
+            "AND v.kiosk_id = k.id) AS registrations_total "
+            "FROM kiosks k WHERE k.hospital_id = :hospital_id AND k.id IN :ids"
+        ).bindparams(bindparam("ids", expanding=True))
+        result = await self.connection.execute(
+            statement,
+            {
+                "hospital_id": hospital_id,
+                "today": datetime.now(ZoneInfo("Asia/Kolkata")).date(),
+                "ids": [item["id"] for item in page.items],
+            },
+        )
+        details = {row["id"]: row for row in result.mappings().all()}
+        for item in page.items:
+            row = details.get(item["id"])
+            pending = bool(row and row["activation_pending"])
+            item["activation_pending"] = pending
+            item["activation_code_expires_at"] = (
+                row["activation_code_expires_at"] if row and pending else None
+            )
+            item["registrations_today"] = int(row["registrations_today"]) if row else 0
+            item["registrations_total"] = int(row["registrations_total"]) if row else 0
+
+    async def _require_live_department(
+        self, hospital_id: UUID, department_id: UUID | None
+    ) -> None:
+        if department_id is None:
+            return
+        live = await self.connection.scalar(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM departments WHERE hospital_id = :hospital_id "
+                "AND id = :department_id AND deleted_at IS NULL)"
+            ),
+            {"hospital_id": hospital_id, "department_id": department_id},
+        )
+        if not live:
+            raise LookupError("department")
 
     async def create(
         self, resource: str, *, hospital_id: UUID, values: dict[str, Any]
@@ -1198,6 +1318,7 @@ class AdminRepository:
             )
             return {"id": str(resource_id), **values, "is_active": True}
         if resource == "users":
+            await self._require_live_department(hospital_id, values["department_id"])
             await self.connection.execute(
                 text(
                     "INSERT INTO users (id, hospital_id, role, name, email, password_hash, "
@@ -1217,12 +1338,20 @@ class AdminRepository:
         if resource == "kiosks":
             await self.connection.execute(
                 text(
-                    "INSERT INTO kiosks (id, hospital_id, label, activation_code_hash) "
-                    "VALUES (:id, :hospital_id, :label, :activation_code_hash)"
+                    "INSERT INTO kiosks (id, hospital_id, label, activation_code_hash, "
+                    "activation_code_expires_at) VALUES (:id, :hospital_id, :label, "
+                    ":activation_code_hash, :activation_code_expires_at)"
                 ),
                 {"id": resource_id, "hospital_id": hospital_id, **values},
             )
-            return {"id": str(resource_id), "label": values["label"], "is_active": True}
+            return {
+                "id": str(resource_id),
+                "label": values["label"],
+                "is_active": True,
+                "paired_at": None,
+                "activation_pending": True,
+                "activation_code_expires_at": values["activation_code_expires_at"],
+            }
         raise ValueError("unsupported admin resource")
 
     async def patch(
@@ -1242,15 +1371,18 @@ class AdminRepository:
         }[resource]
         if set(values) - allowed:
             raise ValueError("unsupported update field")
+        if resource == "users" and "department_id" in values:
+            await self._require_live_department(hospital_id, values["department_id"])
         relation = table(
             resource,
-            *[column(name) for name in (*self._LISTS[resource], "hospital_id")],
+            *[column(name) for name in (*self._LISTS[resource], "hospital_id", "deleted_at")],
         )
         result = await self.connection.execute(
             update(relation)
             .where(
                 relation.c.hospital_id == bindparam("tenant_hospital_id"),
                 relation.c.id == bindparam("resource_id"),
+                relation.c.deleted_at.is_(None),
             )
             .values(**values)
             .returning(*(relation.c[name] for name in self._LISTS[resource])),
@@ -1262,3 +1394,110 @@ class AdminRepository:
         )
         row = result.mappings().first()
         return dict(row) if row is not None else None
+
+    async def issue_kiosk_code(
+        self,
+        *,
+        hospital_id: UUID,
+        kiosk_id: UUID,
+        activation_code_hash: str,
+        expires_at: datetime,
+    ) -> dict[str, Any] | None:
+        """Give an existing kiosk a fresh one-time code; its id and history stay the same.
+
+        The device currently paired keeps working until the new code is used, at which
+        point the new device takes over and the old one is signed out.
+        """
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "UPDATE kiosks SET activation_code_hash = :activation_code_hash, "
+                        "activation_code_expires_at = :expires_at "
+                        "WHERE hospital_id = :hospital_id AND id = :kiosk_id "
+                        "AND deleted_at IS NULL AND is_active = true "
+                        "RETURNING id, label"
+                    ),
+                    {
+                        "activation_code_hash": activation_code_hash,
+                        "expires_at": expires_at,
+                        "hospital_id": hospital_id,
+                        "kiosk_id": kiosk_id,
+                    },
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row is not None else None
+
+    async def blockers(
+        self, resource: str, *, hospital_id: UUID, resource_id: UUID
+    ) -> dict[str, int]:
+        """What still depends on a record that must be moved before it can be deleted."""
+        if resource != "departments":
+            return {}
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT "
+                        "(SELECT count(*) FROM visits WHERE hospital_id = :hospital_id "
+                        "AND department_id = :department_id AND status IN :live_states) "
+                        "AS open_visits, "
+                        "(SELECT count(*) FROM users WHERE hospital_id = :hospital_id "
+                        "AND department_id = :department_id AND deleted_at IS NULL) "
+                        "AS assigned_staff"
+                    ).bindparams(bindparam("live_states", expanding=True)),
+                    {
+                        "hospital_id": hospital_id,
+                        "department_id": resource_id,
+                        "live_states": list(self._LIVE_VISIT_STATES),
+                    },
+                )
+            )
+            .mappings()
+            .one()
+        )
+        return {key: int(value) for key, value in row.items() if value}
+
+    # Kiosks also lose their device credential and any unused code, so the device stops
+    # working at once; staff lose every refresh token in ``archive``.
+    _ARCHIVE: dict[str, str] = {
+        "departments": (
+            "UPDATE departments SET deleted_at = now(), is_active = false "
+            "WHERE hospital_id = :hospital_id AND id = :resource_id AND deleted_at IS NULL "
+            "RETURNING id"
+        ),
+        "users": (
+            "UPDATE users SET deleted_at = now(), is_active = false "
+            "WHERE hospital_id = :hospital_id AND id = :resource_id AND deleted_at IS NULL "
+            "RETURNING id"
+        ),
+        "kiosks": (
+            "UPDATE kiosks SET deleted_at = now(), is_active = false, secret_hash = NULL, "
+            "activation_code_hash = NULL, activation_code_expires_at = NULL "
+            "WHERE hospital_id = :hospital_id AND id = :resource_id AND deleted_at IS NULL "
+            "RETURNING id"
+        ),
+    }
+
+    async def archive(self, resource: str, *, hospital_id: UUID, resource_id: UUID) -> bool:
+        """Delete a record for administrators while keeping the history that refers to it."""
+        if resource not in self._ARCHIVE:
+            raise ValueError("unsupported admin resource")
+        archived = await self.connection.scalar(
+            text(self._ARCHIVE[resource]),
+            {"hospital_id": hospital_id, "resource_id": resource_id},
+        )
+        if archived is None:
+            return False
+        if resource == "users":
+            await self.connection.execute(
+                text(
+                    "UPDATE refresh_tokens SET revoked_at = now() WHERE hospital_id = :hospital_id "
+                    "AND user_id = :user_id AND revoked_at IS NULL"
+                ),
+                {"hospital_id": hospital_id, "user_id": resource_id},
+            )
+        return True

@@ -31,6 +31,7 @@ from app.db.repositories import (
     CaseSheetRepository,
     IntakeRepository,
     InterviewTurnRepository,
+    KioskUnavailableError,
     QueueRepository,
 )
 from app.db.session import set_hospital_scope
@@ -828,12 +829,34 @@ async def create_session(
     principal: Annotated[dict[str, Any], Depends(require_kiosk())],
 ) -> dict[str, Any]:
     hospital_id, kiosk_id = _identity(principal)
+    issued_at = principal.get("iat")
     try:
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
             visit_id, patient_id = await IntakeRepository(
                 connection, request.app.state.settings
-            ).create_session(hospital_id=hospital_id, language=payload.language, kiosk_id=kiosk_id)
+            ).create_session(
+                hospital_id=hospital_id,
+                language=payload.language,
+                kiosk_id=kiosk_id,
+                issued_at=issued_at if isinstance(issued_at, int) else None,
+            )
+    except KioskUnavailableError as exc:
+        if exc.reason == "off":
+            raise _error(
+                409,
+                "KIOSK_TURNED_OFF",
+                "Kiosk turned off",
+                "This kiosk is turned off. Ask staff to turn it on.",
+            ) from exc
+        # Deleted or replaced: 401 sends the device back to its activation screen.
+        raise _error(
+            401,
+            "KIOSK_NOT_PAIRED",
+            "Kiosk needs setting up",
+            "This kiosk was removed or set up on another device. "
+            "Ask staff for a new activation code.",
+        ) from exc
     except LookupError as exc:
         raise _error(
             409, "KIOSK_NOT_READY", "Kiosk unavailable", "Ask staff to check this kiosk."

@@ -58,6 +58,19 @@ $adminPassword = Get-EnvValue $envLines "DEMO_ADMIN_PASSWORD"
 $staffPassword = Get-EnvValue $envLines "DEMO_STAFF_PASSWORD"
 if ($adminPassword.Length -lt 12 -or $adminPassword -like "replace-*") { $adminPassword = "Saathi-$(New-Hex)"; Add-Content .env "`nDEMO_ADMIN_PASSWORD=$adminPassword" }
 if ($staffPassword.Length -lt 12 -or $staffPassword -like "replace-*") { $staffPassword = "Saathi-$(New-Hex)"; Add-Content .env "DEMO_STAFF_PASSWORD=$staffPassword" }
+# Token-signing keys must never fall back to the public defaults in docker-compose.yml
+# (anyone with the repo could forge a sign-in). Older .env files may lack them.
+foreach ($name in "JWT_SECRET","CURSOR_HMAC_KEY") {
+  $value = Get-EnvValue $envLines $name
+  if ($value.Length -lt 32 -or $value -like "*development-only*" -or $value -like "replace-*") {
+    $fresh = if ($name -eq "JWT_SECRET") { New-Hex } else { New-Base64Key }
+    $text = Get-Content ".env" -Raw
+    if ($text -match "(?m)^$name=") { $text = $text -replace "(?m)^$name=.*$", "$name=$fresh" }
+    else { $text = $text.TrimEnd() + "`n$name=$fresh`n" }
+    Set-Content -Path ".env" -Value $text -Encoding utf8 -NoNewline
+    Write-Host "Generated a private $name in .env (everyone signs in again once)." -ForegroundColor Yellow
+  }
+}
 $gemini = Get-EnvValue $envLines "GEMINI_API_KEY"
 $sarvam = Get-EnvValue $envLines "SARVAM_API_KEY"
 
@@ -122,8 +135,12 @@ Write-Host "  Patient kiosk (open once to activate):"
 Write-Host "    $kioskLink" -ForegroundColor Yellow
 Write-Host "  Staff workspace:   $webUrl/staff"
 Write-Host "    Admin:   $adminEmail  /  $adminPassword"
-Write-Host "    Doctor:  doctor01@demo.opdsathi.test  /  $staffPassword   (General Medicine)"
-Write-Host "    Nurse:   nurse01@demo.opdsathi.test   /  $staffPassword   (General Medicine)"
+Write-Host "    Doctors (password $staffPassword), one per department:"
+Write-Host "      doctor01 General Medicine | doctor02 Orthopaedics | doctor03 Ear, Nose and Throat"
+Write-Host "      doctor04 Obstetrics and Gynaecology | doctor05 Paediatrics | doctor06 Dermatology"
+Write-Host "      doctor07 Ophthalmology | doctor08 General Surgery     (each @demo.opdsathi.test)"
+Write-Host "    Nurses (password $staffPassword), General Medicine with doctor01:"
+Write-Host "      nurse01 ... nurse05@demo.opdsathi.test"
 Write-Host "  API docs:          http://localhost:8000/docs"
 if ($phoneUrl) {
   Write-Host "  Token QR codes open on phones via $phoneUrl (phone must be on the same Wi-Fi)." -ForegroundColor Green

@@ -22,6 +22,7 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/auth/refresh"),
         ("POST", "/auth/logout"),
         ("POST", "/kiosks/activate"),
+        ("POST", "/kiosks/token"),
         ("GET", "/status/{token}"),
         ("GET", "/status/{token}/stream"),
         ("GET", "/openapi.json"),
