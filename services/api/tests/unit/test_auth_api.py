@@ -103,7 +103,9 @@ async def test_login_normalizes_identity_and_rotates_credentials_on_success(monk
     monkeypatch.setattr(auth, "set_hospital_scope", scope)
     monkeypatch.setattr(auth, "audit", audit)
     monkeypatch.setattr(auth, "verify_password", lambda *_args: True)
-    monkeypatch.setattr(auth, "_set_refresh_cookie", lambda _r, _s, value: cookie.append(value))
+    monkeypatch.setattr(
+        auth, "_set_refresh_cookie", lambda _r, _s, value, _user: cookie.append(value)
+    )
     monkeypatch.setattr(auth, "issue_access_token", lambda **_kwargs: "synthetic-access-token")
     response = await auth.login(
         auth.LoginPayload(

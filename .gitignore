@@ -47,3 +47,6 @@ backups/
 
 # Local shell shims
 powershell.cmd
+
+# Local-only notes (never committed), e.g. demo login cheat sheets
+*.local.md

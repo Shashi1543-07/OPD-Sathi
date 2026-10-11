@@ -926,6 +926,29 @@
   min-height: 2.125rem;
   width: 100%;
 }
+.staff-switch-account {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: rgb(255 255 255 / 78%);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  gap: 0.35rem;
+  justify-content: center;
+  min-height: 1.9rem;
+  padding: 0 var(--space-2);
+}
+.staff-switch-account:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+.staff-switch-account:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 70%);
+  outline-offset: 2px;
+}
 
 /* --- Content Column --- */
 .staff-content {
@@ -3192,6 +3215,9 @@
   }
   .staff-sidebar-footer .ui-button {
     width: auto;
+  }
+  .staff-switch-account {
+    display: none;
   }
   .staff-content {
     flex: 1 0 auto;

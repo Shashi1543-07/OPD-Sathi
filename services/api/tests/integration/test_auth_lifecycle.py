@@ -113,21 +113,38 @@ async def test_login_lockout_refresh_reuse_kiosk_and_audit() -> None:
             logged_in = client.post("/auth/login", json=payload)
             assert logged_in.status_code == 200
             assert logged_in.json()["user"]["role"] == "admin"
-            old_refresh = logged_in.cookies.get("osa_refresh")
+            # Each staff account has its own refresh cookie, named after the account.
+            account = {"account": logged_in.json()["user"]["id"]}
+            cookie_name = f"osa_refresh_{UUID(account['account']).hex}"
+            old_refresh = logged_in.cookies.get(cookie_name)
             assert old_refresh
             refresh_cookie = logged_in.headers["set-cookie"].lower()
             assert "httponly" in refresh_cookie and "samesite=strict" in refresh_cookie
 
-            rotated = client.post("/auth/refresh")
+            rotated = client.post("/auth/refresh", json=account)
             assert rotated.status_code == 200
-            new_refresh = rotated.cookies.get("osa_refresh")
+            assert rotated.json()["user"]["id"] == account["account"]
+            new_refresh = rotated.cookies.get(cookie_name)
             assert new_refresh and new_refresh != old_refresh
-            client.cookies.set("osa_refresh", old_refresh, domain="testserver.local", path="/auth")
-            reused = client.post("/auth/refresh")
+            client.cookies.set(cookie_name, old_refresh, domain="testserver.local", path="/auth")
+            reused = client.post("/auth/refresh", json=account)
             assert reused.status_code == 401
-            client.cookies.set("osa_refresh", new_refresh, domain="testserver.local", path="/auth")
-            revoked_family = client.post("/auth/refresh")
+            client.cookies.set(cookie_name, new_refresh, domain="testserver.local", path="/auth")
+            revoked_family = client.post("/auth/refresh", json=account)
             assert revoked_family.status_code == 401
+
+            # Two staff accounts signed in side by side in one browser keep their own sessions.
+            first = client.post("/auth/login", json=payload)
+            second = client.post(
+                "/auth/login",
+                json={**payload, "email": failing_email},
+            )
+            assert first.status_code == 200 and second.status_code == 200
+            for signed_in in (first, second):
+                user_id = signed_in.json()["user"]["id"]
+                renewed = client.post("/auth/refresh", json={"account": user_id})
+                assert renewed.status_code == 200
+                assert renewed.json()["user"]["id"] == user_id
 
             nurse = issue_access_token(
                 subject=uuid4(), role="nurse", hospital_id=hospital_id, settings=settings
@@ -159,10 +176,10 @@ async def test_login_lockout_refresh_reuse_kiosk_and_audit() -> None:
 
             logout_login = client.post("/auth/login", json=payload)
             assert logout_login.status_code == 200
-            logged_out = client.post("/auth/logout")
+            logged_out = client.post("/auth/logout", json=account)
             assert logged_out.status_code == 204
             assert "max-age=0" in logged_out.headers["set-cookie"].lower()
-            assert client.post("/auth/refresh").status_code == 401
+            assert client.post("/auth/refresh", json=account).status_code == 401
 
             admin_token = logged_in.json()["access_token"]
             events = client.get("/audit", headers={"Authorization": f"Bearer {admin_token}"})

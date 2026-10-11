@@ -30,6 +30,62 @@ let currentUser: StaffUser | null = null;
 let refreshFlight: Promise<StaffUser | null> | null = null;
 const listeners = new Set<(user: StaffUser | null) => void>();
 
+// Each staff account has its own sign-in cookie, so a doctor and an administrator can
+// work side by side in two tabs of one browser. A tab remembers its own account (tab
+// storage); new tabs start with the account last signed in on this browser.
+const TAB_ACCOUNT_KEY = "osa.staff.account";
+const LAST_ACCOUNT_KEY = "osa.staff.lastAccount";
+/** Marks a tab that chose "Use another account": it shows sign-in instead of the last account. */
+const NO_ACCOUNT = "none";
+
+function tabAccount(): string | null {
+  try {
+    const own = sessionStorage.getItem(TAB_ACCOUNT_KEY);
+    if (own === NO_ACCOUNT) return null;
+    return own ?? localStorage.getItem(LAST_ACCOUNT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function tabWantsAnotherAccount(): boolean {
+  try {
+    return sessionStorage.getItem(TAB_ACCOUNT_KEY) === NO_ACCOUNT;
+  } catch {
+    return false;
+  }
+}
+
+function rememberAccount(userId: string) {
+  try {
+    sessionStorage.setItem(TAB_ACCOUNT_KEY, userId);
+    localStorage.setItem(LAST_ACCOUNT_KEY, userId);
+  } catch {
+    // Storage blocked: the tab still works until it is reloaded.
+  }
+}
+
+function forgetAccount(userId: string | null) {
+  try {
+    sessionStorage.removeItem(TAB_ACCOUNT_KEY);
+    if (userId && localStorage.getItem(LAST_ACCOUNT_KEY) === userId) {
+      localStorage.removeItem(LAST_ACCOUNT_KEY);
+    }
+  } catch {
+    // Nothing stored to forget.
+  }
+}
+
+/**
+ * Tabs of the same account take turns renewing. The server rotates the sign-in cookie on
+ * every renewal and treats a reused one as stolen, so two tabs renewing at the same moment
+ * (for example after the laptop wakes) used to sign everyone out.
+ */
+function oneTabAtATime<T>(name: string, work: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  return locks ? locks.request(name, work) : work();
+}
+
 function publish(user: StaffUser | null) {
   if (
     currentUser?.id !== user?.id ||
@@ -82,17 +138,28 @@ export const staffAuth = {
       }),
     );
     accessToken = auth.access_token;
+    rememberAccount(auth.user.id);
     publish(auth.user);
   },
   refresh(): Promise<StaffUser | null> {
     if (refreshFlight) return refreshFlight;
+    if (!currentUser && tabWantsAnotherAccount()) return Promise.resolve(null);
+    const account = currentUser?.id ?? tabAccount();
     refreshFlight = (async () => {
       try {
-        const auth = await parseAuth(await authRequest("/auth/refresh"));
+        const auth = await oneTabAtATime(`osa-staff-refresh:${account ?? "default"}`, async () =>
+          parseAuth(await authRequest("/auth/refresh", account ? { account } : undefined)),
+        );
+        // A tab never silently turns into someone else.
+        if (currentUser && auth.user.id !== currentUser.id) throw new Error("ACCOUNT_CHANGED");
         accessToken = auth.access_token;
+        rememberAccount(auth.user.id);
         publish(auth.user);
         return auth.user;
-      } catch {
+      } catch (cause) {
+        if (cause instanceof Error && ["UNAUTHENTICATED", "ACCOUNT_CHANGED"].includes(cause.message)) {
+          forgetAccount(account);
+        }
         accessToken = null;
         publish(null);
         return null;
@@ -102,10 +169,25 @@ export const staffAuth = {
     })();
     return refreshFlight;
   },
-  async logout() {
+  /**
+   * Show the sign-in form in this tab only. Unlike sign out, the current account stays
+   * signed in on its other tabs, so a second person can sign in alongside it.
+   */
+  switchAccount() {
     try {
-      await authRequest("/auth/logout");
+      sessionStorage.setItem(TAB_ACCOUNT_KEY, NO_ACCOUNT);
+    } catch {
+      // Without tab storage the next reload simply returns to the last account.
+    }
+    accessToken = null;
+    publish(null);
+  },
+  async logout() {
+    const account = currentUser?.id ?? tabAccount();
+    try {
+      await authRequest("/auth/logout", account ? { account } : undefined);
     } finally {
+      forgetAccount(account);
       accessToken = null;
       publish(null);
     }

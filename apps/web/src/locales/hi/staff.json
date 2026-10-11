@@ -474,5 +474,7 @@
   "confirmDeleteDepartments": "यह इस सूची से और स्टाफ व कियोस्क के विकल्पों से हट जाएगा। पुराने विज़िट में इसका नाम रहेगा। प्रतीक्षा कर रहे मरीज़ों और इसके स्टाफ को पहले दूसरे विभाग में भेजें।",
   "kioskRegistrations": "पंजीकृत मरीज़: आज {{today}} · कुल {{total}}",
   "kioskCodePending": "सेटअप की प्रतीक्षा",
-  "kioskCodePendingUntil": "सेटअप कोड {{when}} तक मान्य"
+  "kioskCodePendingUntil": "सेटअप कोड {{when}} तक मान्य",
+  "useAnotherAccount": "दूसरे खाते से साइन इन करें",
+  "useAnotherAccountHint": "इस टैब में किसी और के रूप में साइन इन करें। यह खाता अपने दूसरे टैब में साइन इन रहेगा।"
 }

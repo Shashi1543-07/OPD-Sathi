@@ -10,6 +10,7 @@ import {
   ClipboardList,
   HeartPulse,
   LogOut,
+  UserPlus,
   Settings,
   Stethoscope,
   Users,
@@ -115,6 +116,19 @@ export function StaffShell() {
     }
   }
 
+  function switchAccount() {
+    signingOut.current = true;
+    try {
+      staffAuth.switchAccount();
+      setError("");
+      setEmail("");
+      setPassword("");
+    } finally {
+      hadSession.current = false;
+      signingOut.current = false;
+    }
+  }
+
   async function signOut() {
     signingOut.current = true;
     try {
@@ -184,6 +198,15 @@ export function StaffShell() {
             >
               {t("signOut", { ns: "staff" })}
             </Button>
+            <button
+              type="button"
+              className="staff-switch-account"
+              title={t("useAnotherAccountHint", { ns: "staff" })}
+              onClick={switchAccount}
+            >
+              <UserPlus aria-hidden="true" size={14} />
+              {t("useAnotherAccount", { ns: "staff" })}
+            </button>
           </div>
         </aside>
       ) : null}
