@@ -320,6 +320,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/kiosks/{resource_id}/checkin-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Checkin Link
+         * @description The phone check-in QR link for a check-in point; it can be shown again any time.
+         */
+        get: operations["get_checkin_link_admin_kiosks__resource_id__checkin_link_get"];
+        put?: never;
+        /**
+         * Replace Checkin Link
+         * @description Replace a check-in point's QR: posters with the previous code stop working at once.
+         */
+        post: operations["replace_checkin_link_admin_kiosks__resource_id__checkin_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/{resource}/{resource_id}": {
         parameters: {
             query?: never;
@@ -448,6 +472,50 @@ export interface paths {
         put?: never;
         /** Create Assisted Session */
         post: operations["create_assisted_session_intake_assisted_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/checkin/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Checkin Details
+         * @description What a phone shows before starting: the hospital's name, or why it cannot start.
+         */
+        get: operations["checkin_details_intake_checkin__code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/checkin/{code}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Checkin Session
+         * @description Start the interview on a patient's own phone from the hospital's check-in QR.
+         *
+         *     The phone gets the same patient session a kiosk would, so consent, the interview, the
+         *     safety rules and the token are exactly the kiosk's. Starting is limited per phone and
+         *     per check-in point; a session only reaches the queue once the patient confirms it.
+         */
+        post: operations["create_checkin_session_intake_checkin__code__sessions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -666,7 +734,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Confirm Summary */
+        /**
+         * Confirm Summary
+         * @description Issue the visit's token once; repeated or simultaneous requests get that same token.
+         */
         post: operations["confirm_summary_intake_sessions__visit_id__confirm_post"];
         delete?: never;
         options?: never;
@@ -1228,6 +1299,14 @@ export interface components {
             confirmed_at?: string | null;
             patient?: components["schemas"]["PatientContext"] | null;
         };
+        /** CheckinSessionPayload */
+        CheckinSessionPayload: {
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "hi" | "mr";
+        };
         /** ConsentPayload */
         ConsentPayload: {
             /** Version */
@@ -1361,6 +1440,12 @@ export interface components {
         KioskCreate: {
             /** Label */
             label: string;
+            /**
+             * Kind
+             * @default device
+             * @enum {string}
+             */
+            kind: "device" | "mobile";
         };
         /** KioskPatch */
         KioskPatch: {
@@ -2262,6 +2347,72 @@ export interface operations {
             };
         };
     };
+    get_checkin_link_admin_kiosks__resource_id__checkin_link_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_checkin_link_admin_kiosks__resource_id__checkin_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_resource_admin__resource___resource_id__delete: {
         parameters: {
             query?: never;
@@ -2498,6 +2649,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CreateAssistedSessionPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    checkin_details_intake_checkin__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_checkin_session_intake_checkin__code__sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckinSessionPayload"];
             };
         };
         responses: {

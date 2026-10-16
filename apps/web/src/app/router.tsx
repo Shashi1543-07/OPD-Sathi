@@ -128,6 +128,28 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    // A patient's own phone, from the hospital's check-in QR poster.
+    path: "/m/:code",
+    element: <KioskShell mode="mobile" />,
+    HydrateFallback: RouteLoading,
+    children: [
+      {
+        index: true,
+        lazy: async () => {
+          const { MobileCheckin } = await import("./MobileCheckin");
+          return { Component: MobileCheckin };
+        },
+      },
+      {
+        path: "intake",
+        lazy: async () => {
+          const { KioskIntake } = await import("./KioskIntake");
+          return { Component: KioskIntake };
+        },
+      },
+    ],
+  },
+  {
     path: "/s/:token",
     HydrateFallback: RouteLoading,
     lazy: async () => {

@@ -14,6 +14,7 @@ from app.config import Settings
 from app.core.crypto import decrypt_field, encrypt_field, lookup_digest
 from app.core.ids import uuid7
 from app.core.pagination import CursorPosition, Page, decode_cursor, encode_cursor
+from app.domain.checkin import checkin_code, checkin_code_digest
 
 
 async def _list_page(
@@ -434,6 +435,7 @@ class QueueRepository:
                     "consult_ended_at",
                     "assigned_doctor_id",
                     "needs_assistance",
+                    "kiosk_id",
                 )
             ],
         )
@@ -441,6 +443,7 @@ class QueueRepository:
             "case_sheets", column("hospital_id"), column("visit_id"), column("data")
         )
         patients = table("patients", column("hospital_id"), column("id"), column("sex"))
+        kiosks = table("kiosks", column("hospital_id"), column("id"), column("kind"))
         statement = (
             select(
                 visits.c.id.label("visit_id"),
@@ -462,11 +465,16 @@ class QueueRepository:
                 visits.c.needs_assistance,
                 case_sheets.c.data.label("case_sheet_data"),
                 patients.c.sex,
+                kiosks.c.kind.label("checkin_kind"),
             )
             .outerjoin(
                 case_sheets,
                 (case_sheets.c.hospital_id == visits.c.hospital_id)
                 & (case_sheets.c.visit_id == visits.c.id),
+            )
+            .outerjoin(
+                kiosks,
+                (kiosks.c.hospital_id == visits.c.hospital_id) & (kiosks.c.id == visits.c.kiosk_id),
             )
             .join(
                 patients,
@@ -953,6 +961,65 @@ class IntakeRepository:
                     hospital_id=hospital_id, kiosk_id=kiosk_id, issued_at=issued_at
                 )
             )
+        return await self._start_visit(
+            hospital_id=hospital_id, language=language, kiosk_id=kiosk_id, name="Kiosk visitor"
+        )
+
+    async def checkin_point_by_code(self, code_hash: str) -> dict[str, Any] | None:
+        """Find a phone check-in point by its code digest, before the hospital is known.
+
+        Run inside ``set_secret_lookup_scope(..., "app.kiosk_checkin_hash", code_hash)``.
+        """
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT id, hospital_id, is_active FROM kiosks "
+                        "WHERE checkin_code_hash = :code_hash AND kind = 'mobile' "
+                        "AND deleted_at IS NULL LIMIT 1"
+                    ),
+                    {"code_hash": code_hash},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row is not None else None
+
+    async def create_mobile_session(
+        self, *, hospital_id: UUID, point_id: UUID, language: str
+    ) -> tuple[UUID, UUID]:
+        """Start a visit from a phone check-in point; refused once the point is turned off."""
+        active = await self.connection.scalar(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM kiosks WHERE hospital_id = :hospital_id "
+                "AND id = :point_id AND kind = 'mobile' AND is_active = true "
+                "AND deleted_at IS NULL)"
+            ),
+            {"hospital_id": hospital_id, "point_id": point_id},
+        )
+        if not active:
+            raise KioskUnavailableError("off")
+        # "Last used", written at most once a minute so simultaneous patients don't queue
+        # behind one row lock.
+        await self.connection.execute(
+            text(
+                "UPDATE kiosks SET last_seen_at = now() WHERE hospital_id = :hospital_id "
+                "AND id = :point_id AND (last_seen_at IS NULL "
+                "OR last_seen_at < now() - interval '50 seconds')"
+            ),
+            {"hospital_id": hospital_id, "point_id": point_id},
+        )
+        return await self._start_visit(
+            hospital_id=hospital_id,
+            language=language,
+            kiosk_id=point_id,
+            name="Phone check-in visitor",
+        )
+
+    async def _start_visit(
+        self, *, hospital_id: UUID, language: str, kiosk_id: UUID, name: str
+    ) -> tuple[UUID, UUID]:
         department_id = await self.connection.scalar(
             text(
                 "SELECT id FROM departments WHERE hospital_id = :hospital_id AND is_active = true "
@@ -964,7 +1031,7 @@ class IntakeRepository:
             raise LookupError("no active intake department is configured")
         patient_id = await PatientRepository(self.connection, self.settings).create(
             hospital_id=hospital_id,
-            name="Kiosk visitor",
+            name=name,
             phone=None,
             preferred_language=language,
         )
@@ -1232,7 +1299,7 @@ class AdminRepository:
             "created_at",
         ),
         "users": ("id", "role", "name", "email", "department_id", "is_active", "created_at"),
-        "kiosks": ("id", "label", "is_active", "last_seen_at", "paired_at", "created_at"),
+        "kiosks": ("id", "label", "kind", "is_active", "last_seen_at", "paired_at", "created_at"),
     }
     # Visits in these states are still being looked after by their department.
     _LIVE_VISIT_STATES = ("registering", "awaiting_confirmation", "queued", "called", "in_consult")
@@ -1339,6 +1406,36 @@ class AdminRepository:
                 "department_id": values["department_id"],
                 "is_active": True,
             }
+        if resource == "kiosks" and values.get("kind") == "mobile":
+            # A phone check-in point: no device to pair, only its check-in code's digest.
+            code = checkin_code(
+                key=self.settings.app_hmac_key_bytes,
+                hospital_id=hospital_id,
+                point_id=resource_id,
+                version=1,
+            )
+            await self.connection.execute(
+                text(
+                    "INSERT INTO kiosks (id, hospital_id, label, kind, checkin_code_hash, "
+                    "checkin_code_version) VALUES (:id, :hospital_id, :label, 'mobile', "
+                    ":checkin_code_hash, 1)"
+                ),
+                {
+                    "id": resource_id,
+                    "hospital_id": hospital_id,
+                    "label": values["label"],
+                    "checkin_code_hash": checkin_code_digest(code),
+                },
+            )
+            return {
+                "id": str(resource_id),
+                "label": values["label"],
+                "kind": "mobile",
+                "is_active": True,
+                "paired_at": None,
+                "activation_pending": False,
+                "activation_code_expires_at": None,
+            }
         if resource == "kiosks":
             await self.connection.execute(
                 text(
@@ -1346,11 +1443,18 @@ class AdminRepository:
                     "activation_code_expires_at) VALUES (:id, :hospital_id, :label, "
                     ":activation_code_hash, :activation_code_expires_at)"
                 ),
-                {"id": resource_id, "hospital_id": hospital_id, **values},
+                {
+                    "id": resource_id,
+                    "hospital_id": hospital_id,
+                    "label": values["label"],
+                    "activation_code_hash": values["activation_code_hash"],
+                    "activation_code_expires_at": values["activation_code_expires_at"],
+                },
             )
             return {
                 "id": str(resource_id),
                 "label": values["label"],
+                "kind": "device",
                 "is_active": True,
                 "paired_at": None,
                 "activation_pending": True,
@@ -1419,7 +1523,7 @@ class AdminRepository:
                         "UPDATE kiosks SET activation_code_hash = :activation_code_hash, "
                         "activation_code_expires_at = :expires_at "
                         "WHERE hospital_id = :hospital_id AND id = :kiosk_id "
-                        "AND deleted_at IS NULL AND is_active = true "
+                        "AND kind = 'device' AND deleted_at IS NULL AND is_active = true "
                         "RETURNING id, label"
                     ),
                     {
@@ -1434,6 +1538,53 @@ class AdminRepository:
             .first()
         )
         return dict(row) if row is not None else None
+
+    async def checkin_point(self, *, hospital_id: UUID, point_id: UUID) -> dict[str, Any] | None:
+        """A phone check-in point that has not been deleted."""
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT id, label, is_active, checkin_code_version FROM kiosks "
+                        "WHERE hospital_id = :hospital_id AND id = :point_id "
+                        "AND kind = 'mobile' AND deleted_at IS NULL"
+                    ),
+                    {"hospital_id": hospital_id, "point_id": point_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row is not None else None
+
+    async def rotate_checkin_code(
+        self, *, hospital_id: UUID, point_id: UUID, current_version: int
+    ) -> int | None:
+        """Move a check-in point to its next code; QR posters with the old code stop working."""
+        version = current_version + 1
+        code = checkin_code(
+            key=self.settings.app_hmac_key_bytes,
+            hospital_id=hospital_id,
+            point_id=point_id,
+            version=version,
+        )
+        updated = await self.connection.scalar(
+            text(
+                "UPDATE kiosks SET checkin_code_version = :version, "
+                "checkin_code_hash = :checkin_code_hash "
+                "WHERE hospital_id = :hospital_id AND id = :point_id AND kind = 'mobile' "
+                "AND deleted_at IS NULL AND checkin_code_version = :current_version "
+                "RETURNING checkin_code_version"
+            ),
+            {
+                "version": version,
+                "checkin_code_hash": checkin_code_digest(code),
+                "hospital_id": hospital_id,
+                "point_id": point_id,
+                "current_version": current_version,
+            },
+        )
+        return int(updated) if updated is not None else None
 
     async def blockers(
         self, resource: str, *, hospital_id: UUID, resource_id: UUID
@@ -1480,7 +1631,8 @@ class AdminRepository:
         ),
         "kiosks": (
             "UPDATE kiosks SET deleted_at = now(), is_active = false, secret_hash = NULL, "
-            "activation_code_hash = NULL, activation_code_expires_at = NULL "
+            "activation_code_hash = NULL, activation_code_expires_at = NULL, "
+            "checkin_code_hash = NULL "
             "WHERE hospital_id = :hospital_id AND id = :resource_id AND deleted_at IS NULL "
             "RETURNING id"
         ),

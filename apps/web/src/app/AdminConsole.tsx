@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { QRCodeSVG } from "qrcode.react";
 import {
   Building2,
   Check,
@@ -12,7 +13,11 @@ import {
   MoreHorizontal,
   Network,
   PlusCircle,
+  Printer,
+  QrCode,
+  RefreshCw,
   Search,
+  Smartphone,
   Trash2,
   UserRound,
   Users,
@@ -20,6 +25,7 @@ import {
 import { Popover } from "../components/ui/Popover";
 import type { StaffRole } from "../lib/auth";
 import { staffAuth } from "../lib/auth";
+import { newRequestId } from "../lib/ids";
 
 type Resource = "departments" | "users" | "kiosks";
 type Department = {
@@ -42,6 +48,8 @@ type StaffRecord = {
 type Kiosk = {
   id: string;
   label: string;
+  /** "device": a paired kiosk screen; "mobile": a phone check-in QR poster. */
+  kind?: "device" | "mobile";
   is_active: boolean;
   last_seen_at: string | null;
   paired_at?: string | null;
@@ -53,9 +61,11 @@ type Kiosk = {
 };
 type Page<T> = { items: T[]; next_cursor: string | null };
 type Activation = { kiosk: string; code: string; expiresAt: string | null } | null;
+/** A phone check-in QR: url is null when this PC's Wi-Fi address is unknown. */
+type CheckinQr = { id: string; label: string; path: string; url: string | null };
 type Filters = { search: string; role: string; status: string };
 type Pending = {
-  action: "deactivate" | "delete";
+  action: "deactivate" | "delete" | "replace";
   resource: Resource;
   item: { id: string; is_active: boolean };
   name: string;
@@ -107,6 +117,7 @@ export function AdminConsole() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activation, setActivation] = useState<Activation>(null);
+  const [checkinQr, setCheckinQr] = useState<CheckinQr | null>(null);
   const [filters, setFilters] = useState<Record<Resource, Filters>>({
     users: NO_FILTERS,
     kiosks: NO_FILTERS,
@@ -114,7 +125,7 @@ export function AdminConsole() {
   });
   const [pending, setPending] = useState<Pending | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [copied, setCopied] = useState<"code" | "link" | null>(null);
+  const [copied, setCopied] = useState<"code" | "link" | "checkin" | null>(null);
   const baseId = useId();
   const tabRefs = useRef<Partial<Record<Resource, HTMLButtonElement | null>>>({});
 
@@ -211,18 +222,24 @@ export function AdminConsole() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": crypto.randomUUID(),
+          "Idempotency-Key": newRequestId(),
         },
         body: JSON.stringify(payload),
       })) as {
         id: string;
+        kind?: Kiosk["kind"];
         activation_code?: string;
         activation_code_expires_at?: string | null;
         label?: string;
       };
       formElement.reset();
       setShowPassword(false);
-      if (created.activation_code) {
+      if (created.kind === "mobile") {
+        setNotice(t("adminCreated"));
+        await load("kiosks");
+        await showCheckinQr(created);
+      } else if (created.activation_code) {
+        setCheckinQr(null);
         setCopied(null);
         setActivation({
           kiosk: created.label ?? t("newKiosk"),
@@ -251,7 +268,7 @@ export function AdminConsole() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": crypto.randomUUID(),
+          "Idempotency-Key": newRequestId(),
         },
         body: JSON.stringify({ is_active: !item.is_active }),
       });
@@ -276,9 +293,12 @@ export function AdminConsole() {
     try {
       await request(`/admin/${target}/${item.id}`, {
         method: "DELETE",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: { "Idempotency-Key": newRequestId() },
       });
-      if (target === "kiosks") setActivation(null);
+      if (target === "kiosks") {
+        setActivation(null);
+        setCheckinQr((current) => (current?.id === item.id ? null : current));
+      }
       setNotice(t("adminDeleted"));
       await load(target);
     } catch (cause) {
@@ -296,10 +316,11 @@ export function AdminConsole() {
     try {
       const issued = (await request(`/admin/kiosks/${kiosk.id}/activation-code`, {
         method: "POST",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: { "Idempotency-Key": newRequestId() },
       })) as { activation_code?: string; activation_code_expires_at?: string; label?: string };
       if (issued.activation_code) {
         setCopied(null);
+        setCheckinQr(null);
         setActivation({
           kiosk: issued.label ?? kiosk.label,
           code: issued.activation_code,
@@ -314,10 +335,46 @@ export function AdminConsole() {
     }
   }
 
+  /** Show a phone check-in point's QR; the same QR can be shown and printed any time. */
+  async function showCheckinQr(point: { id: string }) {
+    setSaving(true);
+    setError("");
+    try {
+      const link = (await request(`/admin/kiosks/${point.id}/checkin-link`)) as CheckinQr;
+      setCopied(null);
+      setActivation(null);
+      setCheckinQr(link);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("adminRequestError"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** A new QR for a check-in point: posters with the old one stop working at once. */
+  async function replaceCheckinQr(point: { id: string }) {
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const link = (await request(`/admin/kiosks/${point.id}/checkin-link`, {
+        method: "POST",
+        headers: { "Idempotency-Key": newRequestId() },
+      })) as CheckinQr;
+      setCopied(null);
+      setCheckinQr(link);
+      setNotice(t("checkinQrReplaced"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("adminRequestError"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const activationLink = (code: string) =>
     `${window.location.origin}/kiosk?activate=${encodeURIComponent(code)}`;
 
-  async function copy(kind: "code" | "link", value: string) {
+  async function copy(kind: "code" | "link" | "checkin", value: string) {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(kind);
@@ -369,7 +426,8 @@ export function AdminConsole() {
     const hours = Math.round(minutes / 60);
     return hours > -24 ? relative.format(hours, "hour") : relative.format(Math.round(hours / 24), "day");
   };
-  const activeKiosks = kiosks.filter((kiosk) => kiosk.is_active);
+  // Only kiosk screens report in; printed phone check-in QRs are never "online".
+  const activeKiosks = kiosks.filter((kiosk) => kiosk.is_active && kiosk.kind !== "mobile");
   const onlineKiosks = activeKiosks.filter((kiosk) => connectionOf(kiosk, now) === "online");
   const dateOnly = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" });
   const roleLabel = (role: string) => t(`${role}Role`, { defaultValue: cap(role) });
@@ -435,7 +493,31 @@ export function AdminConsole() {
       >
         {(close) => (
           <>
-            {options.kiosk && (
+            {options.kiosk?.kind === "mobile" && (
+              <>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    close();
+                    void showCheckinQr(item);
+                  }}
+                >
+                  <QrCode aria-hidden="true" size={15} /> {t("showCheckinQr")}
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    close();
+                    setPending({ action: "replace", resource, item, name });
+                  }}
+                >
+                  <RefreshCw aria-hidden="true" size={15} /> {t("replaceCheckinQr")}
+                </button>
+              </>
+            )}
+            {options.kiosk && options.kiosk.kind !== "mobile" && (
               <button
                 type="button"
                 disabled={saving || !item.is_active}
@@ -520,7 +602,7 @@ export function AdminConsole() {
         <td data-label={t("kioskLabel")}>
           <span className="adm-person">
             <span className="adm-avatar adm-avatar--kiosk" aria-hidden="true">
-              <Monitor size={16} />
+              {item.kind === "mobile" ? <Smartphone size={16} /> : <Monitor size={16} />}
             </span>
             <span className="adm-person-text">
               <strong>{item.label}</strong>
@@ -538,7 +620,19 @@ export function AdminConsole() {
           {item.created_at ? dateOnly.format(new Date(item.created_at)) : "—"}
         </td>
         <td data-label={t("connectionColumn")}>
-          {(() => {
+          {item.kind === "mobile" ? (
+            // A printed QR has no device to be online; show when patients last used it.
+            <span className="adm-connection">
+              <span className={`adm-conn adm-conn--${item.is_active ? "unseen" : "off"}`}>
+                {t("kioskKindMobile")}
+              </span>
+              <span className="adm-muted">
+                {item.last_seen_at
+                  ? t("checkinLastUsed", { when: ago(item.last_seen_at) })
+                  : t("checkinNeverUsed")}
+              </span>
+            </span>
+          ) : (() => {
             const state = connectionOf(item, now);
             return (
               <span className="adm-connection">
@@ -693,6 +787,56 @@ export function AdminConsole() {
               <p>{t("activationCodeHowTo")}</p>
             </aside>
           )}
+          {checkinQr && resource === "kiosks" && (
+            <aside className="adm-activation adm-checkin-qr" aria-live="polite">
+              <h3>
+                <QrCode aria-hidden="true" size={17} /> {t("checkinQrTitle")}
+              </h3>
+              <p>{t("checkinQrFor", { label: checkinQr.label })}</p>
+              {checkinQr.url ? (
+                <>
+                  <div className="adm-checkin-qr-code">
+                    <QRCodeSVG
+                      value={checkinQr.url}
+                      size={220}
+                      level="M"
+                      marginSize={2}
+                      title={t("checkinQrTitle")}
+                    />
+                  </div>
+                  <code>{checkinQr.url}</code>
+                  <p className="no-print">{t("checkinQrTest")}</p>
+                </>
+              ) : (
+                <p className="adm-banner adm-banner--error" role="alert">
+                  {t("checkinQrNoAddress")}
+                </p>
+              )}
+              <div className="adm-activation-actions no-print">
+                {checkinQr.url && (
+                  <>
+                    <button type="button" onClick={() => window.print()}>
+                      <Printer aria-hidden="true" size={15} /> {t("printCheckinQr")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copy("checkin", checkinQr.url ?? "")}
+                    >
+                      {copied === "checkin" ? (
+                        <Check aria-hidden="true" size={15} />
+                      ) : (
+                        <Link2 aria-hidden="true" size={15} />
+                      )}
+                      {copied === "checkin" ? t("copied") : t("copyCheckinLink")}
+                    </button>
+                  </>
+                )}
+                <button type="button" onClick={() => setCheckinQr(null)}>
+                  {t("dismissActivation")}
+                </button>
+              </div>
+            </aside>
+          )}
           <form className="adm-card adm-form" onSubmit={(event) => void create(event)}>
             <div className="adm-card-head">
               <span className="adm-card-icon" aria-hidden="true">
@@ -807,13 +951,23 @@ export function AdminConsole() {
               </>
             )}
             {resource === "kiosks" && (
-              <label>
-                <span>
-                  {t("kioskLabel")} <em aria-hidden="true">*</em>
-                </span>
-                <input name="label" required maxLength={100} placeholder={t("kioskLabelPlaceholder")} />
-                <small>{t("kioskLabelHint")}</small>
-              </label>
+              <>
+                <label>
+                  <span>{t("kioskKind")}</span>
+                  <select name="kind" defaultValue="device">
+                    <option value="device">{t("kioskKindDevice")}</option>
+                    <option value="mobile">{t("kioskKindMobile")}</option>
+                  </select>
+                  <small>{t("kioskKindHint")}</small>
+                </label>
+                <label>
+                  <span>
+                    {t("kioskLabel")} <em aria-hidden="true">*</em>
+                  </span>
+                  <input name="label" required maxLength={100} placeholder={t("kioskLabelPlaceholder")} />
+                  <small>{t("kioskLabelHint")}</small>
+                </label>
+              </>
             )}
             <p className="adm-required">
               <em aria-hidden="true">*</em> {t("requiredFields")}
@@ -922,14 +1076,18 @@ export function AdminConsole() {
             <h3 id={`${baseId}-confirm`}>
               {pending.action === "delete"
                 ? t("confirmDeleteTitle", { name: pending.name })
-                : t("confirmDeactivateTitle", { name: pending.name })}
+                : pending.action === "replace"
+                  ? t("confirmReplaceQrTitle", { name: pending.name })
+                  : t("confirmDeactivateTitle", { name: pending.name })}
             </h3>
             <p id={`${baseId}-confirm-text`}>
               {pending.action === "delete"
                 ? t(`confirmDelete${cap(pending.resource)}`)
-                : pending.resource === "users"
-                  ? t("confirmDeactivateUser")
-                  : t("confirmDeactivateOther")}
+                : pending.action === "replace"
+                  ? t("confirmReplaceQr")
+                  : pending.resource === "users"
+                    ? t("confirmDeactivateUser")
+                    : t("confirmDeactivateOther")}
             </p>
             <div className="rp-dialog-actions">
               <button type="button" autoFocus onClick={() => setPending(null)}>
@@ -942,10 +1100,15 @@ export function AdminConsole() {
                   const target = pending;
                   setPending(null);
                   if (target.action === "delete") void remove(target.resource, target.item);
+                  else if (target.action === "replace") void replaceCheckinQr(target.item);
                   else void toggle(target.resource, target.item);
                 }}
               >
-                {pending.action === "delete" ? t("deleteRecord") : t("deactivate")}
+                {pending.action === "delete"
+                  ? t("deleteRecord")
+                  : pending.action === "replace"
+                    ? t("replaceCheckinQr")
+                    : t("deactivate")}
               </button>
             </div>
           </section>

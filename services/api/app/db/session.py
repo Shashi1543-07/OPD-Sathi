@@ -37,6 +37,7 @@ async def set_secret_lookup_scope(
         "app.refresh_token_hash",
         "app.kiosk_activation_hash",
         "app.kiosk_secret_hash",
+        "app.kiosk_checkin_hash",
         "app.status_token_hash",
     }:
         raise ValueError("unsupported secret lookup scope")

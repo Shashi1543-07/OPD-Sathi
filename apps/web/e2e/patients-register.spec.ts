@@ -30,7 +30,7 @@ test("staff patient register is useful at desktop and mobile sizes", async ({
       },
     }),
   );
-  await page.route((url) => url.pathname === "/patients", (route) =>
+  await page.route((url) => /^(?:\/api)?\/patients$/.test(url.pathname), (route) =>
     route.fulfill({
       json: {
         limit: 50,

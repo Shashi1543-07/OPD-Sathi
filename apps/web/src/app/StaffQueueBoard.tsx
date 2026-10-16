@@ -15,6 +15,7 @@ import {
   PhoneCall,
   RefreshCw,
   Search,
+  Smartphone,
   Stethoscope,
   UserRound,
   Users,
@@ -23,6 +24,7 @@ import { ConnectionIndicator, Popover, UrgencyBadge } from "../components/ui";
 import { TriageWhy } from "./TriageWhy";
 import { apiSocketUrl } from "../lib/api";
 import { staffAuth } from "../lib/auth";
+import { newRequestId } from "../lib/ids";
 import {
   applyQueueOperations,
   sequenceAction,
@@ -467,7 +469,7 @@ export function StaffQueueBoard() {
   async function acknowledge(alertId: string) {
     const response = await staffAuth.request(`/alerts/${alertId}/ack`, {
       method: "POST",
-      headers: { "Idempotency-Key": crypto.randomUUID() },
+      headers: { "Idempotency-Key": newRequestId() },
     });
     if (!response.ok) {
       setError("Could not acknowledge this alert. Refresh and try again.");
@@ -485,7 +487,7 @@ export function StaffQueueBoard() {
     try {
       const response = await staffAuth.request(`/queue/${visitId}/${name}`, {
         method: "POST",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: { "Idempotency-Key": newRequestId() },
       });
       if (!response.ok)
         throw new Error("That queue action is no longer available.");
@@ -507,7 +509,7 @@ export function StaffQueueBoard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": crypto.randomUUID(),
+          "Idempotency-Key": newRequestId(),
         },
         body: JSON.stringify({
           urgency: value.urgency,
@@ -541,7 +543,7 @@ export function StaffQueueBoard() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Idempotency-Key": crypto.randomUUID(),
+            "Idempotency-Key": newRequestId(),
           },
           body: JSON.stringify({ reason }),
         },
@@ -871,6 +873,11 @@ export function StaffQueueBoard() {
                             {item.needs_assistance && (
                               <span className="qb-flag">
                                 <Hand aria-hidden="true" size={13} /> {t("patientNeedsAssistance")}
+                              </span>
+                            )}
+                            {item.channel === "phone" && (
+                              <span className="qb-flag qb-flag--phone" title={t("channelPhoneHint")}>
+                                <Smartphone aria-hidden="true" size={13} /> {t("channelPhone")}
                               </span>
                             )}
                           </div>

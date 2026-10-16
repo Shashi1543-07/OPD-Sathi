@@ -1,0 +1,381 @@
+# OPD Saathi — IIT Bombay readiness: audit, gap analysis and phase plan
+
+**Prepared:** 16 October 2026 (Day 1 of 15) · **Branch:** `feat/iitb-readiness` · **Data:** synthetic only
+
+This document is the working plan for the state-level presentation at IIT Bombay. It records what the
+repository actually does today (verified by reading code, running the suites and reproducing failures),
+where it falls short of SIH26047, what we will change, in what order, and how each change is tested.
+The progress checklist at the end is updated as work lands.
+
+---
+
+## 1. Summary
+
+OPD Saathi is not a prototype that needs rebuilding. It is a mature FastAPI + PostgreSQL (row-level
+security) + Redis + React/Vite PWA system with a deterministic interview engine, explainable triage,
+encrypted clinical data, an audited staff console and 829 passing API tests. The work for the next 15
+days is therefore **hardening and filling specific gaps**, not new architecture.
+
+The audit found four defects that would break the live demonstration and several that a serious
+technical evaluator would find quickly:
+
+| # | Severity | Defect (verified) | Effect at the demo |
+|---|---|---|---|
+| D1 | **P0** | The web app calls `crypto.randomUUID()` in 11 places. Browsers only provide it in a *secure context* (HTTPS or `localhost`). Reproduced in Chromium with a Pixel 7 profile: from `http://172.27.14.36:5173` it is `undefined`. | On a phone or any second PC on the Wi-Fi, answering a question, confirming, and every staff queue action throws. Looks like "the network doesn't work". |
+| D2 | **P0** | `PUBLIC_WEB_URL` (the address encoded in every token QR code) is baked into the API container when `start-demo.ps1` runs. Docker restarts containers with the old value. Running container: `172.17.134.95`; this PC now: `172.27.14.36`. Probing the old address times out. | Phones that scan the QR wait and fail — indistinguishable from a firewall block. |
+| D3 | **P1** | `patients.phone_hmac` is unique per hospital and every kiosk session creates a new patient row. A returning patient, or a second family member using the same phone, gets `409 PHONE_ALREADY_REGISTERED`. No test covers this path. | Returning patients cannot give their number; the longitudinal-record feature cannot be built on this model. |
+| D4 | **P0** | `no_show` is a terminal queue state. There is no "absent / skipped" state and no recall. End-of-day close-out also turns waiting patients into no-shows. | A patient who steps out when called loses the visit; the doctor-calling workflow requested for the demo is impossible. |
+| D5 | P1 | Call, start, complete, no-show, cancel, call-next and override check the role but not the staff member's department. (Reads already check the department.) | A doctor in one department can act on another department's patient through the API. |
+| D6 | P1 | `call-next` reads the queue outside any lock; two doctors pressing it together pick the same patient and the second gets an error. | Visible race at a two-doctor demo. |
+| D7 | P1 | A doctor can hold several patients in `called`/`in_consult` at once; who called a patient is not recorded. | "Two active consultations" and no accountability for calls. |
+| D8 | P1 | `POST /queue/{id}/routing/confirm` reads the case sheet column directly, but that column holds `{"ciphertext": …}`. The route is therefore never found and the call always returns `409 ROUTE_ALREADY_CONFIRMED`; if it ever proceeded it would overwrite ciphertext with plaintext. No test covers it. | The nurse "Confirm route" button never works. |
+| D9 | P1 | If the database commits a confirmation but the final Redis write fails (or two confirms race), a retry gets `409 SUMMARY_NOT_READY` forever, although the patient is queued with a token. | A patient can be in the queue with no token on screen. |
+| D10 | P2 | Answer corrections (`PATCH …/interview/answers`) are not idempotent; a retry after a lost response can hit the turn-number unique key. | Rare 500 on flaky Wi-Fi. |
+| D11 | P2 | In development (`npm run dev`) the API base defaults to `http://localhost:8000`; on a phone that is the phone itself. | Dev-mode phone testing fails for a reason unrelated to the firewall. |
+| D12 | P2 | Local test runs load `.env`, which holds live Gemini/Sarvam keys, so tests could call live providers. CI has no `.env` and is unaffected. | Cost and flaky local runs; synthetic data sent to a provider. |
+| D13 | P2 | The offline outbox needs `crypto.subtle` (secure context only). | Must be hidden, not crash, on insecure origins. |
+
+**What the "firewall issue" most likely was.** The host firewall is not blocking: Docker Desktop's
+backend already has inbound *Allow* rules on the Public profile, there are no matching *Block* rules, and
+the web container listens on `0.0.0.0:5173`. The failures a phone user would see are explained by D2
+(QR points at a dead address), D1 (buttons throw once the page loads), and — at a venue — Wi-Fi client
+isolation or a different subnet (this PC is on a wired `172.27.x` network; campus Wi-Fi commonly isolates
+clients). Section 6.1 gives the operator procedure and a diagnostic script; we will not disable the firewall.
+
+---
+
+## 2. SIH26047 — verified problem statement
+
+The official portal (`sih.gov.in/sih2026PS`) lists problem statements in descending order and only the
+first ~100 (down to SIH26160) are present in the static page, so SIH26047 could not be fetched from it
+automatically. The text below is taken from secondary copies that reproduce the official entry; two
+independent copies agree on every field except the theme. **Before the presentation, a team member
+should open the official portal in a browser, search 26047 and confirm the wording.**
+
+- **Title:** Patient Case-Taking Software · **ID:** SIH26047
+- **Organisation:** Ministry of Ayush · **Department:** All India Institute of Ayurveda (AIIA)
+- **Category:** Software · **Theme:** MedTech / BioTech / HealthTech (one copy says "Smart Automation")
+- **Problem:** OPD consultations last minutes, so histories are incomplete; AYUSH practice needs an even
+  more extensive history (Prakriti, Vikriti, Agni). Patients bring fragmented paper records. ABDM exists,
+  but there is no patient-facing "first-mile" tool to capture history and digitise documents *before* the visit.
+- **Expected solution ("MediKiosk"):**
+  - **A — Conversational history engine:** adaptive voice-and-touch interview in the patient's language,
+    SOCRATES-style follow-ups, an AYUSH extended mode (Dashavidha Pariksha), red-flag detection that
+    raises priority triage alerts.
+  - **B — Document digitisation:** multilingual OCR of printed and handwritten documents; extraction of
+    diagnoses, medicines, lab values and procedures; a chronological timeline; flagging of abnormal values
+    and potential drug interactions.
+  - **C — Summary generator:** standard sections (CC, HPI, past, drug and allergy, family, personal, ROS,
+    prior investigations) that the physician can edit, accept or reject; a draft, never a diagnosis;
+    patient audio in the local language, physician output in English or Hindi.
+  - **D — Consent, privacy and ABDM:** ABHA-based authentication, granular revocable consent with audio
+    explanation, session data cleared after submission, FHIR push to HIS/EMR and the ABHA PHR, DPDP Act 2023.
+  - **Journey:** identify and consent → converse → scan documents → summarise and route → physician reviews.
+
+Sources: [SIH 2026 problem statements](https://sih.gov.in/sih2026PS) (official, not reachable for this ID),
+[SIH explorer copy](https://sih-explorer.amanuniyal47.workers.dev/problem/SIH26047),
+[repository quoting the official metadata](https://github.com/xarjunpatil/SIH26047-Patient-Case-Taking-Software).
+
+### 2.1 Requirements matrix
+
+Priority: **P0** demo-breaking · **P1** needed for a credible demo · **P2** strengthens the demo · **P3** future.
+
+| # | SIH26047 requirement | Why it matters | Current implementation (verified) | Gap | Proposed improvement | Priority | Effort / dependencies | Test and demonstration |
+|---|---|---|---|---|---|---|---|---|
+| R1 | Multilingual interaction | Patients describe problems in their own language | Full UI, question bank, consent and read-back in English, Hindi, Marathi (407 keys/language, parity-checked) | Other regional languages; translations not native-reviewed | Keep three languages for the demo; document the add-a-language path (bank + locale files) | P2 | Native-speaker review is a people task | Locale parity script; e2e language switch mid-interview |
+| R2 | Voice **and** touch history-taking | Low-literacy and elderly users | Sarvam/Gemini STT with browser fallback; TTS read-aloud; tap and type always available | Microphone is unavailable on phones over plain HTTP (no secure context); the UI doesn't say why | Explain "voice needs the secure link" and fall back to tap/type; optional HTTPS-on-LAN using the existing nginx | P1 | nginx TLS config + local CA script; no new component | Secure-context probe; phone e2e with mic unavailable |
+| R3 | Adaptive follow-up questions | Complete, relevant history in few questions | Rule-triggered modules from the chief concern; ≤3 AI follow-ups with bank fallback; Back/Change | No surgical or personal history; "don't know/declined" not distinguished from "no" | Add surgical and personal-history questions; record *unknown* and *declined* explicitly | P2 | Bank JSON + engine; regenerate golden set and audio manifest | Interview golden set; unit tests for unknown ≠ negative |
+| R4 | Structured history (CC, HPI, PMH/PSH, meds, allergies, FH, personal, ROS) | Physician-ready summary | Versioned `CaseSheet` schema covers CC, HPI (SOCRATES fields), past history, medicines, allergies, family, social, red flags, routing, per-field provenance | ROS absent; surgeries/social never asked | As R3; a short ROS screen is deferred | P2 | Schema already has fields | Case-sheet schema check in CI |
+| R5 | AYUSH history (Trividha, Ashtavidha, Dashavidha Pariksha) | The problem owner is AIIA | None | No AYUSH parameters at all | Optional Ayurveda module: patient-reportable items (Ahara Shakti/appetite, Mala/bowel, Mutra/urine, Nidra/sleep, Vyayama Shakti, diet/Satmya) asked by the kiosk; examination items (Nadi, Jihva, Drik, Akriti, Prakriti…) as clinician-entry fields, never asked of the patient. All marked draft pending vaidya review | P2 (high demo value) | Bank module + case-sheet section + consultation UI | Unit tests; demo with AYUSH mode on |
+| R6 | Document scanning, OCR, extraction, chronology | Fragmented paper records | Prescription photo → Gemini reads medicine names; image never stored. `documents` table exists but is unused | No storage, no lab-value extraction, no timeline, no review of uncertain results | Upload/capture with type and size validation, encrypted local storage, staff preview, AI extraction stored as *unconfirmed* until a clinician accepts it; abnormal flags only with a stated reference range | P3 (P2 if time) | Storage adapter, migration, UI | Integration tests for invalid/oversized files and extraction failure |
+| R7 | Physician-readable, editable AI summary | Saves consultation time; must stay a draft | Case sheet + AI brief + doctor edits with optimistic concurrency + PDF; strong output guard rejects diagnosis/advice wording | No accept/reject state for the AI draft; no link from summary statements to the answers that support them | Review state (draft → accepted/edited/rejected, by whom, when); `brief_sources` limited to asked question ids and shown as links | P2 | Case-sheet schema 1.0 additive fields | Unit tests for provenance validation; e2e accept/reject |
+| R8 | Red-flag detection and escalation | Patient safety | Deterministic rules + danger tiles raise an immediate staff alert, re-escalated every 60 s until acknowledged; AI second opinion counts as *priority* at most | A self-reported urgent flag jumps the queue with no "awaiting confirmation" marker; queue gaming via danger tiles is possible | Keep urgent at the front (never suppress), but mark self-reported urgent as *awaiting nurse confirmation*; nurse confirms or lowers with a recorded reason | P1 | Queue phase | Adversarial unit tests; demo red-flag scenario |
+| R9 | Consent, privacy, access control, secure handling | DPDP Act 2023; trust | Versioned consent per visit (text hash), AES-GCM encrypted PII/case sheets/transcripts, RLS tenant isolation, role checks, append-only audit, retention script | Single blanket consent; no withdrawal; department authorisation gaps (D5); D8 writes plaintext | Department checks everywhere; separate consent purposes (care, AI processing, record linking); withdrawal path; fix D8 | P1 / P2 | Migration for consent purposes | Authorisation and tenant-isolation tests |
+| R10 | HIS / ABDM / FHIR integration | Interoperability | None (documented as out of scope) | — | FHIR R4 *export* of one encounter (Patient, Encounter, Condition, AllergyIntolerance, MedicationStatement, Observation, QuestionnaireResponse) labelled "not ABDM-certified"; ABHA/ABDM documented as future | P3 | Mapping module | Validate bundle structure in unit tests |
+| R11 | Returning patients / longitudinal record (brief, Feature 2) | Patients shouldn't repeat their history | Each visit creates a new patient row; no linking; D3 | Everything | OPD card number + card code (QR on the slip) to link a new visit to an existing patient; nurse-assisted search and link; doctor's previous-visits panel; never auto-merge on phone/name | P1 | Migration (drop unique phone index), APIs, UI | Integration tests incl. shared phone, uncertain match, cross-hospital |
+| R12 | Session data cleared after submission | Module D | Redis session TTL 2 h; kiosk clears browser storage on finish | Redis state kept for 2 h after confirmation | Delete interview state after confirmation, keep only the receipt needed for idempotent retries | P2 | Small | Unit test |
+
+---
+
+## 3. Repository audit
+
+### 3.1 Architecture (as built)
+
+```
+Phone / kiosk browser ──HTTP──► nginx (web container, :5173) ──/api──► FastAPI (gunicorn, 2 workers)
+                                   │ static PWA (React/Vite)            │
+                                   │                                     ├─► PostgreSQL 16 (RLS by hospital)
+                                   │                                     ├─► Redis (durable: sessions, queue read model, pub/sub, idempotency)
+                                   │                                     ├─► Redis cache (evictable)
+                                   │                                     └─► Gemini / Sarvam (optional, explicit keys)
+Worker (ARQ): outbox relay every 2 s → Redis sorted sets + status pub/sub; notifications; analytics refresh; day close-out
+```
+
+Key modules: `services/api/app/api/v1/intake.py` (session, consent, identity, danger signs, interview,
+confirm), `queue.py` (status page, staff queue, transitions, alerts, WebSocket), `case_sheets.py`
+(doctor read/edit/PDF/transcript), `db/repositories.py` (all SQL), `domain/interview` (bank + engine),
+`domain/triage` (explainable score), `domain/redflags` (rules), `domain/queue` (state machine, scoring,
+tokens, Redis read model), `workers/main.py`. Web: `KioskIntake.tsx`, `StaffQueueBoard.tsx`,
+`DoctorConsultation.tsx`, `PatientStatus.tsx`, `lib/intake.ts`.
+
+### 3.2 Journeys traced
+
+- **Patient (kiosk):** `/kiosk` (activated kiosk, device secret in localStorage) → `POST /intake/sessions`
+  creates a *patient row and a visit* (`registering`) and returns a 2-hour patient JWT; state lives in
+  Redis `osa:intake:{hospital}:{visit}` → consent (versioned text hash) → identity (age, sex, optional
+  phone) → danger tiles (instant urgent alert) → one question at a time; every answer is a durable,
+  encrypted `interview_turns` row and re-runs red-flag rules and the triage score (monotonic: never falls
+  on its own) → summary read-back → `POST /confirm` assigns the daily token under an advisory lock and a
+  `FOR UPDATE` row lock, writes a `queue.changed` outbox event, enqueues in Redis → token, position,
+  department and QR to `/s/<status-token>` (HMAC-derived, stored only as a hash).
+- **Patient (phone):** today only the status page `/s/<token>` (SSE stream). There is no way to start
+  an interview on a phone.
+- **Nurse:** `/staff` sign-in (hospital picker, 10-minute access token, per-account refresh cookie) →
+  Queue board (WebSocket snapshot + deltas, alert feed, override with reason, call/no-show, assisted
+  registration).
+- **Doctor:** Queue → open case sheet (department-checked, audited read) → edit with `If-Match` →
+  start/finish consult → PDF.
+- **Admin:** Reports (rollup + CSV), Settings (departments, staff, kiosks with one-time activation codes,
+  AI switch, report settings), audit API.
+
+### 3.3 Strengths to preserve
+
+Tenant isolation by RLS with composite tenant foreign keys; field-level AES-GCM with associated data;
+deterministic safety rules authoritative over AI; idempotency store for staff POSTs; outbox + rebuildable
+Redis read model; explainable triage with every point listed for staff; extensive eval sets; 829 API tests.
+
+### 3.4 Baseline (16 Oct 2026, before any change)
+
+| Suite | Result | Notes |
+|---|---|---|
+| API (pytest, unit + integration) | **829 passed, 1 skipped** | Run against an isolated `osa_test` database and Redis DB 5 with AI keys blanked (see 11.4) |
+| Web unit (Vitest, Node 24) | **55 passed** (13 files) | |
+| E2E (Playwright) | to run before each commit | Specs mock the API with `page.route` |
+| Secure-context probe | localhost ✓, LAN ✗ (`randomUUID`, `subtle`, `mediaDevices`, service worker all missing) | Reproduces D1 |
+| LAN reachability | current IP `/api/healthz` 200; QR IP times out | Reproduces D2 |
+
+---
+
+## 4. Target design
+
+### 4.1 Mobile access on the hospital LAN (Feature 1)
+
+1. **Secure-context-safe client** (fixes D1, D13): one `newRequestId()` helper that uses
+   `crypto.randomUUID` when present and otherwise builds an RFC 4122 v4 id from `crypto.getRandomValues`
+   (available on every origin). Offline intake is offered only where `crypto.subtle` exists.
+2. **Phone check-in points** (new): an administrator creates a *phone check-in QR* (stored as a kiosk
+   record of kind `mobile` with its own code hash; it can never obtain a kiosk device token). Patients
+   scan it, open `/m/<code>`, choose a language and complete the **same** server-side interview the kiosk
+   uses. Session creation is rate limited per client address and per check-in point; visits are marked
+   as phone check-ins on the staff board so staff can greet and verify them.
+3. **No duplicates on refresh or reconnect:** the phone keeps its session in `localStorage` (the kiosk
+   keeps `sessionStorage`), resumes at the current step after a reload, and after confirmation remembers
+   the issued token so reopening the check-in link shows "You already have token MED-012" instead of
+   starting another visit. Confirmation becomes idempotent on the database (fixes D9).
+4. **Correct QR address and staff-visible reachability** (fixes D2): `scripts/lan-check.ps1` reports the
+   LAN address, network profile, bindings, firewall rules and whether the running API's phone address
+   matches this PC; `start-demo.ps1` warns when it doesn't. Staff Settings shows the phone address and a
+   live reachability test.
+5. **Voice on phones (optional, P2):** HTTPS on the LAN using the nginx we already ship and a locally
+   generated CA (no new component, per ADR 001). Without it, phones use tap and typing, and the UI says so.
+
+### 4.2 Patient identity and longitudinal record (Feature 2)
+
+- **Identity ≠ encounter.** `patients` stays the per-hospital person; `visits` is the encounter with its
+  own token, consent, interview and consultation.
+- **Matching never trusts demographics.** The unique phone index is replaced by a non-unique index
+  (shared family phones). A phone match is only a *suggestion* shown to staff.
+- **Linking a returning patient** requires something only that patient holds: the **OPD card** — a
+  hospital registration number (`OPD-26-000123`) plus a high-entropy card code printed as a QR on the
+  token slip and shown on the phone. Presenting it at a kiosk or phone links the new visit to the existing
+  patient. Without the card, a nurse searches (registration number, phone, name) and links after verbal
+  verification; every link is audited. No automatic merges.
+- **What each side sees.** The shared kiosk never displays past clinical details (privacy on a public
+  screen); it only asks focused follow-up questions ("Any change in your regular medicines?"). The doctor
+  sees a *Previous visits* panel — date, department, chief complaint, doctor-reviewed summary,
+  allergies/medicines on record — clearly separated from today's interview and labelled by source
+  (patient-reported / AI draft / doctor-reviewed). Reads are authorised server-side only while the
+  patient has an active visit in the staff member's department (admins always), and audited.
+- **Follow-up encounters** reference the earlier visit (`previous_visit_id`) without modifying it.
+
+### 4.3 Queue: state machine, fair priority, abuse resistance (Features 3 and 4)
+
+```
+registering ──► awaiting_confirmation ──► queued ──► called ──► in_consult ──► done
+     │                    │                 ▲  │        │             │
+     └──► cancelled ◄─────┴─────────────────┼──┴────────┤             └──► cancelled
+                                            │           ▼
+                                      recall│       skipped (temporarily absent) ──► no_show
+                                            └───────────┘
+```
+
+- **New state `skipped`** (called, did not appear). The doctor marks the patient absent after a
+  configurable grace period (default 3 minutes; the timer prompts, it never cancels by itself) and calls
+  the next eligible patient. **Recall** returns the patient to `queued` with the *same* token, encounter,
+  urgency and original arrival time, so they are seen next within their priority class. `no_show` is
+  reached only from `skipped` (manually, or at end of day).
+- **One active claim per doctor:** a doctor cannot call or start a patient while already holding one in
+  `called`/`in_consult`; `called_by` is recorded. **`call-next` is serialised per department** with a
+  transaction-scoped advisory lock, so two doctors never receive the same patient.
+- **Department authorisation** on every transition (fixes D5); admins may act hospital-wide.
+- **Audit and history:** each transition writes an immutable `visit_events` row (from, to, actor,
+  reason) besides the audit log, so the doctor and the patient status page can show the history and the
+  original encounter is never lost.
+- **Priority policy (documented in `docs/QUEUE_POLICY.md`):** urgent first (always, never capped);
+  within routine/priority, virtual arrival time = arrival − head start (bounded by level; at most
+  45 minutes); ties by arrival then id (deterministic). Self-reported urgent flags stay at the front but
+  are marked *awaiting nurse confirmation*; the nurse confirms or lowers with a reason. The server alone
+  computes urgency and position; answers cannot be changed after confirmation; urgency never falls
+  without a recorded staff decision. We do **not** penalise inconsistent answers — we route them to a human.
+
+### 4.4 AI summary and documents (Feature 5)
+
+Review state for the AI draft, statement-to-answer provenance, failure handling already present
+(timeouts, schema validation, output guard, deterministic fallback) kept. Documents follow in Phase 4
+if time allows: upload + preview + metadata + review first, OCR extraction stored as unconfirmed.
+
+### 4.5 Future RAG assistant (Feature 6) — design only
+
+Documented in `docs/RAG_DESIGN.md`: retrieval scoped by patient id and hospital *before* search,
+citation of record ids for every factual answer, refusal when unsupported, retrieved text treated as
+untrusted data, no medication advice, urgent-symptom routing, evaluation set. No implementation now.
+
+---
+
+## 5. Database and API changes
+
+All changes are additive Alembic migrations with working downgrades; nothing is dropped that holds data.
+
+| Migration | Change | Why |
+|---|---|---|
+| 0017 `mobile_checkin` | `kiosks.kind` (`device`/`mobile`), `kiosks.checkin_code_hash` (unique, own RLS lookup policy), constraints that a mobile point never has device secrets; `consents.channel` allows `mobile` | Phone check-in points |
+| 0018 `patient_identity` | Drop unique `uq_patients_hospital_phone_hmac`, add a non-unique index; `patients.mrn` (unique per hospital), `patients.card_code_hash` (unique, own RLS lookup policy); `visits.previous_visit_id` (tenant FK) | Returning patients, shared phones (D3) |
+| 0019 `queue_recall` | `visits.status` allows `skipped`; `visits.called_by`, `skipped_at`, `recalled_at`, `skip_count`; `visit_events` table (RLS, insert/select only for the app role); hospital setting `call_grace_seconds` | Missed-patient workflow, audit history |
+| later | `documents` storage fields; consent purposes | Phase 4–5 |
+
+New/changed endpoints (all server-authorised): `POST /intake/self-sessions` (public, rate-limited,
+check-in code), `POST /intake/sessions/{id}/link-card`, `GET /patients/{id}/history` (staff, department
+rule), `POST /patients/link` (nurse), `POST /queue/{id}/skip`, `POST /queue/{id}/recall`,
+admin CRUD for phone check-in points, `GET /system/phone-access`.
+
+---
+
+## 6. Operations
+
+### 6.1 Phone access on the hospital LAN — operator procedure (summary; full guide in `docs/MOBILE_LAN.md`)
+
+1. Connect the server PC and the phones to the **same** Wi-Fi/LAN segment. At venues with client
+   isolation (most campus and guest Wi-Fi), use a dedicated router or a phone hotspot that the server PC
+   also joins.
+2. Run `.\start-demo.ps1` (again after every reboot or network change — it recomputes the phone address).
+3. Run `.\scripts\lan-check.ps1`. It must report the phone address as reachable and matching the running API.
+4. If Windows marks the network *Public* and phones still cannot connect, prefer switching the trusted
+   hospital network to *Private*. Only if required, add the narrowly scoped rule the script prints
+   (TCP 5173, local subnet only) and remove it afterwards with the printed command. Never disable the firewall.
+5. Print the phone check-in QR from Staff → Settings → Phone check-in.
+
+### 6.2 What works without the internet
+
+| Capability | No internet, LAN up | Server PC down | Fully disconnected phone |
+|---|---|---|---|
+| Kiosk and phone interview (tap/type), tokens, live queue, staff console, case sheets, PDF (Docker) | ✓ | ✗ | ✗ |
+| Rules-based red flags, routing, triage score | ✓ | ✗ | ✗ |
+| Browser speech recognition (Chrome) | ✗ (uses Google servers) | ✗ | ✗ |
+| Sarvam/Gemini speech, AI summary, prescription reading | ✗ (degrades to tap/type and the deterministic case sheet) | ✗ | ✗ |
+| Kiosk offline short form (encrypted outbox, replay on reconnect) | n/a | ✓ on the kiosk PC only | ✗ |
+
+---
+
+## 7. Security and clinical-safety considerations
+
+- **Authorisation is server-side only:** department checks on every queue transition and history read;
+  RLS remains the tenant boundary; the client never sends urgency or position.
+- **Phone check-in abuse:** a check-in code is semi-public (printed in the hospital). Mitigations: rate
+  limits per address and per point, codes rotatable by admins, visits marked as phone check-ins, sessions
+  enter the queue only after a complete interview and confirmation, urgent flags always go to a human.
+- **Card codes** are 128-bit secrets stored only as HMAC digests; the shared kiosk never shows history.
+- **No PII in logs or URLs:** status and card tokens are opaque; existing structured logging already
+  omits payloads; new code follows the same pattern.
+- **Clinical safety:** no change weakens red-flag escalation; urgency is monotonic unless staff record a
+  reason; AI output remains a labelled draft that cannot raise urgency above *priority* on its own; all
+  rules, weights, questions and AYUSH items stay marked `draft_needs_clinician_review`.
+- **Legal:** a consent screen is not DPDP compliance. We record purpose, version, timestamp and channel,
+  and document what a hospital deployment would still need (DPO, notice in all languages, retention
+  schedule, breach process, processor agreements with AI providers).
+
+---
+
+## 8. Test plan and acceptance criteria
+
+| Area | Tests (synthetic data only) | Acceptance |
+|---|---|---|
+| Secure context | Vitest for the id helper with and without `randomUUID`; Playwright phone profile on the LAN origin | Interview and staff actions succeed from `http://<LAN-IP>:5173` |
+| Phone check-in | API unit + integration: valid/invalid/turned-off code, rate limit, resume, no duplicate visit on retry | A phone completes the interview end-to-end and sees its live status |
+| Confirmation | Concurrent and repeated confirms return the same token | Exactly one token per visit |
+| Identity | Shared phone no longer blocked; card link; wrong code; cross-hospital code; nurse link audited | No automatic merges; history visible only to authorised staff |
+| Queue | State-machine unit tests (every allowed/forbidden transition); skip → recall keeps token and arrival; one active claim per doctor; concurrent call-next distinct; department checks | Missed patient recovered with the original encounter and audit trail |
+| Priority | Existing monotonicity/adversarial evals + new tests: tapped-everything cannot reach urgent; self-reported urgent marked for confirmation; override persists | Documented policy matches tests |
+| Routing confirm | Decrypt/encrypt round trip | Button works; column stays ciphertext |
+| Regression | Full pytest, Vitest, Playwright, ruff, mypy --strict, eslint, tsc, build, locale parity, OpenAPI types | All green before each commit |
+
+---
+
+## 9. 15-day schedule (Day 1 = Thu 16 Oct 2026)
+
+| Days | Phase | Content | Exit criterion |
+|---|---|---|---|
+| 1 | 0 Audit | This document, baseline, reproductions | ✓ |
+| 1–3 | 1 Reliability + mobile | D1, D2, D8, D9, D11–D13; phone check-in points; LAN guide and script; phone layout pass | Phone completes interview on LAN; all suites green |
+| 4–6 | 2 Identity + records | Migration 0018, OPD card, link flows, doctor previous-visits panel, D3 | Returning-patient demo works; authorisation tests pass |
+| 7–8 | 3 Queue | Migration 0019, skip/recall, claims, call-next lock, D5–D7, policy doc | Missed-patient demo works; concurrency tests pass |
+| 9–10 | 4 Clinical | AI review state + provenance, AYUSH module, surgical/personal history; documents if time | Doctor accepts/edits a sourced draft |
+| 11–12 | 5 Security + E2E | Tenant/department isolation tests, the 15 scenarios in section 10, load smoke | Scenario checklist complete |
+| 13–14 | 6 Polish + demo | UI polish (patient, token, queue, consultation), demo data, rehearsal script | Two clean rehearsals from a cold start |
+| 15 | 7 Freeze | Final regression, LAN check on real phones, limitations doc | Release tag on the branch |
+
+## 10. End-to-end scenarios (tracked in the checklist)
+
+1 first-time patient on a phone · 2 returning patient with a previous visit · 3 incomplete interview ·
+4 red-flag symptom · 5 duplicate submission on a slow network · 6 called patient does not appear ·
+7 skip and recall · 8 patient returns after being marked absent · 9 AI provider unavailable ·
+10 network interruption · 11 two doctors in conflict · 12 another patient's records ·
+13 another hospital's records · 14 invalid/oversized document · 15 simultaneous registrations.
+
+## 11. Deferred (with reasons)
+
+- ABHA authentication and ABDM consent-manager integration — needs approved sandbox credentials and
+  certification; we provide a FHIR export and documented mapping only.
+- Handwriting OCR in Indian languages — accuracy cannot be validated in 15 days; upload/review flow first.
+- Patient self-service access to past records — needs stronger patient authentication than a printed
+  card (OTP/ABHA); the doctor-side history is built now.
+- Drug-interaction checks and abnormal-lab flags — need a licensed, reviewed knowledge base and reference
+  ranges; never shipped as an unreviewed AI judgement.
+- RAG assistant — design document only.
+- Additional regional languages — after native-speaker review of the current three.
+
+### 11.4 How tests are run locally
+
+`.env` contains live provider keys, so local suites run with the keys blanked and against an isolated
+database: create `osa_test` with the same roles (see `services/api/scripts/init-db.sh`), migrate it, and
+export `DATABASE_URL`/`MIGRATIONS_DATABASE_URL`/`WORKER_DATABASE_URL` for `osa_test`,
+`REDIS_STATE_URL=…/5`, `GEMINI_API_KEY=` and `SARVAM_API_KEY=` before `pytest`. Never run the suite
+against the demo database (failed tests leave synthetic hospitals in the sign-in picker).
+
+---
+
+## 12. Progress checklist
+
+| Phase / task | Status | Files | Tests | Notes |
+|---|---|---|---|---|
+| 0 Audit, SIH research, baseline, reproductions | done | this file, `PROBLEM_STATEMENT.md` | 829 API / 55 web baseline | D1–D13 recorded |
+| 1.1 D1 secure-context-safe request ids | done | `lib/ids.ts` + 5 call-site files | `ids.test.ts`; e2e phone flow with `randomUUID` removed | Every write now works over plain-HTTP LAN pages |
+| 1.2 D13 offline form only where Web Crypto exists | done | `offlineOutbox.ts`, `KioskWelcome.tsx` | e2e regression | |
+| 1.3 D8 route confirmation decrypts via repository | done | `queue.py` | `test_route_confirmation_…` (failed before the fix with 409), unit test rewritten to the encrypted reality | Column stays ciphertext |
+| 1.4 D9 one token per visit on retries and double taps | done | `intake.py` (`_confirmed_receipt`, `_queue_receipt`) | 2 integration tests (failed before: 409 / `[200, 409]`) | Red-flag inserts made conflict-safe for the same race |
+| 1.5 D12 tests never call live providers | done | `tests/conftest.py` | full suite | |
+| 1.6 D11 dev server proxies `/api` like nginx | done | `vite.config.ts`, `api.ts`, `playwright.config.ts` | 5 e2e matchers updated to accept `/api` | Local e2e can no longer reach a running API |
+| 1.7 Phone check-in points (migration 0017) | done | `0017_mobile_checkin.py`, `domain/checkin.py`, `intake.py`, `admin.py`, `auth.py`, `repositories.py`, `cli.py`, `MobileCheckin.tsx`, `KioskShell.tsx`, `KioskIntake.tsx`, `AdminConsole.tsx`, `StaffQueueBoard.tsx`, locales | 4 integration + 2 unit + 3 e2e (phone viewport) | Rate limits 6/phone/QR and 150/QR per 10 min; Phone badge for staff |
+| 1.8 D2 stale QR address: diagnosis and operator tooling | done | `scripts/lan-check.ps1`, `start-demo.ps1`, `MOBILE_LAN.md`, `start.md` | script run on this PC: reports the 172.17.134.95 vs 172.27.14.36 mismatch | Fix for the running stack: run `start-demo.ps1 -NoBuild` |
+| Phase 1 gate | green | — | API 838 passed / 1 skipped; web 57; e2e 135; ruff, mypy, eslint, tsc, locales, contrast, build, bandit, semgrep (python, security-audit, sql-injection packs), migrations base→head | Entry bundle 566.8 kB vs 547.3 kB on `main` (+19.5 kB, mostly new hi/mr strings; all locales ship in the entry, a lazy-loading follow-up) |
+| 2 Identity and longitudinal records | next | | | D3 fix lands here (migration 0018) |
+| 3 Queue: skip/recall, claims, department checks | planned | | | D4–D7 |

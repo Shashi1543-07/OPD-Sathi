@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { Language } from "../i18n";
 import { apiOrigin, apiSocketUrl } from "./api";
 import { staffAuth } from "./auth";
+import { newRequestId } from "./ids";
 import type { OfflineSubmission } from "./offlineOutbox";
 import type { SpeechCapabilities } from "./voice";
 
@@ -11,6 +12,8 @@ const deviceKey = "osa.kiosk.device";
 /** The name of the hospital this kiosk belongs to, shown on screen and on token slips. */
 const hospitalKey = "osa.kiosk.hospital";
 const patientKey = "osa.patient.session";
+/** The last token issued on this phone, so reopening the check-in link shows it again. */
+const ticketKey = "osa.mobile.ticket";
 /** Renew the kiosk token this long before it expires, so a patient never meets an expired one. */
 const RENEW_BEFORE_MS = 30 * 60_000;
 
@@ -20,6 +23,21 @@ type Session = {
   consent?: ConsentCopy;
   stage?: string;
   assisted?: boolean;
+  /** Started from a hospital's phone check-in QR on the patient's own phone. */
+  channel?: "mobile";
+  /** The check-in code the phone session came from (its home page is /m/<code>). */
+  checkin?: string;
+  /** When the patient session expires (ms since epoch), so a stale one is never resumed. */
+  expires_at?: number;
+};
+
+/** A token issued on this phone: shown again instead of starting a second visit. */
+export type MobileTicket = {
+  token: string;
+  statusUrl: string;
+  departmentName: string | null;
+  hospitalName: string | null;
+  issuedAt: string;
 };
 
 export class IntakeRequestError extends Error {
@@ -204,15 +222,60 @@ async function kioskCall<T>(path: string, options: RequestInit = {}): Promise<T>
   }
 }
 
-function getPatientSession(): Session | null {
-  const stored = sessionStorage.getItem(patientKey);
-  if (!stored) return null;
+function readSession(store: () => Storage): Session | null {
   try {
-    return JSON.parse(stored) as Session;
+    const stored = store().getItem(patientKey);
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored) as Session;
+    } catch {
+      store().removeItem(patientKey);
+      return null;
+    }
   } catch {
-    sessionStorage.removeItem(patientKey);
+    return null; // Storage blocked (private mode or site data switched off).
+  }
+}
+
+/**
+ * The patient session in progress. A shared kiosk keeps it for this tab only; a patient's own
+ * phone keeps it across reloads and closed tabs until it expires, so a dropped connection or
+ * an accidental refresh resumes the same visit instead of starting another one.
+ */
+function getPatientSession(): Session | null {
+  const kiosk = readSession(() => sessionStorage);
+  if (kiosk) return kiosk;
+  const phone = readSession(() => localStorage);
+  if (phone?.expires_at !== undefined && phone.expires_at <= Date.now()) {
+    clearPatientSession();
     return null;
   }
+  return phone;
+}
+
+function savePatientSession(session: Session) {
+  try {
+    (session.channel === "mobile" ? localStorage : sessionStorage).setItem(
+      patientKey,
+      JSON.stringify(session),
+    );
+  } catch {
+    // Without storage the session lasts as long as this page; the server keeps the visit.
+  }
+}
+
+function clearPatientSession() {
+  for (const store of [() => sessionStorage, () => localStorage]) {
+    try {
+      store().removeItem(patientKey);
+    } catch {
+      // Storage blocked: nothing was saved there.
+    }
+  }
+}
+
+function todayKey(date: Date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
 async function call<T>(
@@ -324,8 +387,62 @@ export const intake = {
       method: "POST",
       body: JSON.stringify({ language }),
     });
-    sessionStorage.setItem(patientKey, JSON.stringify(response));
+    savePatientSession(response);
     return response;
+  },
+  /** The hospital behind a phone check-in QR, or an error saying why it cannot start. */
+  checkinDetails: (code: string) =>
+    call<{ hospital_name: string; languages: Language[] }>(
+      `/intake/checkin/${encodeURIComponent(code)}`,
+    ),
+  /** Start a visit on the patient's own phone from a hospital's check-in QR. */
+  startMobile: async (code: string, language: Language) => {
+    const response = await call<{
+      visit_id: string;
+      patient_access_token: string;
+      consent: ConsentCopy;
+      expires_in: number;
+      hospital_name?: string;
+    }>(`/intake/checkin/${encodeURIComponent(code)}/sessions`, {
+      method: "POST",
+      body: JSON.stringify({ language }),
+    });
+    const session: Session = {
+      visit_id: response.visit_id,
+      patient_access_token: response.patient_access_token,
+      consent: response.consent,
+      channel: "mobile",
+      checkin: code,
+      // A minute of margin so the phone never resumes a session the server just expired.
+      expires_at: Date.now() + Math.max(0, response.expires_in - 60) * 1000,
+    };
+    savePatientSession(session);
+    rememberHospital(response.hospital_name);
+    return session;
+  },
+  /** Shown on screen and on the token on a phone, which has no kiosk pairing to name it. */
+  rememberHospitalName: (name: string | null | undefined) => rememberHospital(name),
+  rememberTicket: (ticket: MobileTicket) => {
+    try {
+      localStorage.setItem(ticketKey, JSON.stringify(ticket));
+    } catch {
+      // Without storage the patient keeps the token on screen and the status link.
+    }
+  },
+  /** Today's token on this phone, if one was issued. */
+  lastTicket: (): MobileTicket | null => {
+    try {
+      const stored = localStorage.getItem(ticketKey);
+      if (!stored) return null;
+      const ticket = JSON.parse(stored) as MobileTicket;
+      if (todayKey(new Date(ticket.issuedAt)) !== todayKey(new Date())) {
+        localStorage.removeItem(ticketKey);
+        return null;
+      }
+      return ticket;
+    } catch {
+      return null;
+    }
   },
   startAssisted: async (language: Language) => {
     const response = await staffAuth.request("/intake/assisted-sessions", {
@@ -339,10 +456,7 @@ export const intake = {
       );
     const session = (await response.json()) as Session & { assisted: true };
     const consent = session.consent;
-    sessionStorage.setItem(
-      patientKey,
-      JSON.stringify({ ...session, stage: "consent" }),
-    );
+    savePatientSession({ ...session, stage: "consent" });
     return consent;
   },
   consent: (consent: ConsentCopy, granted: boolean) =>
@@ -390,7 +504,7 @@ export const intake = {
   ) =>
     patientRequest<IntakeResponse>("/interview/answers", {
       method: "POST",
-      headers: { "Idempotency-Key": crypto.randomUUID() },
+      headers: { "Idempotency-Key": newRequestId() },
       body: JSON.stringify({
         question_id: questionId,
         answer,
@@ -423,7 +537,7 @@ export const intake = {
       position: number | null;
     }>("/confirm", {
       method: "POST",
-      headers: { "Idempotency-Key": crypto.randomUUID() },
+      headers: { "Idempotency-Key": newRequestId() },
     }),
   readbackAudio: async () => {
     const session = getPatientSession();
@@ -508,11 +622,7 @@ export const intake = {
       { method: "POST", body: JSON.stringify({ language }) },
     );
     const session = getPatientSession();
-    if (session)
-      sessionStorage.setItem(
-        patientKey,
-        JSON.stringify({ ...session, consent: result.consent }),
-      );
+    if (session) savePatientSession({ ...session, consent: result.consent });
     return result;
   },
   requestHelp: () =>
@@ -527,13 +637,12 @@ export const intake = {
       await patientRequest<void>("", { method: "DELETE" }).catch(
         () => undefined,
       );
-    sessionStorage.removeItem(patientKey);
+    clearPatientSession();
   },
-  finish: () => sessionStorage.removeItem(patientKey),
+  finish: clearPatientSession,
   setStage: (stage: string) => {
     const session = getPatientSession();
-    if (session)
-      sessionStorage.setItem(patientKey, JSON.stringify({ ...session, stage }));
+    if (session) savePatientSession({ ...session, stage });
   },
   session: getPatientSession,
 };

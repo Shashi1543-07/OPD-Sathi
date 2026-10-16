@@ -21,6 +21,8 @@ export type QueueItem = {
   position: number;
   queued_at: string | null;
   needs_assistance?: boolean;
+  /** Where the patient registered: a kiosk screen, their own phone, or the desk. */
+  channel?: "kiosk" | "phone" | "desk";
   routing?: {
     department_code: string;
     needs_nurse_confirmation: boolean;

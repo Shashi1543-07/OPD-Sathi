@@ -4230,6 +4230,9 @@
   font-weight: 600;
   gap: 0.25rem;
 }
+.qb-flag--phone {
+  color: var(--primary);
+}
 .qb-urgency {
   display: grid;
   gap: 0.25rem;
@@ -6748,6 +6751,37 @@
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+.adm-checkin-qr-code {
+  background: white;
+  border-radius: var(--radius-md);
+  justify-self: center;
+  line-height: 0;
+  padding: 0.5rem;
+}
+.adm-checkin-qr-code svg {
+  height: auto;
+  max-width: 100%;
+}
+/* "Print" on the QR panel prints only the poster: the QR, its label and the link. */
+@media print {
+  body:has(.adm-checkin-qr) * {
+    visibility: hidden;
+  }
+  .adm-checkin-qr,
+  .adm-checkin-qr * {
+    visibility: visible;
+  }
+  .adm-checkin-qr {
+    background: white;
+    border: 0;
+    inset: 0;
+    position: absolute;
+    text-align: center;
+  }
+  .adm-checkin-qr .no-print {
+    display: none;
+  }
+}
 .adm-actions {
   align-items: center;
   display: inline-flex;
@@ -7861,4 +7895,67 @@
 }
 .adm-conn--off::before {
   background: currentColor;
+}
+
+/* ============================================================
+   Phone check-in (/m/<code>): the patient's own phone
+   ============================================================ */
+.kiosk-app[data-layout="mobile"] .kiosk-header {
+  height: auto;
+  min-height: 3.5rem;
+  padding-block: var(--space-2);
+}
+.kiosk-app[data-layout="mobile"] .kiosk-main {
+  justify-content: flex-start;
+  padding: var(--space-4);
+}
+.mobile-checkin .welcome-card {
+  padding: clamp(var(--space-5), 5vw, var(--space-8));
+}
+.mobile-checkin-icon {
+  color: var(--primary);
+  margin-bottom: var(--space-3);
+}
+.mobile-ticket {
+  align-items: flex-start;
+  background: var(--primary-tint);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  border-radius: var(--radius-lg);
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+}
+.mobile-ticket svg {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.mobile-ticket strong {
+  display: block;
+  font-size: var(--font-size-lg);
+}
+.mobile-ticket p {
+  color: var(--text-muted);
+  margin: var(--space-1) 0 var(--space-3);
+}
+.mobile-ticket .ui-button {
+  width: 100%;
+}
+.mobile-resume h1 {
+  font-size: clamp(1.5rem, 6vw, 2rem);
+}
+.mobile-note {
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+}
+.mobile-error {
+  color: var(--urgent-ink);
+  font-weight: 600;
+  margin-top: var(--space-3);
 }

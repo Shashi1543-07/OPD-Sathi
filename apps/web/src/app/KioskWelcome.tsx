@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { LanguageSelector } from "../components/ui";
 import { intake, useKioskHospitalName } from "../lib/intake";
+import { offlineOutboxAvailable } from "../lib/offlineOutbox";
 import { useLanguageStore } from "../languageStore";
 
 export function KioskWelcome() {
@@ -113,7 +114,7 @@ export function KioskWelcome() {
               <p>{t("activationHelp", { ns: "kiosk" })}</p>
             </div>
           )}
-          {activated && networkOffline && (
+          {activated && networkOffline && offlineOutboxAvailable() && (
             <button
               className="ui-button ui-button--secondary ui-button--kiosk"
               type="button"

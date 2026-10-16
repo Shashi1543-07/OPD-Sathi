@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -34,6 +34,7 @@ import {
   listenInBrowser,
   listenWithServer,
   recordingAvailable,
+  secureVoiceAvailable,
   speak,
   stopSpeaking,
   type Listener,
@@ -540,6 +541,10 @@ function AnswerPanel({
 export function KioskIntake() {
   const { t } = useTranslation(["intake", "kiosk"]);
   const navigate = useNavigate();
+  // On a patient's own phone (/m/<code>/intake) the start page is the check-in link.
+  const { code: checkinCode } = useParams<{ code?: string }>();
+  const mobile = Boolean(checkinCode);
+  const home = mobile ? `/m/${checkinCode}` : "/kiosk";
   const setLanguage = useLanguageStore((state) => state.setLanguage);
   const hospitalName = useKioskHospitalName();
   const session = useMemo(() => intake.session(), []);
@@ -586,7 +591,11 @@ export function KioskIntake() {
 
   const reportError = useCallback(
     (cause: unknown) => {
-      if (cause instanceof IntakeRequestError && cause.status === 410) {
+      // 410: the session ended; 401: the patient session expired (two hours).
+      if (
+        cause instanceof IntakeRequestError &&
+        (cause.status === 410 || cause.status === 401)
+      ) {
         setError(t("sessionLost"));
         return;
       }
@@ -616,7 +625,7 @@ export function KioskIntake() {
 
   useEffect(() => {
     if (!session || !consent) {
-      navigate("/kiosk", { replace: true });
+      navigate(home, { replace: true });
       return;
     }
     setLanguage(consent.language);
@@ -639,7 +648,9 @@ export function KioskIntake() {
   }, []);
 
   useEffect(() => {
-    if (stage !== "summary" || nurseComing) return;
+    // A kiosk patient idle on the review screen gets a nurse; a phone user could be anywhere
+    // (and may simply have switched apps), so phones use the Help button instead.
+    if (stage !== "summary" || nurseComing || mobile) return;
     let timer = 0;
     const arm = () => {
       window.clearTimeout(timer);
@@ -656,10 +667,11 @@ export function KioskIntake() {
       window.removeEventListener("pointerdown", arm);
       window.removeEventListener("keydown", arm);
     };
-  }, [stage, nurseComing]);
+  }, [stage, nurseComing, mobile]);
 
   useEffect(() => {
-    if (stage !== "done") return;
+    // The shared kiosk frees itself for the next patient; a phone keeps showing the token.
+    if (stage !== "done" || mobile) return;
     const timer = window.setInterval(() => {
       setSecondsLeft((value) => {
         if (value <= 1) {
@@ -671,7 +683,7 @@ export function KioskIntake() {
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [stage, navigate]);
+  }, [stage, navigate, mobile]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -711,7 +723,7 @@ export function KioskIntake() {
     stopSpeaking();
     setBusy(true);
     await intake.cancel();
-    navigate(session?.assisted ? "/staff/queue" : "/kiosk", { replace: true });
+    navigate(session?.assisted ? "/staff/queue" : home, { replace: true });
   }
 
   /** Back inside the interview: undo the last answer, or return to the safety screen. */
@@ -799,7 +811,13 @@ export function KioskIntake() {
             <AlertTriangle aria-hidden="true" size={22} />
             <span>{error}</span>
             {error === t("sessionLost") && (
-              <button type="button" onClick={() => navigate("/kiosk", { replace: true })}>
+              <button
+                type="button"
+                onClick={() => {
+                  intake.finish();
+                  navigate(home, { replace: true });
+                }}
+              >
                 {t("startAgain")}
               </button>
             )}
@@ -1076,6 +1094,9 @@ export function KioskIntake() {
 
         {stage === "interview" && currentQuestion && (
           <>
+            {mobile && !secureVoiceAvailable() && progress?.current === 1 && (
+              <p className="mobile-note">{t("mobileVoiceNote", { ns: "kiosk" })}</p>
+            )}
             {progress && !editing && (
               <div className="intake-progress">
                 <span>{t("questionOf", progress)}</span>
@@ -1206,6 +1227,14 @@ export function KioskIntake() {
                       departmentName: result.department_name ?? null,
                       waitMinutes: result.wait_minutes ?? null,
                     });
+                    if (mobile)
+                      intake.rememberTicket({
+                        token: result.token,
+                        statusUrl: result.status_url,
+                        departmentName: result.department_name ?? null,
+                        hospitalName,
+                        issuedAt: new Date().toISOString(),
+                      });
                     intake.finish();
                     setSecondsLeft(RESTART_SECONDS);
                     move("done");
@@ -1243,22 +1272,26 @@ export function KioskIntake() {
                   </p>
                 )}
               </div>
-              {/* Not a link: tapping it would take the shared kiosk away from the next patient. */}
-              <div className="intake-ticket-qr">
-                <QRCodeSVG
-                  value={
-                    ticket.publicStatusUrl ??
-                    new URL(ticket.statusUrl, window.location.origin).toString()
-                  }
-                  size={184}
-                  level="M"
-                  marginSize={2}
-                  title={t("scanQr")}
-                />
-                <span>{t("scanQr")}</span>
-              </div>
+              {/* Not a link: tapping it would take the shared kiosk away from the next patient.
+                  A phone is already in the patient's hand, so it needs no QR. */}
+              {!mobile && (
+                <div className="intake-ticket-qr">
+                  <QRCodeSVG
+                    value={
+                      ticket.publicStatusUrl ??
+                      new URL(ticket.statusUrl, window.location.origin).toString()
+                    }
+                    size={184}
+                    level="M"
+                    marginSize={2}
+                    title={t("scanQr")}
+                  />
+                  <span>{t("scanQr")}</span>
+                </div>
+              )}
             </div>
             <p className="intake-lead">{t("waitHint")}</p>
+            {mobile && <p className="mobile-note">{t("mobileKeepPage", { ns: "kiosk" })}</p>}
             <p className="intake-ticket-meta print-only">
               {hospitalName ? `${hospitalName} · ` : ""}
               {ticket.issuedAt.toLocaleString(language === "en" ? "en-IN" : `${language}-IN`, {
@@ -1266,31 +1299,55 @@ export function KioskIntake() {
                 timeStyle: "short",
               })}
             </p>
-            <div className="intake-actions no-print">
-              <button
-                type="button"
-                className="intake-btn intake-btn--secondary"
-                onClick={() => window.print()}
-              >
-                {t("print")}
-              </button>
-              <span className="intake-actions-spacer" />
-              <button
-                type="button"
-                className="intake-btn intake-btn--primary"
-                onClick={() => navigate("/kiosk", { replace: true })}
-              >
-                {t("newPatient")}
-              </button>
-            </div>
-            <p className="intake-restart no-print">{t("autoRestart", { seconds: secondsLeft })}</p>
+            {mobile ? (
+              <div className="intake-actions intake-actions--stack no-print">
+                <button
+                  type="button"
+                  className="intake-btn intake-btn--primary intake-btn--large"
+                  onClick={() => navigate(ticket.statusUrl, { replace: true })}
+                >
+                  {t("mobileViewStatus", { ns: "kiosk" })}
+                </button>
+                <button
+                  type="button"
+                  className="intake-btn intake-btn--ghost"
+                  onClick={() => navigate(home, { replace: true })}
+                >
+                  {t("mobileSomeoneElse", { ns: "kiosk" })}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="intake-actions no-print">
+                  <button
+                    type="button"
+                    className="intake-btn intake-btn--secondary"
+                    onClick={() => window.print()}
+                  >
+                    {t("print")}
+                  </button>
+                  <span className="intake-actions-spacer" />
+                  <button
+                    type="button"
+                    className="intake-btn intake-btn--primary"
+                    onClick={() => navigate("/kiosk", { replace: true })}
+                  >
+                    {t("newPatient")}
+                  </button>
+                </div>
+                <p className="intake-restart no-print">
+                  {t("autoRestart", { seconds: secondsLeft })}
+                </p>
+              </>
+            )}
           </div>
         )}
 
         {stage === "emergency" && emergency && (
           <EmergencyNotice
             state={emergency}
-            onDone={() => navigate("/kiosk", { replace: true })}
+            mobile={mobile}
+            onDone={() => navigate(home, { replace: true })}
           />
         )}
 
@@ -1301,7 +1358,7 @@ export function KioskIntake() {
               <button
                 type="button"
                 className="intake-btn intake-btn--primary"
-                onClick={() => navigate("/kiosk", { replace: true })}
+                onClick={() => navigate(home, { replace: true })}
               >
                 {t("startAgain")}
               </button>

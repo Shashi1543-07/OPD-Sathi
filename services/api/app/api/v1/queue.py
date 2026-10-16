@@ -24,7 +24,7 @@ from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.ids import uuid7
 from app.core.security import AuthenticationTokenError, decode_access_token
-from app.db.repositories import QueueRepository, decrypt_case_sheet
+from app.db.repositories import CaseSheetRepository, QueueRepository, decrypt_case_sheet
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import average_consult_minutes, estimate_wait, queue_score
@@ -36,9 +36,10 @@ _HOSPITAL_TZ = ZoneInfo("Asia/Kolkata")
 router = APIRouter(tags=["queue"])
 STAFF_ROLES = ("nurse", "doctor", "admin")
 RED_FLAG_REASONS = {rule.id: rule.reason_en for rule in RULES}
+_CHANNELS = {"device": "kiosk", "mobile": "phone"}
 # Alerts that do not come from a red-flag rule.
 _SPECIAL_ALERTS = {
-    "PATIENT_HELP": "Patient asked for help at the kiosk",
+    "PATIENT_HELP": "Patient asked for help",
     "AI_TRIAGE_REVIEW": "AI review suggests this patient may be more urgent. Please check.",
 }
 
@@ -363,6 +364,8 @@ async def staff_queue(
                     "queued_at": row["queued_at"].isoformat() if row["queued_at"] else None,
                     "routing": (row.get("case_sheet_data") or {}).get("routing"),
                     "needs_assistance": row.get("needs_assistance") is True,
+                    # Where the patient registered: a kiosk, their own phone, or the desk.
+                    "channel": _CHANNELS.get(str(row.get("checkin_kind")), "desk"),
                     # Staff only: the score and every line that made it up.
                     "triage": row.get("acuity"),
                 }
@@ -512,35 +515,32 @@ async def confirm_routing(
             raise _problem(
                 403, "FORBIDDEN", "Permission denied", "No staff department is assigned."
             )
-        row = (
-            (
-                await connection.execute(
-                    text(
-                        "SELECT c.data, v.department_id FROM case_sheets c JOIN visits v "
-                        "ON v.hospital_id = c.hospital_id AND v.id = c.visit_id "
-                        "WHERE c.hospital_id = :hospital_id AND c.visit_id = :visit_id "
-                        "AND (CAST(:department_id AS uuid) IS NULL OR "
-                        "v.department_id = CAST(:department_id AS uuid)) "
-                        "AND v.status IN ('queued', 'called', 'in_consult') FOR UPDATE OF c"
-                    ),
-                    {
-                        "hospital_id": hospital_id,
-                        "visit_id": visit_id,
-                        "department_id": assigned_department
-                        if principal["role"] != "admin"
-                        else None,
-                    },
-                )
-            )
-            .mappings()
-            .first()
+        live_visit = await connection.scalar(
+            text(
+                "SELECT id FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id "
+                "AND (CAST(:department_id AS uuid) IS NULL OR "
+                "department_id = CAST(:department_id AS uuid)) "
+                "AND status IN ('queued', 'called', 'in_consult') FOR UPDATE"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "department_id": assigned_department if principal["role"] != "admin" else None,
+            },
         )
-        if row is None:
+        # The case sheet column holds ciphertext; only the repository can read or write it.
+        repository = CaseSheetRepository(connection, request.app.state.settings)
+        saved = (
+            await repository.get(hospital_id=hospital_id, visit_id=visit_id, for_update=True)
+            if live_visit is not None
+            else None
+        )
+        if saved is None:
             raise _problem(
                 404, "ROUTE_UNAVAILABLE", "Route unavailable", "This route is unavailable."
             )
-        data = row["data"]
-        routing = data.get("routing", {})
+        data = saved["data"]
+        routing = data.get("routing") if isinstance(data.get("routing"), dict) else {}
         if not routing.get("needs_nurse_confirmation"):
             raise _problem(
                 409,
@@ -549,19 +549,21 @@ async def confirm_routing(
                 "This route no longer needs confirmation.",
             )
         routing["needs_nurse_confirmation"] = False
-        await connection.execute(
-            text(
-                "UPDATE case_sheets SET data = CAST(:data AS jsonb), version = version + 1, "
-                "last_edited_by = :actor_id WHERE hospital_id = :hospital_id "
-                "AND visit_id = :visit_id"
-            ),
-            {
-                "data": json.dumps(data, separators=(",", ":")),
-                "actor_id": actor_id,
-                "hospital_id": hospital_id,
-                "visit_id": visit_id,
-            },
+        data["routing"] = routing
+        version = await repository.replace_if_version(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            expected_version=int(saved["version"]),
+            data=data,
+            editor_id=actor_id,
         )
+        if version is None:
+            raise _problem(
+                409,
+                "CASE_SHEET_CONFLICT",
+                "Case sheet changed",
+                "Reload the queue and confirm the route again.",
+            )
         await audit(
             connection,
             request,

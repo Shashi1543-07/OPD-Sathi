@@ -43,6 +43,7 @@ import { ConfidenceChip, Popover } from "../components/ui";
 import { ConsultPatientRailView } from "./ConsultPatientRail";
 import { useConsultQueue } from "./consultQueue";
 import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
+import { newRequestId } from "../lib/ids";
 import type { Triage } from "./queueBoardModel";
 import { TriageWhy } from "./TriageWhy";
 
@@ -335,7 +336,7 @@ export function DoctorConsultation() {
     try {
       const response = await staffAuth.request(`/queue/${visitId}/${action}`, {
         method: "POST",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: { "Idempotency-Key": newRequestId() },
       });
       if (!response.ok) throw new Error(t("consultActionError"));
       setSearchParams(
