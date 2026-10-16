@@ -124,6 +124,11 @@ class QueueSettingsPatch(Payload):
     call_grace_seconds: int = Field(ge=0, le=900)
 
 
+class InterviewSettingsPatch(Payload):
+    # Ask the six patient-reportable Ayurveda history questions in every interview.
+    ayurveda_module: bool
+
+
 def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
     return UUID(principal["hospital_id"]), UUID(principal["sub"])
 
@@ -295,6 +300,87 @@ async def patch_queue_settings(
             },
         )
         return await _queue_settings(connection, hospital_id)
+
+
+async def _interview_settings(connection: Any, hospital_id: UUID) -> dict[str, Any]:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT s.ayurveda_module, s.updated_at, u.name AS updated_by_name "
+                    "FROM hospital_interview_settings s LEFT JOIN users u "
+                    "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
+                    "WHERE s.hospital_id = :hospital_id"
+                ),
+                {"hospital_id": hospital_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return {"ayurveda_module": False, "updated_at": None, "updated_by_name": None}
+    return {
+        "ayurveda_module": bool(row["ayurveda_module"]),
+        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+        "updated_by_name": row["updated_by_name"],
+    }
+
+
+@router.get("/interview-settings")
+async def get_interview_settings(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Optional interview modules for this hospital (the Ayurveda history)."""
+    hospital_id, _ = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        return await _interview_settings(connection, hospital_id)
+
+
+@router.patch("/interview-settings")
+async def patch_interview_settings(
+    payload: InterviewSettingsPatch,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Turn the Ayurveda history on or off; it applies to interviews that start afterwards."""
+    hospital_id, actor_id = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        before = await _interview_settings(connection, hospital_id)
+        await connection.execute(
+            text(
+                "INSERT INTO hospital_interview_settings (hospital_id, ayurveda_module, "
+                "updated_by) VALUES (:hospital_id, :ayurveda, :actor_id) "
+                "ON CONFLICT (hospital_id) DO UPDATE SET "
+                "ayurveda_module = EXCLUDED.ayurveda_module, "
+                "updated_by = EXCLUDED.updated_by, updated_at = now()"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "ayurveda": payload.ayurveda_module,
+                "actor_id": actor_id,
+            },
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.interview_settings.updated",
+            resource_type="hospital_interview_settings",
+            resource_id=hospital_id,
+            meta={
+                "ayurveda_module": {
+                    "before": before["ayurveda_module"],
+                    "after": payload.ayurveda_module,
+                }
+            },
+        )
+        return await _interview_settings(connection, hospital_id)
 
 
 @router.get("/{resource}")

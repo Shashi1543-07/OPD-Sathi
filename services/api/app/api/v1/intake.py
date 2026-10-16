@@ -38,11 +38,10 @@ from app.db.repositories import (
 )
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
 from app.domain.checkin import checkin_code_digest, is_checkin_code
-from app.domain.interview.bank import QUESTIONS, Language, Question
+from app.domain.interview.bank import AYURVEDA_MODULE, QUESTIONS, Language, Question
 from app.domain.interview.consent import DANGER_TILES, get_consent_copy
 from app.domain.interview.engine import (
     ALWAYS_MODULES,
-    MAX_QUESTIONS,
     InterviewState,
     InterviewValidationError,
     add_followups,
@@ -53,6 +52,7 @@ from app.domain.interview.engine import (
     next_question,
     pending,
     pregnancy_answer,
+    question_cap,
     question_for,
     question_total,
     skip_followups,
@@ -184,6 +184,20 @@ def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
 
 def _session_key(hospital_id: UUID, visit_id: UUID) -> str:
     return f"osa:intake:{hospital_id}:{visit_id}"
+
+
+async def _hospital_ayurveda_enabled(request: Request, hospital_id: UUID) -> bool:
+    """Whether this hospital adds the Ayurveda history questions (an AYUSH hospital)."""
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        enabled = await connection.scalar(
+            text(
+                "SELECT ayurveda_module FROM hospital_interview_settings "
+                "WHERE hospital_id = :hospital_id"
+            ),
+            {"hospital_id": hospital_id},
+        )
+    return enabled is True
 
 
 async def _hospital_llm_enabled(request: Request, hospital_id: UUID) -> bool:
@@ -567,7 +581,8 @@ def _question_payload(state: InterviewState, question_id: str) -> dict[str, Any]
             {
                 "id": option.id,
                 "label": option.label[language],
-                "none": option.none,
+                # "Don't know" and "Prefer not to say" stand alone on screen like "None".
+                "none": option.non_answer,
                 "excludes": option.excludes,
             }
             for option in question.options
@@ -807,9 +822,14 @@ async def _persist_case_sheet_enrichment(
             if any(
                 isinstance(meta, dict) and meta.get("source") in {"nurse", "doctor"}
                 for meta in current.get("field_meta", {}).values()
-            ):
-                return  # Staff have edited this sheet; never overwrite their work.
-            merged = apply_summary(current, output, model=str(getattr(provider, "model", "")))
+            ) or (current.get("ai_summary") or {}).get("review"):
+                return  # Staff have edited or reviewed this sheet; never overwrite their work.
+            merged = apply_summary(
+                current,
+                output,
+                model=str(getattr(provider, "model", "")),
+                asked=interview_state.asked,
+            )
             version = await repository.replace_if_version(
                 hospital_id=hospital_id,
                 visit_id=visit_id,
@@ -1599,6 +1619,9 @@ async def save_danger_signs(
         red_flag_ids=tuple(payload.tile_ids),
         sex=context.get("sex"),
         age=context.get("age_years"),
+        extra_modules=(
+            (AYURVEDA_MODULE,) if await _hospital_ayurveda_enabled(request, hospital_id) else ()
+        ),
     )
     state["interview"] = interview_state.model_dump(mode="json")
     state["phase"] = "interview"
@@ -1996,7 +2019,7 @@ async def _question_response(
             "current": len(interview_state.asked) + 1,
             # Before the main concern is known, assume a typical interview length.
             "total": min(
-                MAX_QUESTIONS,
+                question_cap(interview_state),
                 max(question_total(interview_state), 10 if not interview_state.asked else 0),
             ),
         },
@@ -2173,10 +2196,14 @@ async def correct_interview_answer(
     alerts: list[dict[str, Any]] = []
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        await InterviewTurnRepository(connection, request.app.state.settings).add(
+        turns = InterviewTurnRepository(connection, request.app.state.settings)
+        await turns.add(
             hospital_id=hospital_id,
             visit_id=visit_id,
-            turn_index=_CORRECTION_TURN_BASE + int(state.get("corrections", 0)),
+            # From the stored turns, not the session: a retry must never reuse a number.
+            turn_index=await turns.next_correction_index(
+                hospital_id=hospital_id, visit_id=visit_id, base=_CORRECTION_TURN_BASE
+            ),
             question_id=payload.question_id,
             input_mode=payload.input_mode,
             text_original=str(payload.answer),

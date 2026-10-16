@@ -1,0 +1,63 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "habits",
+      "module": "personal_history",
+      "input": "text",
+      "optional": true,
+      "min_age": 12,
+      "topic": "tobacco and alcohol use",
+      "prompt": {
+        "en": "Do you use any of these?",
+        "hi": "क्या आप इनमें से कुछ लेते हैं?",
+        "mr": "तुम्ही यापैकी काही घेता का?"
+      },
+      "options": [
+        {
+          "id": "smoking",
+          "label": {
+            "en": "Smoking (bidi or cigarette)",
+            "hi": "धूम्रपान (बीड़ी या सिगरेट)",
+            "mr": "धूम्रपान (बिडी किंवा सिगारेट)"
+          }
+        },
+        {
+          "id": "chewing",
+          "label": {
+            "en": "Chewing tobacco or gutkha",
+            "hi": "तंबाकू या गुटखा खाना",
+            "mr": "तंबाखू किंवा गुटखा खाणे"
+          }
+        },
+        {
+          "id": "alcohol",
+          "label": {
+            "en": "Alcohol",
+            "hi": "शराब",
+            "mr": "दारू"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true
+        },
+        {
+          "id": "declined",
+          "label": {
+            "en": "Prefer not to say",
+            "hi": "नहीं बताना चाहते",
+            "mr": "सांगायचे नाही"
+          },
+          "declined": true
+        }
+      ],
+      "multi": true
+    }
+  ]
+}

@@ -101,6 +101,33 @@ _LABELS = {
 _DISCLAIMER = (
     "Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis."
 )
+# Ayurveda history: what the patient reported, then the vaidya's examination findings.
+_AYUSH_REPORTED = (
+    ("appetite", "Appetite (Ahara Shakti)"),
+    ("digestion", "Digestion (Jarana Shakti)"),
+    ("bowel", "Bowel habit (Mala)"),
+    ("sleep", "Sleep (Nidra)"),
+    ("exercise", "Capacity for exertion (Vyayama Shakti)"),
+    ("diet", "Diet (Ahara)"),
+)
+_AYUSH_EXAMINATION = (
+    ("nadi", "Nadi (pulse)"),
+    ("mutra", "Mutra (urine)"),
+    ("mala", "Mala (stool)"),
+    ("jihva", "Jihva (tongue)"),
+    ("shabda", "Shabda (voice)"),
+    ("sparsha", "Sparsha (touch)"),
+    ("drik", "Drik (eyes)"),
+    ("akriti", "Akriti (build)"),
+    ("prakriti", "Prakriti (constitution)"),
+    ("vikriti", "Vikriti (present imbalance)"),
+    ("sara", "Sara (tissue quality)"),
+    ("samhanana", "Samhanana (compactness)"),
+    ("pramana", "Pramana (proportions)"),
+    ("satmya", "Satmya (what suits)"),
+    ("sattva", "Sattva (mental strength)"),
+    ("vaya", "Vaya (age group)"),
+)
 _DURATION_UNITS = {
     "hi": {
         "minute": "मिनट",
@@ -205,7 +232,26 @@ def render_case_sheet_pdf(
         (
             _row(labels["tobacco"], social.get("tobacco"), language),
             _row(labels["alcohol"], social.get("alcohol"), language),
+            _row("Other habits", social.get("other"), language),
         )
+    )
+    # "Don't know" and "prefer not to say" answers: still open, never denials.
+    open_items = "".join(
+        f"<li>{escape(str(item['text_en']))}</li>"
+        for item in case_sheet.get("unanswered") or []
+        if isinstance(item, dict) and item.get("text_en")
+    )
+    open_block = f"<h2>Open questions</h2><ul>{open_items}</ul>" if open_items else ""
+    ayush = case_sheet.get("ayush") or {}
+    examination = ayush.get("examination") or {}
+    ayush_rows = "".join(
+        [_row(label, ayush.get(key), language) for key, label in _AYUSH_REPORTED]
+        + [_row(label, examination.get(key), language) for key, label in _AYUSH_EXAMINATION]
+    )
+    ayush_block = (
+        f"<h2>Ayurveda history (draft for the vaidya to review)</h2><dl>{ayush_rows}</dl>"
+        if ayush_rows
+        else ""
     )
     women = case_sheet.get("women_health") or {}
     women_rows = "".join(
@@ -222,10 +268,17 @@ def render_case_sheet_pdf(
         f"<h2>{escape(labels['womenHealth'])}</h2><dl>{women_rows}</dl>" if women_rows else ""
     )
     ai_summary = case_sheet.get("ai_summary") or {}
+    review = ai_summary.get("review") or {}
+    reviewer = str(review.get("by_name") or "a doctor")
+    # A rejected draft is never printed; otherwise the label says who reviewed it, if anyone.
+    brief_label = {
+        "accepted": f"AI summary, accepted by {reviewer}:",
+        "edited": f"Summary, edited by {reviewer} from an AI draft:",
+    }.get(str(review.get("status")), "AI summary (draft, verify with patient):")
     brief_block = (
-        f"<div class='brief'><strong>AI summary (verify with patient):</strong> "
+        f"<div class='brief'><strong>{escape(brief_label)}</strong> "
         f"{escape(str(ai_summary.get('brief_en')))}</div>"
-        if ai_summary.get("brief_en")
+        if ai_summary.get("brief_en") and review.get("status") != "rejected"
         else ""
     )
     language_names = {"en": "English", "hi": "Hindi", "mr": "Marathi"}
@@ -284,8 +337,10 @@ ul {{ margin:2pt 0 0; padding-left:14pt; }}
     {family_rows}
     {social_block}
     {women_block}
+    {open_block}
   </section>
 </div>
+{ayush_block}
 </body></html>"""
     return cast(bytes, HTML(string=html).write_pdf())
 

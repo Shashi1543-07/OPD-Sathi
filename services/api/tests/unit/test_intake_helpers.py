@@ -584,6 +584,9 @@ async def test_answer_correction_route_updates_summary_and_rejects_unasked_quest
         def __init__(self, *_args: object) -> None:
             pass
 
+        async def next_correction_index(self, *, base: int, **_kwargs: object) -> int:
+            return base + len(turns)
+
         async def add(self, **kwargs: object) -> None:
             turns.append(kwargs)
 

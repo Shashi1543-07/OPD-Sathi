@@ -83,7 +83,8 @@ def test_fever_and_cough_trigger_targeted_follow_up_questions() -> None:
     ]
     # The pregnancy question is planned but never shown to this patient.
     assert "pregnancy" in state.queued
-    assert question_total(state) <= 12
+    # Core 3 + two symptom modules (4) + seven history questions, pregnancy not shown.
+    assert question_total(state) <= 14
 
 
 def test_every_option_label_maps_back_to_english() -> None:
@@ -141,6 +142,49 @@ def test_apply_summary_adds_english_and_keeps_patient_words() -> None:
         {"name": "Metformin", "dose": "500 mg", "source": "patient_stated"}
     ]
     assert merged["field_meta"]["/chief_complaint"]["ai_assisted"] is True
+
+
+def test_brief_statements_cite_only_questions_the_patient_answered() -> None:
+    state = _interview("hi", HINDI_FEVER)
+    output = _summary(
+        brief_statements=[
+            {
+                "text_en": "34-year-old female reports fever and cough for 4-7 days.",
+                "question_ids": ["chief_concern", "duration", "invented_question"],
+            },
+            # A sentence that cites no asked question cannot be checked, so it goes.
+            {"text_en": "She reports travel abroad.", "question_ids": ["travel_history"]},
+            {"text_en": "She takes medicine for diabetes.", "question_ids": ["medications"]},
+        ]
+    )
+    merged = apply_summary(
+        build_case_sheet(state), output, model="gemini-test", asked=state.asked
+    )
+    summary = merged["ai_summary"]
+    assert summary["statements"] == [
+        {
+            "text_en": "34-year-old female reports fever and cough for 4-7 days.",
+            "sources": ["chief_concern", "duration"],
+        },
+        {"text_en": "She takes medicine for diabetes.", "sources": ["medications"]},
+    ]
+    # The brief is exactly the sentences that can be traced to an answer.
+    assert summary["brief_en"] == (
+        "34-year-old female reports fever and cough for 4-7 days. "
+        "She takes medicine for diabetes."
+    )
+    assert summary["review"] is None
+
+
+def test_brief_statements_are_checked_for_diagnosis_and_advice() -> None:
+    with pytest.raises(UnsafeSummaryError):
+        guard_doctor_summary(
+            _summary(
+                brief_statements=[
+                    {"text_en": "Probably a viral infection.", "question_ids": ["chief_concern"]}
+                ]
+            )
+        )
 
 
 class _Provider:

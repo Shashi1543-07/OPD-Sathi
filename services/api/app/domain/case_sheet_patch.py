@@ -16,6 +16,8 @@ EDITABLE_ROOTS = frozenset(
         "family_history",
         "social",
         "women_health",
+        # Patient-reported Ayurveda answers and the vaidya's examination findings.
+        "ayush",
     }
 )
 

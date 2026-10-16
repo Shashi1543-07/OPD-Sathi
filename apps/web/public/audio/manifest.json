@@ -170,6 +170,132 @@
       "duration_seconds": 0.12
     },
     {
+      "id": "question.ayur_appetite",
+      "lang": "en",
+      "text_sha256": "bb02d5b2a160bb90797330bb9cda90344cefc6915818d6258240079051672b3e",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_appetite",
+      "lang": "hi",
+      "text_sha256": "1a38ba24a8c8ac18ef7393efea1187225e3dff851bafad04a81169feb3f79faf",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_appetite",
+      "lang": "mr",
+      "text_sha256": "7732b964948f1ec91b2c54a704acab1b7dc27a48a9dee2060e14f9245cc08104",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_bowel",
+      "lang": "en",
+      "text_sha256": "2f542d6edc6b3329ac2f6368b4aefe87cfa394fad69ff6df54f0353910788c10",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_bowel",
+      "lang": "hi",
+      "text_sha256": "27b8a86d503d2302a8285f8eac145343cbb11c944a4304581606ac9c89cab741",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_bowel",
+      "lang": "mr",
+      "text_sha256": "9137aeabba4dd479bd828f0b60d13aa13044e1ab549a698e40355e158ad8376a",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_diet",
+      "lang": "en",
+      "text_sha256": "9a92bad944e948707e139142908a6a5fccc7e77c88dae2549f2118a63a713f18",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_diet",
+      "lang": "hi",
+      "text_sha256": "7f6c896c6e1eb40722a8779f1b823dfdebf3d775b2576e21cf63d7672a3586cb",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_diet",
+      "lang": "mr",
+      "text_sha256": "038ec7feb654789d9c52929f6f50bb1a89711e952b71a7ee07798eb70d64297d",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_digestion",
+      "lang": "en",
+      "text_sha256": "75ab3ecf5d709f263c2bc5e8e1cfd982bab7a470277143c0f0677b602d939a96",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_digestion",
+      "lang": "hi",
+      "text_sha256": "62b7218b75031e3a1123e5e3fd725383a2817a8e6615c7bd099b1b4dae052070",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_digestion",
+      "lang": "mr",
+      "text_sha256": "bd7487c7347a3d9f86db18d9e7390039dca28a612d04471aeb7880a7976a2125",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_exercise",
+      "lang": "en",
+      "text_sha256": "090794ae53d443afe4e15fcf3bcfb206c9b999959c64d22eaafec384ed8b7a67",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_exercise",
+      "lang": "hi",
+      "text_sha256": "24d8b698f6145e2a4d68244aeb3ad0b6d8a5b8efbfefded83200ef6180ef884e",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_exercise",
+      "lang": "mr",
+      "text_sha256": "69d6ca79e400af8f8b853f1f7fe7b22ccc9dd79f3f004f2ceb1129368adc3b2d",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_sleep",
+      "lang": "en",
+      "text_sha256": "94c4908f84596b0373e1e8e3cf0ba6e6b122cfa0267fb112cc0c29ff8eaa1dd9",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_sleep",
+      "lang": "hi",
+      "text_sha256": "09a99ae2df0e47124f11c201f5858164ca22d82961856b2a729db46ba2926ccb",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ayur_sleep",
+      "lang": "mr",
+      "text_sha256": "934e32f8f4f408c22be2e671c768ba6a2f176cdc4bddc1cc3d57825445d72d99",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
       "id": "question.chief_concern",
       "lang": "en",
       "text_sha256": "60aa603aec317d2275cb5c9e05cf347530761938122ce1b469edb59458e018fa",
@@ -334,6 +460,27 @@
       "id": "question.general_context",
       "lang": "mr",
       "text_sha256": "37baec2c0997bf2d6f0f9057b470a30d29cf244aacbddd14635b2a1cbfb101f8",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.habits",
+      "lang": "en",
+      "text_sha256": "fde1fb748b03acef034391326dbd76f4c6224544c74c9e7ef505e028b8f76657",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.habits",
+      "lang": "hi",
+      "text_sha256": "e2bac9f8d5bd29cff74a249ed40af6bfc02710387914d5f4fdd59a33316edaa7",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.habits",
+      "lang": "mr",
+      "text_sha256": "891298844f7c8c0868a45c7281a11d0c600591b578dc7c9f8d27e3ff914a5ad1",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },
@@ -607,6 +754,27 @@
       "id": "question.sleep_energy",
       "lang": "mr",
       "text_sha256": "2a051b043fd67e0768e17f31073157894bc28c9e408c466ffc2a9339c678e5e1",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.surgeries",
+      "lang": "en",
+      "text_sha256": "dabc5fdf1589f006f33a977464beded295a94cecb3825fb1c3902824ec808d28",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.surgeries",
+      "lang": "hi",
+      "text_sha256": "557f65f33a6d861998ff912d06b0a70bf59d4b3d95b91b55faffa61c94bf5ec5",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.surgeries",
+      "lang": "mr",
+      "text_sha256": "fe6e9c453fe4f046c0c53821992581653a56d8e9a2a733ae80826f9b374775ac",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },

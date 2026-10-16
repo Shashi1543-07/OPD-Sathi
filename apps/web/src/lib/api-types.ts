@@ -198,6 +198,30 @@ export interface paths {
         patch: operations["patch_queue_settings_admin_queue_settings_patch"];
         trace?: never;
     };
+    "/admin/interview-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Interview Settings
+         * @description Optional interview modules for this hospital (the Ayurveda history).
+         */
+        get: operations["get_interview_settings_admin_interview_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Interview Settings
+         * @description Turn the Ayurveda history on or off; it applies to interviews that start afterwards.
+         */
+        patch: operations["patch_interview_settings_admin_interview_settings_patch"];
+        trace?: never;
+    };
     "/admin/{resource}": {
         parameters: {
             query?: never;
@@ -1276,6 +1300,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/visits/{visit_id}/ai-summary/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Ai Summary
+         * @description Record a doctor's decision on the AI draft: accept it, rewrite it, or reject it.
+         *
+         *     Until then the brief is shown as an unreviewed AI draft. A rewrite keeps the model's
+         *     wording alongside the doctor's, and every decision is audited.
+         */
+        post: operations["review_ai_summary_visits__visit_id__ai_summary_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/visits/{visit_id}/history": {
         parameters: {
             query?: never;
@@ -1409,6 +1456,9 @@ export interface components {
         /**
          * AISummary
          * @description Doctor-facing English translation produced by the language model; history only.
+         *
+         *     Without a ``review`` it is an unreviewed draft. ``statements`` split the brief into
+         *     sentences, each citing the asked questions it rests on, so the doctor can check them.
          */
         AISummary: {
             /** Brief En */
@@ -1427,6 +1477,9 @@ export interface components {
              * @default
              */
             generated_at: string;
+            /** Statements */
+            statements?: components["schemas"]["SummaryStatement"][];
+            review?: components["schemas"]["SummaryReview"] | null;
         };
         /**
          * AccountPayload
@@ -1466,6 +1519,26 @@ export interface components {
              */
             input_mode: "touch" | "text" | "voice" | "nurse";
         };
+        /**
+         * AyushHistory
+         * @description Ayurveda history; a draft for the vaidya to review.
+         *
+         *     The patient reports appetite, digestion, bowel habit, sleep, capacity for exertion and
+         *     diet at the kiosk. Examination findings are entered by the clinician only and are never
+         *     asked of the patient.
+         */
+        AyushHistory: {
+            appetite?: components["schemas"]["TextPair"] | null;
+            digestion?: components["schemas"]["TextPair"] | null;
+            bowel?: components["schemas"]["TextPair"] | null;
+            sleep?: components["schemas"]["TextPair"] | null;
+            exercise?: components["schemas"]["TextPair"] | null;
+            diet?: components["schemas"]["TextPair"] | null;
+            /** Examination */
+            examination?: {
+                [key: string]: string;
+            };
+        };
         /** CaseSheet */
         CaseSheet: {
             /**
@@ -1489,6 +1562,9 @@ export interface components {
             family_history?: components["schemas"]["TextPair"][];
             social?: components["schemas"]["SocialHistory"];
             women_health?: components["schemas"]["WomenHealth"] | null;
+            /** Unanswered */
+            unanswered?: components["schemas"]["Unanswered"][];
+            ayush?: components["schemas"]["AyushHistory"] | null;
             /** Red Flags */
             red_flags?: components["schemas"]["RedFlag"][];
             routing: components["schemas"]["Routing"];
@@ -1663,6 +1739,11 @@ export interface components {
              * @default false
              */
             sms_opt_in: boolean;
+        };
+        /** InterviewSettingsPatch */
+        InterviewSettingsPatch: {
+            /** Ayurveda Module */
+            ayurveda_module: boolean;
         };
         /** KioskActivationPayload */
         KioskActivationPayload: {
@@ -1984,6 +2065,8 @@ export interface components {
         SocialHistory: {
             tobacco?: components["schemas"]["TextPair"] | null;
             alcohol?: components["schemas"]["TextPair"] | null;
+            /** Other */
+            other?: components["schemas"]["TextPair"][];
         };
         /** SpeakPayload */
         SpeakPayload: {
@@ -1997,6 +2080,46 @@ export interface components {
              * @default
              */
             question_id: string;
+        };
+        /**
+         * SummaryReview
+         * @description A doctor's decision on the AI draft; the latest decision replaces an earlier one.
+         */
+        SummaryReview: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "edited" | "rejected";
+            /**
+             * By Name
+             * @default
+             */
+            by_name: string;
+            /** At */
+            at: string;
+            /** Original Brief En */
+            original_brief_en?: string | null;
+        };
+        /** SummaryReviewPayload */
+        SummaryReviewPayload: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "edited" | "rejected";
+            /** Brief En */
+            brief_en?: string | null;
+        };
+        /**
+         * SummaryStatement
+         * @description One sentence of the AI brief and the asked questions whose answers support it.
+         */
+        SummaryStatement: {
+            /** Text En */
+            text_en: string;
+            /** Sources */
+            sources: string[];
         };
         /** TextPair */
         TextPair: {
@@ -2034,6 +2157,21 @@ export interface components {
             text_english: string | null;
             /** Stt Confidence */
             stt_confidence: number | null;
+        };
+        /**
+         * Unanswered
+         * @description A history question the patient could not or chose not to answer; not a denial.
+         */
+        Unanswered: {
+            /** Question Id */
+            question_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unknown" | "declined";
+            /** Text En */
+            text_en: string;
         };
         /** UserCreate */
         UserCreate: {
@@ -2429,6 +2567,63 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["QueueSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_interview_settings_admin_interview_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    patch_interview_settings_admin_interview_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InterviewSettingsPatch"];
             };
         };
         responses: {
@@ -4486,6 +4681,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_ai_summary_visits__visit_id__ai_summary_review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SummaryReviewPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseSheetResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

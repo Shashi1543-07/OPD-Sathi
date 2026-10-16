@@ -1252,6 +1252,25 @@ class InterviewTurnRepository:
             )
         return turns
 
+    async def next_correction_index(self, *, hospital_id: UUID, visit_id: UUID, base: int) -> int:
+        """The next free turn number for a correction, taken from the stored turns.
+
+        Serialised per visit, so a retried correction (whose first attempt was saved but whose
+        answer never arrived) gets a new number instead of colliding with the saved one.
+        """
+        await self.connection.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+            {"lock_key": f"corrections:{hospital_id}:{visit_id}"},
+        )
+        last = await self.connection.scalar(
+            text(
+                "SELECT max(turn_index) FROM interview_turns WHERE hospital_id = :hospital_id "
+                "AND visit_id = :visit_id AND turn_index >= :base"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id, "base": base},
+        )
+        return base if last is None else int(last) + 1
+
     async def add(
         self,
         *,

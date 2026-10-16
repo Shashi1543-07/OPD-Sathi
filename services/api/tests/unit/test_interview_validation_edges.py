@@ -73,7 +73,7 @@ def test_question_bank_rejects_invalid_shapes(
 
 
 def test_question_bank_rejects_missing_bank_directory() -> None:
-    with pytest.raises(ValueError, match="exactly 13 modules"):
+    with pytest.raises(ValueError, match="exactly 15 modules"):
         bank.load_question_bank(Path("missing-interview-bank"))
 
 

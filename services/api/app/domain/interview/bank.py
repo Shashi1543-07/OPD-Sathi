@@ -10,6 +10,10 @@ Language = Literal["en", "hi", "mr"]
 Sex = Literal["female", "male", "other", "unknown"]
 REVIEW_STATUS = "draft_needs_clinician_review"
 BANK_DIRECTORY = Path(__file__).with_name("bank")
+# Symptom and history modules, each in its own file next to core.json.
+MODULE_COUNT = 15
+# Asked only where the hospital turns on Ayurveda history (an AYUSH hospital).
+AYURVEDA_MODULE = "ayurveda"
 
 
 class StrictModel(BaseModel):
@@ -33,13 +37,22 @@ class Applicability(StrictModel):
 class AnswerOption(Applicability):
     """A tap-to-answer choice; ``none`` marks an explicit negative such as "No allergy".
 
-    ``excludes`` lists options that contradict this one, so they cannot both be picked.
+    ``unknown`` ("Don't know") and ``declined`` ("Prefer not to say") are not negatives:
+    the doctor sees them as open questions, never as a denial. ``excludes`` lists options
+    that contradict this one, so they cannot both be picked.
     """
 
     id: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_]+$")
     label: dict[Language, str]
     none: bool = False
+    unknown: bool = False
+    declined: bool = False
     excludes: list[str] = Field(default_factory=list)
+
+    @property
+    def non_answer(self) -> bool:
+        """A choice that is not itself a finding: "none", "don't know" or "prefer not to say"."""
+        return self.none or self.unknown or self.declined
 
 
 class Question(Applicability):
@@ -52,6 +65,8 @@ class Question(Applicability):
     multi: bool = True
     # Skip when every tapped main problem is one of these (the answer is already known).
     skip_if_only_concerns: list[str] = Field(default_factory=list)
+    # What the question is about, for staff ("past operations"); defaults to the prompt.
+    topic: str | None = Field(default=None, max_length=80)
 
     def option_for_label(self, label: str) -> AnswerOption | None:
         """Find the option whose label (in any language) matches ``label`` exactly."""
@@ -84,6 +99,17 @@ class Question(Applicability):
         """True when every part of the answer is an explicit "none" option."""
         parts = self.answer_parts(answer)
         return bool(parts) and all(option is not None and option.none for _, option in parts)
+
+    def open_status(self, answer: str) -> Literal["unknown", "declined"] | None:
+        """ "unknown" or "declined" when the whole answer is "Don't know" or "Prefer not to say"."""
+        parts = self.answer_parts(answer)
+        if not parts or any(option is None for _, option in parts):
+            return None
+        if all(option is not None and option.declined for _, option in parts):
+            return "declined"
+        if all(option is not None and (option.unknown or option.declined) for _, option in parts):
+            return "unknown"
+        return None
 
 
 class TriggerConfiguration(TypedDict):
@@ -122,10 +148,10 @@ def _check_rules(questions: dict[str, Question], modules: set[str]) -> None:
 def load_question_bank(
     directory: Path = BANK_DIRECTORY,
 ) -> tuple[dict[str, Question], TriggerConfiguration]:
-    """Read the core and thirteen module files, failing closed on invalid content."""
+    """Read the core and module files, failing closed on invalid content."""
     files = [directory / "core.json", *sorted((directory / "modules").glob("*.json"))]
-    if len(files) != 14 or not files[0].is_file():
-        raise ValueError("question bank must contain core.json and exactly 13 modules")
+    if len(files) != MODULE_COUNT + 1 or not files[0].is_file():
+        raise ValueError(f"question bank must contain core.json and exactly {MODULE_COUNT} modules")
     questions: dict[str, Question] = {}
     for path in files:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -146,6 +172,11 @@ def load_question_bank(
                     for language in ("en", "hi", "mr")
                 ):
                     raise ValueError(f"{question.id} option {option.id} needs en, hi, mr labels")
+                if option.none + option.unknown + option.declined > 1:
+                    raise ValueError(
+                        f"{question.id} option {option.id} can be only one of none, unknown, "
+                        "declined"
+                    )
             if question.id in questions:
                 raise ValueError(f"duplicate question id: {question.id}")
             questions[question.id] = question
@@ -175,10 +206,12 @@ def load_question_bank(
     ):
         raise ValueError("trigger terms must be non-empty strings")
     module_names = {question.module for question in questions.values()} - {"core"}
-    if len(module_names) != 13:
-        raise ValueError("question bank must contain exactly 13 non-core modules")
+    if len(module_names) != MODULE_COUNT or AYURVEDA_MODULE not in module_names:
+        raise ValueError(f"question bank must contain exactly {MODULE_COUNT} non-core modules")
     if set(triggers.get("always", [])) - module_names:
         raise ValueError("trigger configuration refers to an unknown always-on module")
+    if AYURVEDA_MODULE in triggers["always"] or AYURVEDA_MODULE in triggers["keywords"]:
+        raise ValueError("the Ayurveda module is chosen per hospital, never by triggers")
     if set(triggers.get("keywords", {})) - module_names:
         raise ValueError("trigger configuration refers to an unknown module")
     if set(triggers["always"]) & set(triggers["keywords"]):

@@ -1,13 +1,14 @@
 """Audited case sheet reads and optimistic-concurrency doctor edits."""
 
+import copy
 import re
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, Depends, Header, Request, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import text
 from starlette.responses import Response as StarletteResponse
 
@@ -376,6 +377,117 @@ async def patch_case_sheet(
                 "version_before": expected_version,
                 "version_after": new_version,
                 "changes": [operation.op + ":" + operation.path for operation in operations],
+            },
+        )
+    response.headers["ETag"] = f'"{new_version}"'
+    return CaseSheetResponse(
+        visit_id=visit_id,
+        version=new_version,
+        case_sheet=_with_flag_reasons(updated),
+        confirmed_by_patient=saved.get("confirmed_by_patient") is True,
+        confirmed_at=saved.get("confirmed_at"),
+    )
+
+
+class SummaryReviewPayload(PatchModel):
+    decision: Literal["accepted", "edited", "rejected"]
+    # The doctor's own wording of the brief; required when the decision is "edited".
+    brief_en: str | None = Field(default=None, min_length=1, max_length=600)
+
+
+@router.post("/visits/{visit_id}/ai-summary/review", response_model=CaseSheetResponse)
+async def review_ai_summary(
+    visit_id: UUID,
+    payload: SummaryReviewPayload,
+    request: Request,
+    response: Response,
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor"))],
+    if_match: Annotated[str | None, Header()] = None,
+) -> CaseSheetResponse:
+    """Record a doctor's decision on the AI draft: accept it, rewrite it, or reject it.
+
+    Until then the brief is shown as an unreviewed AI draft. A rewrite keeps the model's
+    wording alongside the doctor's, and every decision is audited.
+    """
+    if payload.decision == "edited" and not payload.brief_en:
+        raise _problem(422, "VALIDATION_FAILED", "Brief required", "Write the brief to save it.")
+    expected_version = _parse_if_match(if_match)
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _check_visit_department(
+            connection, hospital_id=hospital_id, visit_id=visit_id, actor_id=actor_id
+        )
+        repository = CaseSheetRepository(connection, request.app.state.settings)
+        saved = await repository.get(hospital_id=hospital_id, visit_id=visit_id, for_update=True)
+        if saved is None:
+            raise _problem(
+                404, "NOT_FOUND", "Case sheet not found", "The case sheet is unavailable."
+            )
+        if int(saved["version"]) != expected_version:
+            raise _problem(
+                409,
+                "CASE_SHEET_CONFLICT",
+                "Case sheet changed",
+                "Reload the latest case sheet before reviewing the AI draft.",
+            )
+        data = copy.deepcopy(saved["data"])
+        summary = data.get("ai_summary")
+        if not isinstance(summary, dict) or not summary.get("brief_en"):
+            raise _problem(
+                409, "NO_AI_SUMMARY", "No AI draft", "This case sheet has no AI draft to review."
+            )
+        reviewer = await connection.scalar(
+            text("SELECT name FROM users WHERE hospital_id = :hospital_id AND id = :actor_id"),
+            {"hospital_id": hospital_id, "actor_id": actor_id},
+        )
+        earlier = summary.get("review") or {}
+        review: dict[str, Any] = {
+            "status": payload.decision,
+            "by_name": str(reviewer or "")[:200],
+            "at": datetime.now(UTC).isoformat(),
+        }
+        if payload.decision == "edited":
+            review["original_brief_en"] = earlier.get("original_brief_en") or summary["brief_en"]
+            summary["brief_en"] = payload.brief_en
+            summary["statements"] = []  # The doctor's own words; no answers are cited.
+        elif earlier.get("original_brief_en"):
+            review["original_brief_en"] = earlier["original_brief_en"]
+        summary["review"] = review
+        try:
+            updated = CaseSheet.model_validate(data).model_dump(mode="json")
+        except ValidationError as exc:
+            raise _problem(
+                422, "INVALID_CASE_SHEET_PATCH", "Invalid review", "The review could not be saved."
+            ) from exc
+        new_version = await repository.replace_if_version(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            expected_version=expected_version,
+            data=updated,
+            editor_id=actor_id,
+        )
+        if new_version is None:
+            raise _problem(
+                409,
+                "CASE_SHEET_CONFLICT",
+                "Case sheet changed",
+                "Reload the latest case sheet before reviewing the AI draft.",
+            )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="case_sheet.ai_summary_reviewed",
+            resource_type="case_sheet",
+            resource_id=saved["id"],
+            meta={
+                "decision": payload.decision,
+                "version_before": expected_version,
+                "version_after": new_version,
             },
         )
     response.headers["ETag"] = f'"{new_version}"'
