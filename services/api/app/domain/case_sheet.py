@@ -57,6 +57,54 @@ class Medication(StrictModel):
 class SocialHistory(StrictModel):
     tobacco: TextPair | None = None
     alcohol: TextPair | None = None
+    # Anything else the patient said about their habits, in their own words.
+    other: Annotated[list[TextPair], Field(max_length=10)] = Field(default_factory=list)
+
+
+class Unanswered(StrictModel):
+    """A history question the patient could not or chose not to answer; not a denial."""
+
+    question_id: Annotated[str, Field(min_length=1, max_length=80)]
+    status: Literal["unknown", "declined"]
+    text_en: Text
+
+
+# Ashtavidha Pariksha (eight-fold examination) and Dashavidha Pariksha (ten-fold assessment).
+AyushExamField = Literal[
+    "nadi",
+    "mutra",
+    "mala",
+    "jihva",
+    "shabda",
+    "sparsha",
+    "drik",
+    "akriti",
+    "prakriti",
+    "vikriti",
+    "sara",
+    "samhanana",
+    "pramana",
+    "satmya",
+    "sattva",
+    "vaya",
+]
+
+
+class AyushHistory(StrictModel):
+    """Ayurveda history; a draft for the vaidya to review.
+
+    The patient reports appetite, digestion, bowel habit, sleep, capacity for exertion and
+    diet at the kiosk. Examination findings are entered by the clinician only and are never
+    asked of the patient.
+    """
+
+    appetite: TextPair | None = None
+    digestion: TextPair | None = None
+    bowel: TextPair | None = None
+    sleep: TextPair | None = None
+    exercise: TextPair | None = None
+    diet: TextPair | None = None
+    examination: dict[AyushExamField, Text] = Field(default_factory=dict)
 
 
 class WomenHealth(StrictModel):
@@ -92,13 +140,41 @@ class FieldMeta(StrictModel):
     ai_assisted: bool = False
 
 
+QuestionId = Annotated[str, Field(min_length=1, max_length=80)]
+
+
+class SummaryStatement(StrictModel):
+    """One sentence of the AI brief and the asked questions whose answers support it."""
+
+    text_en: Annotated[str, Field(min_length=1, max_length=300)]
+    sources: Annotated[list[QuestionId], Field(min_length=1, max_length=10)]
+
+
+class SummaryReview(StrictModel):
+    """A doctor's decision on the AI draft; the latest decision replaces an earlier one."""
+
+    status: Literal["accepted", "edited", "rejected"]
+    by_name: Annotated[str, Field(max_length=200)] = ""
+    at: Annotated[str, Field(max_length=40)]
+    # The model's wording, kept when a doctor rewrites the brief.
+    original_brief_en: Annotated[str, Field(max_length=600)] | None = None
+
+
 class AISummary(StrictModel):
-    """Doctor-facing English translation produced by the language model; history only."""
+    """Doctor-facing English translation produced by the language model; history only.
+
+    Without a ``review`` it is an unreviewed draft. ``statements`` split the brief into
+    sentences, each citing the asked questions it rests on, so the doctor can check them.
+    """
 
     brief_en: Annotated[str, Field(max_length=600)]
     answers_en: dict[Annotated[str, Field(max_length=80)], Text] = Field(default_factory=dict)
     model: Annotated[str, Field(max_length=80)] = ""
     generated_at: Annotated[str, Field(max_length=40)] = ""
+    statements: Annotated[list[SummaryStatement], Field(max_length=8)] = Field(
+        default_factory=list
+    )
+    review: SummaryReview | None = None
 
 
 class CaseSheet(StrictModel):
@@ -112,6 +188,9 @@ class CaseSheet(StrictModel):
     family_history: Annotated[list[TextPair], Field(max_length=30)] = Field(default_factory=list)
     social: SocialHistory = Field(default_factory=SocialHistory)
     women_health: WomenHealth | None = None
+    # Questions answered "don't know" or "prefer not to say": still open for the doctor.
+    unanswered: Annotated[list[Unanswered], Field(max_length=30)] = Field(default_factory=list)
+    ayush: AyushHistory | None = None
     red_flags: Annotated[list[RedFlag], Field(max_length=30)] = Field(default_factory=list)
     routing: Routing
     field_meta: dict[str, FieldMeta] = Field(default_factory=dict)

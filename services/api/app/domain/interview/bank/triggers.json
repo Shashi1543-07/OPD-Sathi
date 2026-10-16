@@ -5,6 +5,7 @@
     "medications",
     "allergies",
     "family_history",
+    "personal_history",
     "general_context"
   ],
   "max_triggered_modules": 2,

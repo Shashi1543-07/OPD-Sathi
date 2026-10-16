@@ -27,6 +27,7 @@ import { Popover } from "../components/ui/Popover";
 import type { StaffRole } from "../lib/auth";
 import { staffAuth } from "../lib/auth";
 import { newRequestId } from "../lib/ids";
+import { InterviewSettingsCard } from "./InterviewSettingsCard";
 import { QueueSettingsCard } from "./QueueSettingsCard";
 
 type Resource = "departments" | "users" | "kiosks";
@@ -980,6 +981,7 @@ export function AdminConsole() {
             </button>
           </form>
           {resource === "departments" && <QueueSettingsCard />}
+          {resource === "departments" && <InterviewSettingsCard />}
         </div>
 
         <section className="adm-card adm-list" aria-labelledby={`${baseId}-list`}>

@@ -76,6 +76,110 @@
       "multi": true
     },
     {
+      "id": "surgeries",
+      "module": "past_history",
+      "input": "text",
+      "optional": true,
+      "topic": "past operations",
+      "prompt": {
+        "en": "Have you ever had an operation?",
+        "hi": "क्या आपका कभी कोई ऑपरेशन हुआ है?",
+        "mr": "तुमचे कधी कोणते ऑपरेशन झाले आहे का?"
+      },
+      "options": [
+        {
+          "id": "caesarean",
+          "label": {
+            "en": "Caesarean (C-section)",
+            "hi": "सिज़ेरियन (ऑपरेशन से डिलीवरी)",
+            "mr": "सिझेरियन (ऑपरेशनने प्रसूती)"
+          },
+          "only_sexes": [
+            "female",
+            "other",
+            "unknown"
+          ],
+          "min_age": 14
+        },
+        {
+          "id": "appendix",
+          "label": {
+            "en": "Appendix",
+            "hi": "अपेंडिक्स",
+            "mr": "अपेंडिक्स"
+          }
+        },
+        {
+          "id": "hernia",
+          "label": {
+            "en": "Hernia",
+            "hi": "हर्निया",
+            "mr": "हर्निया"
+          }
+        },
+        {
+          "id": "gallbladder",
+          "label": {
+            "en": "Gallbladder or stone",
+            "hi": "पित्ताशय या पथरी",
+            "mr": "पित्ताशय किंवा खडा"
+          }
+        },
+        {
+          "id": "eye",
+          "label": {
+            "en": "Eye (cataract)",
+            "hi": "आँख (मोतियाबिंद)",
+            "mr": "डोळा (मोतीबिंदू)"
+          }
+        },
+        {
+          "id": "bone_joint",
+          "label": {
+            "en": "Bone or joint",
+            "hi": "हड्डी या जोड़",
+            "mr": "हाड किंवा सांधा"
+          }
+        },
+        {
+          "id": "other",
+          "label": {
+            "en": "Another operation",
+            "hi": "कोई और ऑपरेशन",
+            "mr": "दुसरे ऑपरेशन"
+          }
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "Never had an operation",
+            "hi": "कभी ऑपरेशन नहीं हुआ",
+            "mr": "कधीच ऑपरेशन झाले नाही"
+          },
+          "none": true
+        },
+        {
+          "id": "unknown",
+          "label": {
+            "en": "Don't know",
+            "hi": "पता नहीं",
+            "mr": "माहीत नाही"
+          },
+          "unknown": true
+        },
+        {
+          "id": "declined",
+          "label": {
+            "en": "Prefer not to say",
+            "hi": "नहीं बताना चाहते",
+            "mr": "सांगायचे नाही"
+          },
+          "declined": true
+        }
+      ],
+      "multi": true
+    },
+    {
       "id": "pregnancy",
       "module": "past_history",
       "input": "text",

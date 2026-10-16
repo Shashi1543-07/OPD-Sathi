@@ -1,0 +1,313 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "ayur_appetite",
+      "module": "ayurveda",
+      "input": "text",
+      "optional": true,
+      "topic": "appetite (Ahara Shakti)",
+      "prompt": {
+        "en": "How is your hunger?",
+        "hi": "आपको भूख कैसी लगती है?",
+        "mr": "तुम्हाला भूक कशी लागते?"
+      },
+      "options": [
+        {
+          "id": "good",
+          "label": {
+            "en": "Good and on time",
+            "hi": "अच्छी और समय पर",
+            "mr": "चांगली आणि वेळेवर"
+          }
+        },
+        {
+          "id": "less",
+          "label": {
+            "en": "Less than before",
+            "hi": "पहले से कम",
+            "mr": "आधीपेक्षा कमी"
+          }
+        },
+        {
+          "id": "more",
+          "label": {
+            "en": "More than before",
+            "hi": "पहले से ज़्यादा",
+            "mr": "आधीपेक्षा जास्त"
+          }
+        },
+        {
+          "id": "varies",
+          "label": {
+            "en": "Changes from day to day",
+            "hi": "रोज़ बदलती रहती है",
+            "mr": "रोज बदलते"
+          }
+        }
+      ],
+      "multi": false
+    },
+    {
+      "id": "ayur_digestion",
+      "module": "ayurveda",
+      "input": "text",
+      "optional": true,
+      "topic": "digestion (Jarana Shakti)",
+      "prompt": {
+        "en": "How do you feel after eating?",
+        "hi": "खाना खाने के बाद कैसा लगता है?",
+        "mr": "जेवल्यानंतर कसे वाटते?"
+      },
+      "options": [
+        {
+          "id": "light",
+          "label": {
+            "en": "Light and fine",
+            "hi": "हल्का और ठीक",
+            "mr": "हलके आणि ठीक"
+          },
+          "excludes": [
+            "heavy",
+            "sour",
+            "gas"
+          ]
+        },
+        {
+          "id": "heavy",
+          "label": {
+            "en": "Heavy or bloated",
+            "hi": "भारीपन या पेट फूलना",
+            "mr": "जडपणा किंवा पोट फुगणे"
+          }
+        },
+        {
+          "id": "sour",
+          "label": {
+            "en": "Sour belching or burning",
+            "hi": "खट्टी डकार या जलन",
+            "mr": "आंबट ढेकर किंवा जळजळ"
+          }
+        },
+        {
+          "id": "gas",
+          "label": {
+            "en": "Gas",
+            "hi": "गैस",
+            "mr": "गॅस"
+          }
+        }
+      ],
+      "multi": true
+    },
+    {
+      "id": "ayur_bowel",
+      "module": "ayurveda",
+      "input": "text",
+      "optional": true,
+      "topic": "bowel habit (Mala)",
+      "prompt": {
+        "en": "How are your bowel movements?",
+        "hi": "आपका पेट कैसे साफ़ होता है?",
+        "mr": "तुमचे पोट कसे साफ होते?"
+      },
+      "options": [
+        {
+          "id": "daily",
+          "label": {
+            "en": "Daily and easy",
+            "hi": "रोज़ और आसानी से",
+            "mr": "रोज आणि सहज"
+          }
+        },
+        {
+          "id": "hard",
+          "label": {
+            "en": "Hard or constipated",
+            "hi": "सख़्त या कब्ज़",
+            "mr": "कडक किंवा बद्धकोष्ठता"
+          }
+        },
+        {
+          "id": "loose",
+          "label": {
+            "en": "Loose",
+            "hi": "पतला",
+            "mr": "पातळ"
+          }
+        },
+        {
+          "id": "irregular",
+          "label": {
+            "en": "Not regular",
+            "hi": "नियमित नहीं",
+            "mr": "नियमित नाही"
+          }
+        }
+      ],
+      "multi": false
+    },
+    {
+      "id": "ayur_sleep",
+      "module": "ayurveda",
+      "input": "text",
+      "optional": true,
+      "topic": "sleep (Nidra)",
+      "hide_with_modules": [
+        "sleep_energy"
+      ],
+      "prompt": {
+        "en": "How do you sleep?",
+        "hi": "आपकी नींद कैसी है?",
+        "mr": "तुमची झोप कशी आहे?"
+      },
+      "options": [
+        {
+          "id": "sound",
+          "label": {
+            "en": "Sound sleep",
+            "hi": "गहरी नींद",
+            "mr": "गाढ झोप"
+          },
+          "excludes": [
+            "slow",
+            "waking"
+          ]
+        },
+        {
+          "id": "slow",
+          "label": {
+            "en": "Takes long to fall asleep",
+            "hi": "नींद आने में देर लगती है",
+            "mr": "झोप लागायला वेळ लागतो"
+          }
+        },
+        {
+          "id": "waking",
+          "label": {
+            "en": "Wake up often",
+            "hi": "बार-बार नींद खुलती है",
+            "mr": "वारंवार जाग येते"
+          }
+        },
+        {
+          "id": "daytime",
+          "label": {
+            "en": "Sleepy in the day",
+            "hi": "दिन में नींद आती है",
+            "mr": "दिवसा झोप येते"
+          }
+        }
+      ],
+      "multi": true
+    },
+    {
+      "id": "ayur_exercise",
+      "module": "ayurveda",
+      "input": "text",
+      "optional": true,
+      "topic": "capacity for exertion (Vyayama Shakti)",
+      "prompt": {
+        "en": "Can you do your daily physical work?",
+        "hi": "क्या आप रोज़ का शारीरिक काम कर पाते हैं?",
+        "mr": "तुम्ही रोजचे शारीरिक काम करू शकता का?"
+      },
+      "options": [
+        {
+          "id": "easily",
+          "label": {
+            "en": "Easily",
+            "hi": "आसानी से",
+            "mr": "सहज"
+          }
+        },
+        {
+          "id": "tired",
+          "label": {
+            "en": "Get tired quickly",
+            "hi": "जल्दी थक जाते हैं",
+            "mr": "लवकर थकतो"
+          }
+        },
+        {
+          "id": "breathless",
+          "label": {
+            "en": "Get breathless",
+            "hi": "साँस फूलती है",
+            "mr": "दम लागतो"
+          }
+        },
+        {
+          "id": "cannot",
+          "label": {
+            "en": "Cannot do it",
+            "hi": "नहीं कर पाते",
+            "mr": "करू शकत नाही"
+          }
+        }
+      ],
+      "multi": false
+    },
+    {
+      "id": "ayur_diet",
+      "module": "ayurveda",
+      "input": "text",
+      "optional": true,
+      "topic": "diet (Ahara)",
+      "prompt": {
+        "en": "What do you usually eat?",
+        "hi": "आप आमतौर पर क्या खाते हैं?",
+        "mr": "तुम्ही सहसा काय खाता?"
+      },
+      "options": [
+        {
+          "id": "vegetarian",
+          "label": {
+            "en": "Vegetarian",
+            "hi": "शाकाहारी",
+            "mr": "शाकाहारी"
+          },
+          "excludes": [
+            "non_vegetarian"
+          ]
+        },
+        {
+          "id": "non_vegetarian",
+          "label": {
+            "en": "Non-vegetarian",
+            "hi": "मांसाहारी",
+            "mr": "मांसाहारी"
+          },
+          "excludes": [
+            "vegetarian"
+          ]
+        },
+        {
+          "id": "eggs",
+          "label": {
+            "en": "Eggs",
+            "hi": "अंडे",
+            "mr": "अंडी"
+          }
+        },
+        {
+          "id": "spicy",
+          "label": {
+            "en": "Mostly spicy or fried",
+            "hi": "ज़्यादातर तीखा या तला हुआ",
+            "mr": "बहुतेक तिखट किंवा तळलेले"
+          }
+        },
+        {
+          "id": "irregular",
+          "label": {
+            "en": "Meals at irregular times",
+            "hi": "खाने का समय तय नहीं",
+            "mr": "जेवणाच्या वेळा ठराविक नाहीत"
+          }
+        }
+      ],
+      "multi": true
+    }
+  ]
+}

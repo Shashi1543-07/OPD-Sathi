@@ -5565,6 +5565,183 @@
 .cx-card--ai .cx-card-foot {
   border-top-color: #c7d2fe;
 }
+.cx-card--ai.is-rejected {
+  background: var(--surface-subtle);
+  border-color: var(--border);
+}
+/* Review status of the AI draft */
+.cx-review {
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  margin-left: auto;
+  padding: 0.15rem 0.55rem;
+  white-space: nowrap;
+}
+.cx-review--draft {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+.cx-review--accepted,
+.cx-review--edited {
+  background: var(--primary-tint);
+  color: var(--primary);
+}
+.cx-review--rejected {
+  background: var(--urgent-tint);
+  color: var(--urgent-ink);
+}
+.cx-card--ai h4 {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+/* Each sentence of the brief with the answers it rests on */
+.cx-ai-statements {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cx-ai-statements li {
+  color: var(--text-primary);
+  display: grid;
+  font-size: var(--font-size-md);
+  gap: 0.3rem;
+  line-height: 1.55;
+}
+.cx-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.cx-source {
+  background: var(--surface);
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  color: #3730a3;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  min-height: 1.6rem;
+  padding: 0.1rem 0.55rem;
+}
+.cx-source:hover,
+.cx-source:focus-visible {
+  background: #e0e7ff;
+}
+.cx-ai-edit {
+  display: grid;
+  gap: 0.4rem;
+}
+.cx-ai-edit label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.cx-ai-edit textarea {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: var(--font-size-md);
+  padding: 0.5rem 0.65rem;
+  resize: vertical;
+}
+.cx-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.cx-ai-original {
+  font-size: var(--font-size-sm);
+}
+.cx-ai-original p {
+  color: var(--text-muted);
+}
+/* Ayurveda history: the patient's answers and the vaidya's examination */
+.ayu {
+  display: grid;
+  gap: 0.9rem;
+}
+.ayu-head h3 {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  margin: 0 0 0.3rem;
+}
+.ayu-reported {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+.ayu-reported > div {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(9rem, 34%) minmax(0, 1fr);
+}
+.ayu-reported dt {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+.ayu-reported dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.ayu-reported small {
+  color: var(--text-muted);
+}
+.ayu-exam fieldset {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin: 0.6rem 0 0;
+  padding: 0.6rem 0.75rem 0.75rem;
+}
+.ayu-exam legend {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  padding: 0 0.3rem;
+}
+.ayu-grid {
+  display: grid;
+  gap: 0.6rem 0.9rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+}
+.ayu-field {
+  display: grid;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  gap: 0.25rem;
+}
+.ayu-field input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-weight: 400;
+  min-height: 2.4rem;
+  padding: 0 0.6rem;
+}
+.ayu-field input[readonly] {
+  background: var(--surface-subtle);
+}
+.ayu-exam .cx-btn--primary {
+  margin-top: 0.75rem;
+}
+.cx-card--open {
+  border-color: #fcd34d;
+}
+@media (max-width: 640px) {
+  .ayu-reported > div {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}
+.cx-transcript li.is-highlighted {
+  background: #eef2ff;
+  border-radius: var(--radius-md);
+  outline: 2px solid #a5b4fc;
+}
 .cx-verify {
   align-items: center;
   color: #3730a3;
@@ -6797,6 +6974,17 @@
   align-items: center;
   display: flex;
   gap: 0.5rem;
+}
+.adm-form label.adm-check {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+}
+.adm-form label.adm-check input {
+  flex: none;
+  height: 1.2rem;
+  min-height: 0;
+  width: 1.2rem;
 }
 .adm-form .adm-inline-field input {
   max-width: 7rem;

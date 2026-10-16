@@ -67,6 +67,7 @@ def guard_doctor_summary(value: Any) -> None:
     _check(value, _ALWAYS_BLOCKED)
     if isinstance(value, Mapping):
         _check(value.get("doctor_brief_en", ""), _ALWAYS_BLOCKED + _BRIEF_BLOCKED)
+        _check(value.get("brief_statements", []), _ALWAYS_BLOCKED + _BRIEF_BLOCKED)
 
 
 class _Strict(BaseModel):
@@ -83,8 +84,15 @@ class _Answer(_Strict):
     answer_en: str = Field(default="", max_length=500)
 
 
+class _Statement(_Strict):
+    text_en: str = Field(min_length=1, max_length=300)
+    question_ids: list[str] = Field(default_factory=list, max_length=10)
+
+
 class SummaryOutput(_Strict):
     doctor_brief_en: str = Field(min_length=1, max_length=600)
+    # The brief as sentences, each naming the asked questions whose answers support it.
+    brief_statements: list[_Statement] = Field(default_factory=list, max_length=6)
     chief_complaint_en: str = Field(min_length=1, max_length=300)
     onset_en: str = _Short
     location_en: str = _Short
@@ -112,6 +120,22 @@ def summary_json_schema() -> dict[str, Any]:
         "type": "object",
         "properties": {
             "doctor_brief_en": {"type": "string", "maxLength": 600},
+            "brief_statements": {
+                "type": "array",
+                "maxItems": 6,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text_en": {"type": "string", "maxLength": 300},
+                        "question_ids": {
+                            "type": "array",
+                            "maxItems": 10,
+                            "items": {"type": "string", "maxLength": 80},
+                        },
+                    },
+                    "required": ["text_en", "question_ids"],
+                },
+            },
             "chief_complaint_en": text,
             "onset_en": text,
             "location_en": text,
@@ -154,6 +178,7 @@ def summary_json_schema() -> dict[str, Any]:
         },
         "required": [
             "doctor_brief_en",
+            "brief_statements",
             "chief_complaint_en",
             "onset_en",
             "associated_symptoms_en",
@@ -180,10 +205,34 @@ def _pairs(values: list[str]) -> list[dict[str, Any]]:
     return [_pair(item) for item in seen[:15]]
 
 
+def sourced_statements(
+    statements: Sequence[_Statement], asked: Sequence[str]
+) -> list[dict[str, Any]]:
+    """Keep each sentence's citations to questions this patient was asked.
+
+    A citation the model made up is dropped, and so is a sentence left with none: the doctor
+    must be able to check every statement against the patient's own answer.
+    """
+    allowed = set(asked)
+    kept: list[dict[str, Any]] = []
+    for statement in statements:
+        sources = list(dict.fromkeys(item for item in statement.question_ids if item in allowed))
+        if sources:
+            kept.append({"text_en": statement.text_en, "sources": sources})
+    return kept
+
+
 def apply_summary(
-    case_sheet: dict[str, Any], output: dict[str, Any], *, model: str
+    case_sheet: dict[str, Any],
+    output: dict[str, Any],
+    *,
+    model: str,
+    asked: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """Merge validated English fields; original-language text stays as the patient said it."""
+    """Merge validated English fields; original-language text stays as the patient said it.
+
+    ``asked`` lists the question ids this patient answered; the brief may cite only those.
+    """
     summary = SummaryOutput.model_validate(output)
     updated = deepcopy(CaseSheet.model_validate(case_sheet).model_dump(mode="json"))
     meta = updated["field_meta"]
@@ -244,8 +293,12 @@ def apply_summary(
         social["tobacco"] = _pair(summary.tobacco_en)
     if summary.alcohol_en:
         social["alcohol"] = _pair(summary.alcohol_en)
+    statements = sourced_statements(summary.brief_statements, asked)
+    # With traceable sentences, the brief is exactly those sentences.
+    sourced_brief = " ".join(item["text_en"] for item in statements)[:600]
     updated["ai_summary"] = {
-        "brief_en": summary.doctor_brief_en,
+        "brief_en": sourced_brief or summary.doctor_brief_en,
+        "statements": statements,
         "answers_en": {
             item.question_id: item.answer_en for item in summary.answers_en if item.answer_en
         },

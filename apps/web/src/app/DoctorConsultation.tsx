@@ -40,12 +40,14 @@ import {
   Undo2,
   UserRound,
   UserX,
+  XCircle,
 } from "lucide-react";
 import type { components } from "../lib/api-types";
 import { staffAuth } from "../lib/auth";
 import { ConfidenceChip, Popover } from "../components/ui";
 import { ConsultPatientRailView } from "./ConsultPatientRail";
 import { PreviousVisits, type PatientHistory } from "./PreviousVisits";
+import { AyurvedaPanel } from "./AyurvedaPanel";
 import { useConsultQueue } from "./consultQueue";
 import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
 import { newRequestId } from "../lib/ids";
@@ -59,6 +61,15 @@ type CaseSheet = components["schemas"]["CaseSheet"] & {
     answers_en?: Record<string, string>;
     model?: string;
     generated_at?: string;
+    /** The brief as sentences, each citing the asked questions whose answers support it. */
+    statements?: { text_en: string; sources: string[] }[];
+    /** A doctor's decision; absent while the brief is an unreviewed draft. */
+    review?: {
+      status: "accepted" | "edited" | "rejected";
+      by_name: string;
+      at: string;
+      original_brief_en?: string | null;
+    } | null;
   } | null;
   followup_questions?: Record<string, string>;
 };
@@ -94,7 +105,7 @@ type CaseSheetResult = {
   patient?: PatientContext | null;
 };
 type Draft = { path: string; value: string; initial: string; label: string };
-type Tab = "overview" | "history" | "previous" | "transcript" | "notes";
+type Tab = "overview" | "history" | "previous" | "ayurveda" | "transcript" | "notes";
 type StepState = "done" | "active" | "next" | "upcoming";
 
 const emptyText = "—";
@@ -103,6 +114,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "history", label: "tabHistory" },
   // Earlier visits stay apart from today's history so the two are never confused.
   { id: "previous", label: "tabPrevious" },
+  // Only on sheets with an Ayurveda section (hospitals that ask the Ayurveda history).
+  { id: "ayurveda", label: "tabAyurveda" },
   { id: "transcript", label: "tabTranscript" },
   { id: "notes", label: "tabNotes" },
 ];
@@ -126,6 +139,8 @@ const PATH_LABELS: [RegExp, string][] = [
   [/^\/family_history/, "familyHistory"],
   [/^\/social\/tobacco/, "tobacco"],
   [/^\/social\/alcohol/, "alcohol"],
+  [/^\/social\/other/, "habitsOther"],
+  [/^\/ayush/, "ayurvedaHistory"],
 ];
 /** Where each visit status sits on the call → consult → complete path. */
 const WORKFLOW: Record<string, StepState[]> = {
@@ -309,6 +324,18 @@ export function DoctorConsultation() {
   }, [loadTimeline]);
   const visitTimeline = timeline?.visitId === visitId ? timeline.events : [];
 
+  // Reviewing the AI draft: the brief being rewritten, a rejected draft shown on request,
+  // and the answer a source chip points to in the transcript.
+  const [briefDraft, setBriefDraft] = useState<{ visitId: string; text: string } | null>(null);
+  const [rejectedShown, setRejectedShown] = useState<string | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const editingBrief = briefDraft?.visitId === visitId ? briefDraft.text : null;
+  useEffect(() => {
+    if (!highlighted || tab !== "transcript") return;
+    document.getElementById(`turn-${highlighted}`)?.scrollIntoView?.({ block: "center" });
+  }, [highlighted, tab]);
+
   // A called patient can be marked absent once the hospital's grace period has passed.
   const calledAt = queue.items.find((item) => item.visit_id === visitId)?.called_at;
   const [tick, setTick] = useState(() => Date.now());
@@ -444,6 +471,41 @@ export function DoctorConsultation() {
         reason instanceof Error ? reason.message : t("consultActionError"),
       );
     }
+  }
+
+  async function reviewSummary(decision: "accepted" | "edited" | "rejected", brief?: string) {
+    if (!visitId || !sheet) return;
+    setReviewing(true);
+    setError("");
+    try {
+      const response = await staffAuth.request(`/visits/${visitId}/ai-summary/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "If-Match": `"${sheet.version}"` },
+        body: JSON.stringify(decision === "edited" ? { decision, brief_en: brief } : { decision }),
+      });
+      if (response.status === 409) {
+        await load();
+        throw new Error(t("aiReviewConflict"));
+      }
+      if (!response.ok) throw new Error(t("aiReviewFailed"));
+      const updated = (await response.json()) as CaseSheetResult;
+      const headerVersion = Number(response.headers.get("ETag")?.replaceAll('"', ""));
+      setSheet((previous) => ({
+        ...updated,
+        patient: updated.patient ?? previous?.patient,
+        version: Number.isFinite(headerVersion) ? headerVersion : updated.version,
+      }));
+      setBriefDraft(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("aiReviewFailed"));
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  function showSource(questionId: string) {
+    setHighlighted(questionId);
+    openTab("transcript");
   }
 
   async function exportPdf() {
@@ -781,6 +843,7 @@ export function DoctorConsultation() {
     ...pairs(t("familyHistory"), data.family_history as TextPair[], "/family_history", 230),
     pair(t("tobacco"), data.social?.tobacco as TextPair | null, "/social/tobacco", 260),
     pair(t("alcohol"), data.social?.alcohol as TextPair | null, "/social/alcohol", 261),
+    ...pairs(t("habitsOther"), data.social?.other as TextPair[] | undefined, "/social/other", 270),
     data.women_health?.pregnant
       ? field(t("pregnancy"), t("pregnantNow"), "/women_health/pregnant", 262, false)
       : null,
@@ -841,18 +904,110 @@ export function DoctorConsultation() {
       </div>
     </section>
   );
-  const aiCard = data.ai_summary?.brief_en && (
-    <section className="cx-card cx-card--ai" aria-labelledby={`${baseId}-ai`}>
+  const summary = data.ai_summary;
+  const review = summary?.review ?? null;
+  const canReview = staffAuth.user?.role === "doctor";
+  const answerFor = (questionId: string) => {
+    const turn = transcript.find((item) => item.question_id === questionId);
+    return turn?.text_original || turn?.text_english || undefined;
+  };
+  const reviewLabel = review
+    ? t(
+        review.status === "accepted"
+          ? "aiReviewAccepted"
+          : review.status === "edited"
+            ? "aiReviewEdited"
+            : "aiReviewRejected",
+        { name: review.by_name || t("aDoctor") },
+      )
+    : t("aiReviewDraft");
+  const hideRejected = review?.status === "rejected" && rejectedShown !== visitId;
+  const aiCard = summary?.brief_en && (
+    <section
+      className={`cx-card cx-card--ai${review?.status === "rejected" ? " is-rejected" : ""}`}
+      aria-labelledby={`${baseId}-ai`}
+    >
       <h4 id={`${baseId}-ai`}>
         <Sparkles aria-hidden="true" size={17} /> {t("aiBriefTitle")}
+        <span className={`cx-review cx-review--${review?.status ?? "draft"}`}>{reviewLabel}</span>
       </h4>
-      <p>{data.ai_summary.brief_en}</p>
+      {hideRejected ? (
+        <p className="cx-none">
+          {t("aiRejectedNote")}{" "}
+          <button type="button" className="cx-link" onClick={() => setRejectedShown(visitId)}>
+            {t("aiShowDraft")}
+          </button>
+        </p>
+      ) : editingBrief !== null ? (
+        <form
+          className="cx-ai-edit"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (editingBrief.trim()) void reviewSummary("edited", editingBrief.trim());
+          }}
+        >
+          <label htmlFor={`${baseId}-brief`}>{t("aiEditLabel")}</label>
+          <textarea
+            id={`${baseId}-brief`}
+            value={editingBrief}
+            maxLength={600}
+            rows={4}
+            onChange={(event) => setBriefDraft({ visitId: visitId ?? "", text: event.target.value })}
+          />
+          <span className="cx-ai-actions">
+            <button
+              type="submit"
+              className="cx-btn cx-btn--primary"
+              disabled={reviewing || !editingBrief.trim()}
+            >
+              {t("aiSaveEdit")}
+            </button>
+            <button type="button" className="cx-btn" onClick={() => setBriefDraft(null)}>
+              {t("aiCancelEdit")}
+            </button>
+          </span>
+        </form>
+      ) : summary.statements?.length ? (
+        <ul className="cx-ai-statements">
+          {summary.statements.map((statement, index) => (
+            <li key={`${index}-${statement.text_en}`}>
+              <span>{statement.text_en}</span>
+              <span className="cx-sources" role="group" aria-label={t("aiSourcesLabel")}>
+                {statement.sources.map((source) => (
+                  <button
+                    type="button"
+                    key={source}
+                    className="cx-source no-print"
+                    title={answerFor(source)}
+                    onClick={() => showSource(source)}
+                  >
+                    {questionLabel(source)}
+                  </button>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <>
+          <p>{summary.brief_en}</p>
+          {!review && <p className="cx-panel-note">{t("aiNoSources")}</p>}
+        </>
+      )}
+      {review?.status === "edited" && review.original_brief_en && editingBrief === null && (
+        <details className="cx-ai-original no-print">
+          <summary>{t("aiOriginalDraft")}</summary>
+          <p>{review.original_brief_en}</p>
+        </details>
+      )}
       <div className="cx-card-foot">
         <small>{t("aiBriefNote")}</small>
-        <span className="cx-verify">
-          <ShieldAlert aria-hidden="true" size={14} />
-          {t("aiNotVerified")}
-        </span>
+        {!review && (
+          <span className="cx-verify">
+            <ShieldAlert aria-hidden="true" size={14} />
+            {t("aiNotVerified")}
+          </span>
+        )}
         <button
           type="button"
           className="cx-link no-print"
@@ -860,6 +1015,38 @@ export function DoctorConsultation() {
         >
           {t("compareOriginal")} <ArrowRight aria-hidden="true" size={14} />
         </button>
+        {canReview && editingBrief === null && (
+          <span className="cx-ai-actions no-print">
+            {review?.status !== "accepted" && (
+              <button
+                type="button"
+                className="cx-btn"
+                disabled={reviewing}
+                onClick={() => void reviewSummary("accepted")}
+              >
+                <CheckCircle2 aria-hidden="true" size={15} /> {t("aiAccept")}
+              </button>
+            )}
+            <button
+              type="button"
+              className="cx-btn"
+              disabled={reviewing}
+              onClick={() => setBriefDraft({ visitId: visitId ?? "", text: summary.brief_en })}
+            >
+              <Pencil aria-hidden="true" size={15} /> {t("aiEdit")}
+            </button>
+            {review?.status !== "rejected" && (
+              <button
+                type="button"
+                className="cx-btn"
+                disabled={reviewing}
+                onClick={() => void reviewSummary("rejected")}
+              >
+                <XCircle aria-hidden="true" size={15} /> {t("aiReject")}
+              </button>
+            )}
+          </span>
+        )}
       </div>
     </section>
   );
@@ -923,7 +1110,10 @@ export function DoctorConsultation() {
       label: t("alcohol"),
       text,
     })),
+    ...textList(data.social?.other ?? []).map((text) => ({ label: t("habitsOther"), text })),
     ...(data.women_health?.pregnant ? [{ label: t("pregnancy"), text: t("pregnantNow") }] : []),
+    // "Don't know" and "prefer not to say": still to ask, never a denial.
+    ...(data.unanswered ?? []).map((item) => ({ label: t("openQuestion"), text: item.text_en })),
   ];
   const keyHistoryCard = (
     <section className="cx-card" aria-labelledby={`${baseId}-keyhistory`}>
@@ -1070,6 +1260,17 @@ export function DoctorConsultation() {
           <p className="cx-none">{t("noneRecorded")}</p>
         )}
       </section>
+      {(data.unanswered ?? []).length > 0 && (
+        <section className="cx-card cx-card--open" aria-labelledby={`${baseId}-open`}>
+          <h4 id={`${baseId}-open`}>{t("openQuestionsTitle")}</h4>
+          <ul className="cx-points">
+            {(data.unanswered ?? []).map((item) => (
+              <li key={item.question_id}>{item.text_en}</li>
+            ))}
+          </ul>
+          <p className="cx-panel-note">{t("openQuestionsNote")}</p>
+        </section>
+      )}
     </>
   );
   const staffEdits = Array.from(
@@ -1084,6 +1285,7 @@ export function DoctorConsultation() {
     ),
   );
 
+  const visibleTabs = TABS.filter((item) => item.id !== "ayurveda" || data.ayush);
   let panel: ReactNode;
   if (tab === "overview") {
     panel = (
@@ -1110,6 +1312,21 @@ export function DoctorConsultation() {
         {historyCards}
         <p className="cx-disclaimer">{data.disclaimer}</p>
       </article>
+    );
+  } else if (tab === "ayurveda" && data.ayush) {
+    panel = (
+      <AyurvedaPanel
+        key={visitId}
+        visitId={visitId}
+        ayush={data.ayush}
+        version={sheet.version}
+        canEdit={staffAuth.user?.role === "doctor"}
+        onSaved={(saved) => {
+          const updated = saved as unknown as CaseSheetResult;
+          setSheet((previous) => ({ ...updated, patient: updated.patient ?? previous?.patient }));
+        }}
+        onConflict={() => void load()}
+      />
     );
   } else if (tab === "previous") {
     panel = (
@@ -1143,7 +1360,11 @@ export function DoctorConsultation() {
               const aiQuestion = data.followup_questions?.[turn.question_id];
               const Icon = ModeIcon(turn.input_mode);
               return (
-                <li key={turn.turn_index}>
+                <li
+                  key={turn.turn_index}
+                  id={`turn-${turn.question_id}`}
+                  className={highlighted === turn.question_id ? "is-highlighted" : undefined}
+                >
                   <div className="cx-turn-head">
                     {aiQuestion ? (
                       <span className="cx-turn-q">
@@ -1229,16 +1450,16 @@ export function DoctorConsultation() {
   }
 
   function onTabKey(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    const index = TABS.findIndex((item) => item.id === tab);
+    const index = visibleTabs.findIndex((item) => item.id === tab);
     const target =
       event.key === "ArrowRight"
-        ? TABS[(index + 1) % TABS.length]
+        ? visibleTabs[(index + 1) % visibleTabs.length]
         : event.key === "ArrowLeft"
-          ? TABS[(index - 1 + TABS.length) % TABS.length]
+          ? visibleTabs[(index - 1 + visibleTabs.length) % visibleTabs.length]
           : event.key === "Home"
-            ? TABS[0]
+            ? visibleTabs[0]
             : event.key === "End"
-              ? TABS[TABS.length - 1]
+              ? visibleTabs[visibleTabs.length - 1]
               : undefined;
     if (!target) return;
     event.preventDefault();
@@ -1449,7 +1670,8 @@ export function DoctorConsultation() {
         ) : (
           data.ai_summary?.brief_en && (
             <span className="cx-strip-ai">
-              <Sparkles aria-hidden="true" size={14} /> {t("aiSummaryUnverified")}
+              <Sparkles aria-hidden="true" size={14} />{" "}
+              {review ? reviewLabel : t("aiSummaryUnverified")}
             </span>
           )
         )}
@@ -1459,14 +1681,15 @@ export function DoctorConsultation() {
       {printing ? (
         <article className="cx-sheet">
           {redFlagCard}
-          {aiCard}
+          {/* A rejected AI draft is never printed. */}
+          {review?.status !== "rejected" && aiCard}
           {historyCards}
           <p className="cx-disclaimer">{data.disclaimer}</p>
         </article>
       ) : (
         <>
           <div className="cx-tabs no-print" role="tablist" aria-label={t("consultTabs")}>
-            {TABS.map((item) => (
+            {visibleTabs.map((item) => (
               <button
                 key={item.id}
                 ref={(node) => {

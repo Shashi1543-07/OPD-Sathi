@@ -388,6 +388,173 @@ describe("Phase 7.4 doctor consultation", () => {
     expect(screen.getByText("Missed call")).toBeVisible();
   });
 
+  const draftSheet = {
+    ...sheet,
+    ai_summary: {
+      brief_en: "40-year-old female reports headache for 1-3 days.",
+      statements: [
+        {
+          text_en: "40-year-old female reports headache for 1-3 days.",
+          sources: ["chief_concern", "duration"],
+        },
+      ],
+      answers_en: {},
+      review: null,
+    },
+  };
+  const signedInDoctor = () =>
+    vi.spyOn(staffAuth, "user", "get").mockReturnValue({
+      id: "doctor-1",
+      name: "Dr Rao",
+      email: "doctor@example.test",
+      role: "doctor",
+      hospital_id: "hospital-1",
+    });
+
+  it("shows each AI sentence with the answers it rests on, one tap from the transcript", async () => {
+    mockRequests([
+      sheetResponse(1, draftSheet),
+      transcriptResponse([
+        {
+          turn_index: 1,
+          question_id: "chief_concern",
+          input_mode: "touch",
+          text_original: "Synthetic headache",
+          text_english: "Synthetic headache",
+          stt_confidence: null,
+        },
+      ]),
+    ]);
+
+    renderConsult();
+    expect(await screen.findByText("Draft · not reviewed")).toBeVisible();
+    const source = screen.getByRole("button", { name: "Main problem" });
+    expect(source).toHaveAttribute("title", "Synthetic headache");
+    expect(screen.getByRole("button", { name: "Since when" })).toBeVisible();
+    await userEvent.setup().click(source);
+    expect(screen.getByRole("tab", { name: /Interview transcript/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(document.getElementById("turn-chief_concern")).toHaveClass("is-highlighted");
+  });
+
+  it("lets a doctor accept or rewrite the AI draft, with the version they reviewed", async () => {
+    signedInDoctor();
+    const accepted = {
+      ...draftSheet,
+      ai_summary: {
+        ...draftSheet.ai_summary,
+        review: { status: "accepted", by_name: "Dr Rao", at: "2026-10-16T05:00:00Z" },
+      },
+    };
+    const edited = {
+      ...draftSheet,
+      ai_summary: {
+        ...draftSheet.ai_summary,
+        brief_en: "Headache for two days.",
+        statements: [],
+        review: {
+          status: "edited",
+          by_name: "Dr Rao",
+          at: "2026-10-16T05:01:00Z",
+          original_brief_en: draftSheet.ai_summary.brief_en,
+        },
+      },
+    };
+    const { calls } = mockRequests([
+      sheetResponse(1, draftSheet),
+      transcriptResponse(),
+      sheetResponse(2, accepted),
+      sheetResponse(3, edited),
+    ]);
+
+    renderConsult();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Accept" }));
+    expect(await screen.findAllByText("Accepted by Dr Rao")).not.toHaveLength(0);
+    expect(calls()[2][0]).toBe("/visits/visit-1/ai-summary/review");
+    expect(calls()[2][1]?.headers).toMatchObject({ "If-Match": '"1"' });
+    expect(calls()[2][1]?.body).toBe(JSON.stringify({ decision: "accepted" }));
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const box = screen.getByRole("textbox", { name: "Summary for the case sheet (your words)" });
+    expect(box).toHaveValue(draftSheet.ai_summary.brief_en);
+    fireEvent.change(box, { target: { value: "Headache for two days." } });
+    await user.click(screen.getByRole("button", { name: "Save summary" }));
+    expect(await screen.findAllByText("Edited by Dr Rao")).not.toHaveLength(0);
+    expect(calls()[3][1]?.headers).toMatchObject({ "If-Match": '"2"' });
+    expect(calls()[3][1]?.body).toBe(
+      JSON.stringify({ decision: "edited", brief_en: "Headache for two days." }),
+    );
+    expect(screen.getByText("Original AI draft")).toBeInTheDocument();
+  });
+
+  it("hides a rejected draft until asked and offers no review to nurses", async () => {
+    vi.spyOn(staffAuth, "user", "get").mockReturnValue({
+      id: "nurse-1",
+      name: "Synthetic Nurse",
+      email: "nurse@example.test",
+      role: "nurse",
+      hospital_id: "hospital-1",
+    });
+    mockRequests([
+      sheetResponse(1, {
+        ...draftSheet,
+        ai_summary: {
+          ...draftSheet.ai_summary,
+          review: { status: "rejected", by_name: "Dr Rao", at: "2026-10-16T05:00:00Z" },
+        },
+      }),
+      transcriptResponse(),
+    ]);
+
+    renderConsult();
+    expect(await screen.findByText("This AI draft was rejected and is not printed.")).toBeVisible();
+    expect(screen.queryByText(draftSheet.ai_summary.brief_en)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Show it" }));
+    expect(screen.getByText(draftSheet.ai_summary.brief_en)).toBeVisible();
+  });
+
+  it("lists what the patient did not know or preferred not to say, and adds an Ayurveda tab", async () => {
+    mockRequests([
+      sheetResponse(1, {
+        ...sheet,
+        unanswered: [
+          {
+            question_id: "surgeries",
+            status: "unknown",
+            text_en: "Does not know: past operations",
+          },
+        ],
+        ayush: { appetite: { text_original: "Good", text_en: "Good and on time" }, examination: {} },
+      }),
+      transcriptResponse(),
+    ]);
+
+    renderConsult();
+    // On the overview, among the key history, marked as still to ask.
+    expect(await screen.findByText("Does not know: past operations")).toBeVisible();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Patient history" }));
+    expect(screen.getByRole("heading", { name: "Still to ask" })).toBeVisible();
+    expect(
+      screen.getByText("The patient did not know or preferred not to say. These are not denials."),
+    ).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Ayurveda" }));
+    expect(screen.getByRole("heading", { name: "Ayurveda history" })).toBeVisible();
+    expect(screen.getByText("Good and on time")).toBeVisible();
+  });
+
+  it("has no Ayurveda tab where the hospital does not ask the Ayurveda history", async () => {
+    mockRequests([sheetResponse(1), transcriptResponse()]);
+    renderConsult();
+    await screen.findByText("Synthetic headache");
+    expect(screen.queryByRole("tab", { name: "Ayurveda" })).toBeNull();
+  });
+
   it("waits out the grace period before a just-called patient can be marked absent", async () => {
     mockRequests([sheetResponse(1), transcriptResponse()]);
     queueState.current = {

@@ -2,7 +2,7 @@
   "$defs": {
     "AISummary": {
       "additionalProperties": false,
-      "description": "Doctor-facing English translation produced by the language model; history only.",
+      "description": "Doctor-facing English translation produced by the language model; history only.\n\nWithout a ``review`` it is an unreviewed draft. ``statements`` split the brief into\nsentences, each citing the asked questions it rests on, so the doctor can check them.",
       "properties": {
         "brief_en": {
           "maxLength": 600,
@@ -31,12 +31,133 @@
           "maxLength": 40,
           "title": "Generated At",
           "type": "string"
+        },
+        "statements": {
+          "items": {
+            "$ref": "#/$defs/SummaryStatement"
+          },
+          "maxItems": 8,
+          "title": "Statements",
+          "type": "array"
+        },
+        "review": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SummaryReview"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
         "brief_en"
       ],
       "title": "AISummary",
+      "type": "object"
+    },
+    "AyushHistory": {
+      "additionalProperties": false,
+      "description": "Ayurveda history; a draft for the vaidya to review.\n\nThe patient reports appetite, digestion, bowel habit, sleep, capacity for exertion and\ndiet at the kiosk. Examination findings are entered by the clinician only and are never\nasked of the patient.",
+      "properties": {
+        "appetite": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "digestion": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "bowel": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sleep": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "exercise": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "diet": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextPair"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "examination": {
+          "additionalProperties": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "nadi",
+              "mutra",
+              "mala",
+              "jihva",
+              "shabda",
+              "sparsha",
+              "drik",
+              "akriti",
+              "prakriti",
+              "vikriti",
+              "sara",
+              "samhanana",
+              "pramana",
+              "satmya",
+              "sattva",
+              "vaya"
+            ]
+          },
+          "title": "Examination",
+          "type": "object"
+        }
+      },
+      "title": "AyushHistory",
       "type": "object"
     },
     "Duration": {
@@ -430,9 +551,91 @@
             }
           ],
           "default": null
+        },
+        "other": {
+          "items": {
+            "$ref": "#/$defs/TextPair"
+          },
+          "maxItems": 10,
+          "title": "Other",
+          "type": "array"
         }
       },
       "title": "SocialHistory",
+      "type": "object"
+    },
+    "SummaryReview": {
+      "additionalProperties": false,
+      "description": "A doctor's decision on the AI draft; the latest decision replaces an earlier one.",
+      "properties": {
+        "status": {
+          "enum": [
+            "accepted",
+            "edited",
+            "rejected"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "by_name": {
+          "default": "",
+          "maxLength": 200,
+          "title": "By Name",
+          "type": "string"
+        },
+        "at": {
+          "maxLength": 40,
+          "title": "At",
+          "type": "string"
+        },
+        "original_brief_en": {
+          "anyOf": [
+            {
+              "maxLength": 600,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Original Brief En"
+        }
+      },
+      "required": [
+        "status",
+        "at"
+      ],
+      "title": "SummaryReview",
+      "type": "object"
+    },
+    "SummaryStatement": {
+      "additionalProperties": false,
+      "description": "One sentence of the AI brief and the asked questions whose answers support it.",
+      "properties": {
+        "text_en": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Text En",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Sources",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text_en",
+        "sources"
+      ],
+      "title": "SummaryStatement",
       "type": "object"
     },
     "TextPair": {
@@ -468,6 +671,38 @@
         "text_en"
       ],
       "title": "TextPair",
+      "type": "object"
+    },
+    "Unanswered": {
+      "additionalProperties": false,
+      "description": "A history question the patient could not or chose not to answer; not a denial.",
+      "properties": {
+        "question_id": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Question Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "unknown",
+            "declined"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "text_en": {
+          "maxLength": 500,
+          "title": "Text En",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question_id",
+        "status",
+        "text_en"
+      ],
+      "title": "Unanswered",
       "type": "object"
     },
     "WomenHealth": {
@@ -559,6 +794,25 @@
       "anyOf": [
         {
           "$ref": "#/$defs/WomenHealth"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "unanswered": {
+      "items": {
+        "$ref": "#/$defs/Unanswered"
+      },
+      "maxItems": 30,
+      "title": "Unanswered",
+      "type": "array"
+    },
+    "ayush": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AyushHistory"
         },
         {
           "type": "null"

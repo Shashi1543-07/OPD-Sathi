@@ -2,6 +2,7 @@
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 from redis.asyncio import from_url
 
@@ -89,6 +90,46 @@ async def test_confirmation_retry_returns_the_same_token_after_lost_session_stat
             h=hospital.hospital_id,
         )
         assert visits[0]["n"] == 1
+
+
+async def test_a_correction_retried_after_a_lost_session_write_is_saved_again() -> None:
+    """D10: the correction's turn number came from the session, so a retry after a lost
+    session write reused it and hit the unique turn key (a server error)."""
+    async with synthetic_hospital() as hospital:
+        with api_client(hospital.settings) as client:
+            session = start_kiosk_session(client, activate_kiosk(client, hospital))
+            complete_intake(session, answers={"duration": "1 to 3 days"})
+            correction = {"question_id": "duration", "answer": "4 to 7 days"}
+
+            def correct() -> Any:
+                return client.patch(
+                    f"/intake/sessions/{session.visit_id}/interview/answers",
+                    json=correction,
+                    headers=session.headers(),
+                )
+
+            assert correct().status_code == 200
+            # The turn was saved, but the session never learned of it.
+            redis = from_url(hospital.settings.redis_state_url, decode_responses=True)
+            try:
+                key = f"osa:intake:{hospital.hospital_id}:{session.visit_id}"
+                state = json.loads(await redis.get(key))
+                state["corrections"] = 0
+                await redis.set(key, json.dumps(state), ex=600)
+            finally:
+                await redis.aclose()
+            retry = correct()
+            assert retry.status_code == 200, retry.text
+
+        turns = await fetch(
+            hospital.settings,
+            hospital.hospital_id,
+            "SELECT turn_index FROM interview_turns WHERE hospital_id = :h "
+            "AND visit_id = :v AND turn_index >= 100 ORDER BY turn_index",
+            h=hospital.hospital_id,
+            v=session.visit_id,
+        )
+        assert [row["turn_index"] for row in turns] == [100, 101]
 
 
 async def test_simultaneous_confirmations_issue_one_token() -> None:
