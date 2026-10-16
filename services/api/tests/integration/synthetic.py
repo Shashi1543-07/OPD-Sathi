@@ -33,6 +33,7 @@ STAFF = {
     "doctor": ("doctor", "GENMED"),
     "doctor2": ("doctor", "GENMED"),
     "ortho_doctor": ("doctor", "ORTHO"),
+    "ortho_nurse": ("nurse", "ORTHO"),
     "admin": ("admin", None),
 }
 # Rows that reference a hospital, deleted children first. Visit children cascade.

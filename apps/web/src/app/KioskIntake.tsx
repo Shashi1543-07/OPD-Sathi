@@ -279,8 +279,11 @@ function AnswerPanel({
       setShowText(true);
       setText((current) => (current ? `${current}, ${found}` : found));
       setVoiceMessage(t("scanFound"));
-    } catch {
-      setVoiceMessage(t("scanFailed"));
+    } catch (cause) {
+      const status = cause instanceof IntakeRequestError ? cause.status : 0;
+      setVoiceMessage(
+        t(status === 413 ? "scanTooLarge" : status === 415 ? "scanNotPhoto" : "scanFailed"),
+      );
     } finally {
       setScanning(false);
     }
@@ -607,6 +610,12 @@ export function KioskIntake() {
         (cause.status === 410 || cause.status === 401)
       ) {
         setError(t("sessionLost"));
+        return;
+      }
+      // The request never got an answer (Wi-Fi dropped): tapping again is safe, because the
+      // server recognises an answer it has already saved.
+      if (cause instanceof TypeError) {
+        setError(t("connectionRetry"));
         return;
       }
       setError(cause instanceof Error && cause.message ? cause.message : t("errorRetry"));

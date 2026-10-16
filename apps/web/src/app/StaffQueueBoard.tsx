@@ -67,6 +67,8 @@ type StaffAlert = {
 type ConnectionState = "live" | "reconnecting" | "offline";
 
 const PAGE_SIZE = 50;
+/** Close code the server uses when a board's sign-in expired while it was open. */
+const SIGN_IN_EXPIRED = 4401;
 const SOUND_PREFERENCE_KEY = "opd-staff-alert-sound";
 const DEFAULT_GRACE_SECONDS = 180;
 type QueueSnapshot = {
@@ -414,9 +416,16 @@ export function StaffQueueBoard() {
           );
         }
       };
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (disposed) return;
         setConnection("reconnecting");
+        if (event.code === SIGN_IN_EXPIRED) {
+          // The board stayed open past the 10-minute sign-in: renew it, then reconnect.
+          void staffAuth.refresh().finally(() => {
+            if (!disposed) reconnectTimer = window.setTimeout(connect, 250);
+          });
+          return;
+        }
         reconnectTimer = window.setTimeout(connect, 2000);
       };
       socket.onerror = () => setConnection("offline");
@@ -454,9 +463,15 @@ export function StaffQueueBoard() {
           );
         }
       };
-      alertSocket.onclose = () => {
-        if (!disposed)
-          alertReconnectTimer = window.setTimeout(connectAlerts, 2000);
+      alertSocket.onclose = (event) => {
+        if (disposed) return;
+        if (event.code === SIGN_IN_EXPIRED) {
+          void staffAuth.refresh().finally(() => {
+            if (!disposed) alertReconnectTimer = window.setTimeout(connectAlerts, 250);
+          });
+          return;
+        }
+        alertReconnectTimer = window.setTimeout(connectAlerts, 2000);
       };
     };
     void refresh()

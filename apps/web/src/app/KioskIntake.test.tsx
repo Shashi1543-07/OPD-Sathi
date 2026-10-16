@@ -45,6 +45,7 @@ const { intakeMock, voiceMock, IntakeRequestErrorMock, captured } = vi.hoisted((
       transcribe: vi.fn(),
       speechAudio: vi.fn(),
       changeLanguage: vi.fn(),
+      readPrescription: vi.fn(),
     },
     voiceMock: {
       listenWithServer: vi.fn((_transcribe: unknown, handlers: Handlers) => {
@@ -222,6 +223,68 @@ describe("kiosk intake", () => {
         "touch",
       ),
     );
+  });
+
+  it("asks the patient to tap again when the connection drops while answering", async () => {
+    const user = userEvent.setup();
+    intakeMock.nextQuestion.mockResolvedValue({
+      question: chiefConcern,
+      progress: { current: 1, total: 10 },
+      answered: [],
+    });
+    intakeMock.answer
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({
+        question: { ...chiefConcern, id: "duration", prompt: "Since when?", options: [] },
+        progress: { current: 2, total: 10 },
+        answered: [],
+      });
+    renderIntake("interview");
+
+    await user.click(await screen.findByRole("button", { name: "Fever" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The connection dropped. Please tap again. Your answers are kept.",
+    );
+    expect(screen.queryByText("Failed to fetch")).toBeNull();
+    // The server recognises an answer it already saved, so tapping again is safe.
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Since when?")).toBeInTheDocument();
+    expect(intakeMock.answer).toHaveBeenCalledTimes(2);
+  });
+
+  it("says why a prescription photo could not be used", async () => {
+    const user = userEvent.setup();
+    intakeMock.capabilities.mockResolvedValue({ stt: "gemini", tts: "browser", ai: true });
+    intakeMock.nextQuestion.mockResolvedValue({
+      question: {
+        id: "medications",
+        input: "text",
+        optional: true,
+        multi: false,
+        prompt: "Which medicines do you take?",
+        options: [],
+      },
+      progress: { current: 6, total: 10 },
+      answered: [],
+    });
+    intakeMock.readPrescription
+      .mockRejectedValueOnce(new IntakeRequestErrorMock("UNSUPPORTED_IMAGE", "Not a photo", 415))
+      .mockRejectedValueOnce(new IntakeRequestErrorMock("IMAGE_TOO_LARGE", "Too large", 413));
+    const { container } = renderIntake("interview");
+
+    await screen.findByRole("button", { name: "Scan old prescription" });
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff])], "rx.jpg", { type: "image/jpeg" });
+    await user.upload(input!, photo);
+    expect(
+      await screen.findByText("That file is not a photo. Please take a photo of the prescription."),
+    ).toBeInTheDocument();
+    await user.upload(input!, photo);
+    expect(
+      await screen.findByText("That photo is too large. Please take the photo again."),
+    ).toBeInTheDocument();
   });
 
   it("treats a 'none of these' option as exclusive", async () => {

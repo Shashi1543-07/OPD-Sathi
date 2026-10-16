@@ -789,6 +789,10 @@ export interface paths {
         /**
          * Request Staff Help
          * @description The patient pressed "Call staff": raise an acknowledgeable alert on the staff board.
+         *
+         *     Each press re-opens the visit's one help alert and rings the board, so presses are limited
+         *     per visit (a script holding a phone session cannot keep the board ringing), and a visit
+         *     that has finished cannot call staff any more.
          */
         post: operations["request_staff_help_intake_sessions__visit_id__help_post"];
         delete?: never;
@@ -864,7 +868,14 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Cancel Session */
+        /**
+         * Cancel Session
+         * @description End a check-in that did not finish: the patient quit, or left the kiosk idle.
+         *
+         *     A visit that already has a token is not cancelled here. The patient is in the queue, and
+         *     only staff take a patient out of it (with the queue's own timeline entry), so a kiosk reset
+         *     or a stray request after confirmation never costs a patient their place.
+         */
         delete: operations["cancel_session_intake_sessions__visit_id__delete"];
         options?: never;
         head?: never;
@@ -1436,6 +1447,9 @@ export interface paths {
         /**
          * Read Prescription Photo
          * @description Read medicine names from an old prescription photo; the image is never stored.
+         *
+         *     Only a JPEG, PNG or WebP photo whose contents match its declared type is read, so a PDF
+         *     or any other file renamed as a photo is refused before it reaches the model.
          */
         post: operations["read_prescription_photo_intake_sessions__visit_id__prescription_photo_post"];
         delete?: never;
