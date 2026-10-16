@@ -92,8 +92,6 @@
   "sexOther": "Another option",
   "sexUnknown": "Prefer not to say",
   "phoneLabel": "Mobile number (optional)",
-  "phoneAlreadyRegistered": "This number is already linked to a visit. Remove it to continue without SMS updates, or ask staff for help.",
-  "continueWithoutPhone": "Continue without phone",
   "continueIntake": "Continue",
   "dangerTitle": "Do you need help right now?",
   "dangerNone": "None of these",

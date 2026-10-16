@@ -576,6 +576,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/intake/sessions/{visit_id}/opd-card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link Opd Card
+         * @description A returning patient joins today's visit to their record with their OPD card.
+         *
+         *     Nothing from the earlier record is shown here (a kiosk screen is shared); the doctor sees
+         *     it. The card links only when today's age and sex fit the record, attempts are limited per
+         *     visit and per card, and every attempt is audited.
+         */
+        post: operations["link_opd_card_intake_sessions__visit_id__opd_card_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/sessions/{visit_id}/follow-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Follow Up
+         * @description Say whether today's visit continues an earlier one; the earlier visit is not changed.
+         */
+        post: operations["mark_follow_up_intake_sessions__visit_id__follow_up_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/danger-signs": {
         parameters: {
             query?: never;
@@ -858,6 +902,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/patients/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lookup Patients
+         * @description Find a registered patient by OPD card number or phone, to confirm with them at the desk.
+         *
+         *     A phone number can belong to several family members, so it returns every match; staff
+         *     check age and sex with the patient before linking. Only what verification needs is
+         *     returned (no clinical details), and every lookup is audited.
+         */
+        get: operations["lookup_patients_patients_lookup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/queue/{visit_id}/link-patient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link Patient
+         * @description Join a visit to a registered patient after checking who they are at the desk.
+         *
+         *     For patients without their OPD card. The nurse confirms identity in person first; the
+         *     link is audited, and the doctor's view says it was made by staff.
+         */
+        post: operations["link_patient_queue__visit_id__link_patient_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/queue/{visit_id}/routing/confirm": {
         parameters: {
             query?: never;
@@ -1064,6 +1155,30 @@ export interface paths {
         };
         /** Export Case Sheet Pdf */
         get: operations["export_case_sheet_pdf_visits__visit_id__case_sheet_pdf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/visits/{visit_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Patient History
+         * @description Earlier visits of today's patient, for the clinician looking after today's visit.
+         *
+         *     Allowed to staff of the department treating the visit while it is open or still today's
+         *     (and to administrators), so a doctor sees a patient's earlier visits in other departments
+         *     only while caring for them. Every read is audited. A first visit has no earlier visits.
+         */
+        get: operations["get_patient_history_visits__visit_id__history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1388,6 +1503,11 @@ export interface components {
              */
             ai_assisted: boolean;
         };
+        /** FollowUpPayload */
+        FollowUpPayload: {
+            /** Previous Visit Id */
+            previous_visit_id?: string | null;
+        };
         /** HPI */
         HPI: {
             onset?: components["schemas"]["TextPair"] | null;
@@ -1459,6 +1579,21 @@ export interface components {
             /** Device Secret */
             device_secret: string;
         };
+        /**
+         * KnownItem
+         * @description Something the patient reported at one or more earlier visits (patient-reported).
+         */
+        KnownItem: {
+            /** Text */
+            text: string;
+            /**
+             * Last Reported
+             * Format: date
+             */
+            last_reported: string;
+            /** Visits */
+            visits: number;
+        };
         /** LanguagePayload */
         LanguagePayload: {
             /**
@@ -1466,6 +1601,11 @@ export interface components {
              * @enum {string}
              */
             language: "en" | "hi" | "mr";
+        };
+        /** LinkPatientPayload */
+        LinkPatientPayload: {
+            /** Opd Number */
+            opd_number: string;
         };
         /** LoginPayload */
         LoginPayload: {
@@ -1540,6 +1680,13 @@ export interface components {
             /** Danger Tile Ids */
             danger_tile_ids?: string[];
         };
+        /** OpdCardPayload */
+        OpdCardPayload: {
+            /** Number */
+            number: string;
+            /** Pin */
+            pin: string;
+        };
         /** OverridePayload */
         OverridePayload: {
             /** Reason */
@@ -1594,6 +1741,76 @@ export interface components {
             } | null;
             /** Queued At */
             queued_at?: string | null;
+        };
+        /** PatientHistoryResponse */
+        PatientHistoryResponse: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /** Opd Number */
+            opd_number?: string | null;
+            /** Linked By */
+            linked_by?: ("card" | "staff") | null;
+            /** Follow Up Of */
+            follow_up_of?: string | null;
+            /** Previous Visits */
+            previous_visits?: components["schemas"]["PreviousVisit"][];
+            /** Known Allergies */
+            known_allergies?: components["schemas"]["KnownItem"][];
+            /** Known Medications */
+            known_medications?: components["schemas"]["KnownItem"][];
+            /** Known Conditions */
+            known_conditions?: components["schemas"]["KnownItem"][];
+            /** No Known Allergies Reported */
+            no_known_allergies_reported?: string | null;
+        };
+        /**
+         * PreviousVisit
+         * @description One earlier registered visit, as recorded then. Never edited from here.
+         */
+        PreviousVisit: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /**
+             * Service Date
+             * Format: date
+             */
+            service_date: string;
+            /** Department */
+            department: string;
+            /** Status */
+            status: string;
+            /** Token */
+            token?: string | null;
+            /** Urgency */
+            urgency: string;
+            /** Chief Complaint */
+            chief_complaint?: string | null;
+            /** Ai Brief */
+            ai_brief?: string | null;
+            /**
+             * Staff Edited
+             * @default false
+             */
+            staff_edited: boolean;
+            /** Red Flags */
+            red_flags?: string[];
+            /** Conditions */
+            conditions?: string[];
+            /** Medications */
+            medications?: string[];
+            /** Allergies */
+            allergies?: string[];
+            /**
+             * No Known Allergies
+             * @default false
+             */
+            no_known_allergies: boolean;
         };
         /** RedFlag */
         RedFlag: {
@@ -2855,6 +3072,80 @@ export interface operations {
             };
         };
     };
+    link_opd_card_intake_sessions__visit_id__opd_card_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpdCardPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_follow_up_intake_sessions__visit_id__follow_up_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FollowUpPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     save_danger_signs_intake_sessions__visit_id__danger_signs_post: {
         parameters: {
             query?: never;
@@ -3393,6 +3684,77 @@ export interface operations {
             };
         };
     };
+    lookup_patients_patients_lookup_get: {
+        parameters: {
+            query?: {
+                opd_number?: string | null;
+                phone?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_patient_queue__visit_id__link_patient_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkPatientPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_routing_queue__visit_id__routing_confirm_post: {
         parameters: {
             query?: never;
@@ -3817,6 +4179,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_patient_history_visits__visit_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientHistoryResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

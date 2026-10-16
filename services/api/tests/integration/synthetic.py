@@ -10,6 +10,7 @@ import os
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -152,15 +153,19 @@ async def synthetic_hospital(settings: Settings | None = None) -> AsyncIterator[
                         "department_id": departments[department] if department else None,
                     },
                 )
+            # Already paired (as after activation), so tests mint kiosk tokens directly instead
+            # of calling /kiosks/activate, whose per-address limit all tests would share.
             await connection.execute(
                 text(
-                    "INSERT INTO kiosks (id, hospital_id, label, activation_code_hash) "
-                    "VALUES (:id, :hospital_id, 'Synthetic kiosk', :activation_hash)"
+                    "INSERT INTO kiosks (id, hospital_id, label, activation_code_hash, "
+                    "secret_hash, paired_at) VALUES (:id, :hospital_id, 'Synthetic kiosk', "
+                    ":activation_hash, :secret_hash, now() - interval '1 minute')"
                 ),
                 {
                     "id": kiosk_id,
                     "hospital_id": hospital_id,
                     "activation_hash": digest_secret(activation_code),
+                    "secret_hash": digest_secret("synthetic-device-" + uuid4().hex),
                 },
             )
         yield SyntheticHospital(
@@ -187,6 +192,17 @@ async def fetch(settings: Settings, hospital_id: UUID, sql: str, **params: Any) 
             await set_hospital_scope(connection, hospital_id)
             result = await connection.execute(text(sql), params)
             return list(result.mappings().all())
+    finally:
+        await engine.dispose()
+
+
+async def execute(settings: Settings, hospital_id: UUID, sql: str, **params: Any) -> None:
+    """Run one write as the migrator inside the hospital's scope (test set-up only)."""
+    engine = create_async_engine(settings.migrations_database_url)
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            await connection.execute(text(sql), params)
     finally:
         await engine.dispose()
 
@@ -264,10 +280,16 @@ class PatientSession:
 
 
 def activate_kiosk(client: TestClient, hospital: SyntheticHospital) -> dict[str, str]:
-    """Pair the hospital's kiosk and return kiosk bearer headers."""
-    response = client.post("/kiosks/activate", json={"activation_code": hospital.activation_code})
-    assert response.status_code == 200, response.text
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    """Kiosk bearer headers for the hospital's (already paired) kiosk."""
+    del client  # Kept in the signature: callers read like the real activation flow.
+    token = issue_access_token(
+        subject=hospital.kiosk_id,
+        role="kiosk",
+        hospital_id=hospital.hospital_id,
+        settings=hospital.settings,
+        lifetime=timedelta(hours=1),
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 def start_kiosk_session(

@@ -92,8 +92,6 @@
   "sexOther": "अन्य",
   "sexUnknown": "बताना पसंद नहीं",
   "phoneLabel": "मोबाइल नंबर (वैकल्पिक)",
-  "phoneAlreadyRegistered": "यह नंबर पहले से किसी विज़िट से जुड़ा है। SMS अपडेट के बिना आगे बढ़ने के लिए इसे हटाएँ, या स्टाफ़ से मदद लें।",
-  "continueWithoutPhone": "फोन नंबर के बिना आगे बढ़ें",
   "continueIntake": "आगे बढ़ें",
   "dangerTitle": "क्या आपको अभी मदद चाहिए?",
   "dangerNone": "इनमें से कोई नहीं",

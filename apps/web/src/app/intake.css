@@ -743,6 +743,41 @@
   display: none;
 }
 
+/* OPD card: entered by a returning patient, printed for a new one. */
+.intake-opd-card-fields {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+.intake-opd-card-fields .intake-field input {
+  letter-spacing: 0.08em;
+  max-width: none;
+  width: 100%;
+}
+.intake-opd-slip {
+  background: var(--surface-subtle);
+  border-radius: 1rem;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+}
+.intake-opd-slip > span {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-weight: 700;
+  gap: var(--space-2);
+}
+.intake-opd-slip strong {
+  color: var(--navy-900);
+  font-size: clamp(1.25rem, 4vw, 1.6rem);
+  letter-spacing: 0.02em;
+}
+.intake-opd-slip small {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
 /* Emergency: big, red, and never behind a form. */
 .intake-btn--danger {
   background: #b42318;

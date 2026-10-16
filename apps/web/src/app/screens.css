@@ -5221,6 +5221,9 @@
 .cx-tabs {
   border-bottom: 1px solid var(--border);
   display: flex;
+  /* Five sections: on narrower screens (and with longer Hindi/Marathi labels) the last
+     ones move to a second row instead of pushing the page sideways. */
+  flex-wrap: wrap;
   gap: var(--space-1);
 }
 .cx-tab {
@@ -7895,6 +7898,137 @@
 }
 .adm-conn--off::before {
   background: currentColor;
+}
+
+/* ============================================================
+   Consultation: earlier visits of today's patient
+   ============================================================ */
+.pv {
+  display: grid;
+  gap: var(--space-4);
+}
+.pv-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.pv-head h3 {
+  align-items: center;
+  display: inline-flex;
+  font-size: var(--font-size-lg);
+  gap: var(--space-2);
+  margin: 0;
+}
+.pv-chip {
+  align-items: center;
+  background: var(--primary-tint);
+  border-radius: var(--radius-chip);
+  color: var(--primary);
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  gap: var(--space-1);
+  padding: 2px 10px;
+}
+.pv-chip--muted {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+.pv-followup {
+  background: var(--surface-subtle);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+}
+.pv-known-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.pv-known h5 {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.05em;
+  margin: 0 0 var(--space-2);
+  text-transform: uppercase;
+}
+.pv-known-list {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pv-known-list li {
+  display: grid;
+}
+.pv-known-list small {
+  color: var(--text-muted);
+}
+.pv-visits {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pv-visit-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.pv-token {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+}
+.pv-complaint {
+  font-weight: 600;
+  margin: var(--space-2) 0 0;
+}
+.pv-flags {
+  align-items: flex-start;
+  color: var(--urgent-ink);
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+}
+.pv-brief {
+  color: var(--text-muted);
+  margin: var(--space-2) 0 0;
+}
+.pv-hint {
+  color: var(--text-muted);
+  margin: 0;
+}
+.pv-link-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pv-link-form input {
+  flex: 1 1 10rem;
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+}
+.pv-candidates {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+.pv-candidates li {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-3);
 }
 
 /* ============================================================

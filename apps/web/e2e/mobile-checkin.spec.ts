@@ -122,6 +122,7 @@ async function installApiMocks(page: Page) {
         position: 3,
         department_name: "General Medicine",
         wait_minutes: 8,
+        opd_card: { number: "26-000012", pin: "482913" },
       },
     });
   });
@@ -174,6 +175,7 @@ test("a patient checks in on their own phone over plain HTTP and keeps their tok
   await page.getByLabel(intake.ageQuestion).fill("41");
   await page.getByRole("radio", { name: intake.sexMale, exact: true }).click();
   await page.getByRole("button", { name: intake.next, exact: true }).click();
+  await page.getByRole("button", { name: intake.returningNo }).click();
   await page.getByRole("button", { name: intake.dangerNone }).click();
 
   await expect(page.getByRole("heading", { name: "What is the main problem?" })).toBeVisible();
@@ -187,6 +189,8 @@ test("a patient checks in on their own phone over plain HTTP and keeps their tok
   await page.getByRole("button", { name: intake.confirm }).click();
   await expect(page.getByRole("heading", { name: intake.doneTitle })).toBeVisible();
   await expect(page.getByText("MED-012")).toBeVisible();
+  // A first visit gets an OPD card to bring next time.
+  await expect(page.getByText("OPD number 26-000012 · PIN 482913")).toBeVisible();
   // The phone is already in the patient's hand: no QR to scan, no kiosk countdown.
   await expect(page.locator(".intake-ticket-qr")).toHaveCount(0);
   await expect(page.locator(".intake-restart")).toHaveCount(0);
@@ -203,6 +207,7 @@ test("a patient checks in on their own phone over plain HTTP and keeps their tok
   // Scanning the poster again shows the same token instead of starting a second visit.
   await page.goto(`/m/${CODE}`);
   await expect(page.getByText(kiosk.mobileHaveToken.replace("{{token}}", "MED-012"))).toBeVisible();
+  await expect(page.getByText("OPD number 26-000012 · PIN 482913")).toBeVisible();
   await expect(page.getByRole("link", { name: kiosk.mobileViewStatus })).toBeVisible();
   expect(api.sessionsStarted).toBe(1);
 });
@@ -215,6 +220,7 @@ test("a refresh in the middle of the interview resumes the same visit", async ({
   await page.getByLabel(intake.ageQuestion).fill("29");
   await page.getByRole("radio", { name: intake.sexFemale }).click();
   await page.getByRole("button", { name: intake.next, exact: true }).click();
+  await page.getByRole("button", { name: intake.returningNo }).click();
   await page.getByRole("button", { name: intake.dangerNone }).click();
   await page.getByRole("button", { name: "Fever" }).click();
   await page.getByRole("button", { name: intake.next, exact: true }).click();
@@ -228,6 +234,49 @@ test("a refresh in the middle of the interview resumes the same visit", async ({
   await page.getByRole("button", { name: kiosk.mobileResume }).click();
   await expect(page.getByRole("heading", { name: "How bad is it?" })).toBeVisible();
   expect(api.sessionsStarted).toBe(1);
+});
+
+test("a returning patient joins today's visit to their record with their OPD card", async ({
+  page,
+}) => {
+  await installApiMocks(page);
+  const linked: string[] = [];
+  await page.route("**/intake/sessions/*/opd-card", async (route) => {
+    linked.push(route.request().postData() ?? "");
+    await route.fulfill({
+      json: {
+        linked: true,
+        opd_number: "26-000012",
+        visit_count: 1,
+        previous_visit: { id: "00000000-0000-7000-8000-00000000a000", date: "2026-10-03" },
+      },
+    });
+  });
+  let followUp: unknown;
+  await page.route("**/intake/sessions/*/follow-up", async (route) => {
+    followUp = JSON.parse(route.request().postData() ?? "{}");
+    await route.fulfill({ json: { previous_visit_id: "00000000-0000-7000-8000-00000000a000" } });
+  });
+
+  await page.goto(`/m/${CODE}`);
+  await page.getByRole("button", { name: kiosk.mobileStart }).click();
+  await page.getByRole("button", { name: intake.consentAgree }).click();
+  await page.getByLabel(intake.ageQuestion).fill("41");
+  await page.getByRole("radio", { name: intake.sexMale, exact: true }).click();
+  await page.getByRole("button", { name: intake.next, exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: intake.returningTitle })).toBeVisible();
+  await page.getByRole("button", { name: intake.returningYes }).click();
+  await page.getByLabel(intake.opdCardNumber).fill("26-000012");
+  await page.getByLabel(intake.opdCardPin).fill("482913");
+  await expectNoHorizontalScroll(page);
+  await page.getByRole("button", { name: intake.next, exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: /same problem/ })).toBeVisible();
+  await page.getByRole("button", { name: intake.followUpSame }).click();
+  await expect(page.getByRole("button", { name: intake.dangerNone })).toBeVisible();
+  expect(JSON.parse(linked[0])).toEqual({ number: "26-000012", pin: "482913" });
+  expect(followUp).toEqual({ previous_visit_id: "00000000-0000-7000-8000-00000000a000" });
 });
 
 test("an invalid or paused check-in link says where to go instead", async ({ page }) => {

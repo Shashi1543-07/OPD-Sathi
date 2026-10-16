@@ -90,5 +90,21 @@
   "scanFound": "We found these medicines. Please check and edit if needed.",
   "scanNone": "We could not read any medicine names. Please say or type them.",
   "scanFailed": "Could not read the photo. Please say or type the medicine names.",
-  "dangerHelpNow": "Get help now (stop the questions)"
+  "dangerHelpNow": "Get help now (stop the questions)",
+  "returningTitle": "Have you visited this hospital before?",
+  "returningLead": "If you have your OPD card, the doctor can see your earlier visits.",
+  "returningYes": "Yes, I have my OPD card",
+  "returningNo": "No, or I don't have my card",
+  "opdCardTitle": "Your OPD card",
+  "opdCardNumber": "OPD number (for example 26-000123)",
+  "opdCardPin": "PIN (6 digits)",
+  "opdCardHint": "Your earlier visits go to the doctor. They are not shown on this screen.",
+  "continueWithoutCard": "Continue without the card",
+  "followUpTitle": "Is today's visit about the same problem as your visit on {{date}}?",
+  "followUpLead": "This helps the doctor see what has changed.",
+  "followUpSame": "Yes, the same problem",
+  "followUpNew": "No, a new problem",
+  "yourOpdCard": "Your OPD card",
+  "opdCardLine": "OPD number {{number}} · PIN {{pin}}",
+  "opdCardKeep": "Keep this number and PIN. At your next visit, enter them so the doctor can see your earlier visits."
 }

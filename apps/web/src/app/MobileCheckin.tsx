@@ -124,6 +124,15 @@ export function MobileCheckin() {
             <div>
               <strong>{t("mobileHaveToken", { token: ticket.token })}</strong>
               <p>{t("mobileHaveTokenLead")}</p>
+              {ticket.opdCard && (
+                <p>
+                  {t("opdCardLine", {
+                    ns: "intake",
+                    number: ticket.opdCard.number,
+                    pin: ticket.opdCard.pin,
+                  })}
+                </p>
+              )}
               <Link className="ui-button ui-button--primary ui-button--kiosk" to={ticket.statusUrl}>
                 {t("mobileViewStatus")}
               </Link>

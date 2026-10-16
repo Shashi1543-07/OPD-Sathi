@@ -58,8 +58,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # The older schema has no phone channel: those consents become kiosk consents.
+    # The older schema has no phone channel: those consents become kiosk consents. This
+    # touches every hospital, so row-level security is lifted for the owner meanwhile.
+    op.execute("ALTER TABLE consents NO FORCE ROW LEVEL SECURITY")
     op.execute("UPDATE consents SET channel = 'kiosk' WHERE channel = 'mobile'")
+    op.execute("ALTER TABLE consents FORCE ROW LEVEL SECURITY")
     op.drop_constraint("ck_consents_channel", "consents", type_="check")
     op.create_check_constraint("ck_consents_channel", "consents", "channel IN ('kiosk', 'nurse')")
     op.execute("DROP POLICY kiosks_checkin_code_lookup ON kiosks")

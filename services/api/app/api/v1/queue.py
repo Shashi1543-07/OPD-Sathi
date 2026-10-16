@@ -24,8 +24,14 @@ from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.ids import uuid7
 from app.core.security import AuthenticationTokenError, decode_access_token
-from app.db.repositories import CaseSheetRepository, QueueRepository, decrypt_case_sheet
+from app.db.repositories import (
+    CaseSheetRepository,
+    PatientRepository,
+    QueueRepository,
+    decrypt_case_sheet,
+)
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
+from app.domain.patients import normalize_mrn
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import average_consult_minutes, estimate_wait, queue_score
 from app.domain.queue.tokens import status_token_digest
@@ -485,6 +491,175 @@ async def staff_patients(
         "limit": limit,
         "days": days,
     }
+
+
+class LinkPatientPayload(TransitionPayload):
+    opd_number: str = Field(min_length=6, max_length=24)
+
+
+async def _staff_department(
+    connection: Any, *, hospital_id: UUID, actor_id: UUID, role: str
+) -> UUID | None:
+    """The staff member's department (None for administrators, who act hospital-wide)."""
+    if role == "admin":
+        return None
+    assigned = await connection.scalar(
+        text(
+            "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
+            "AND id = :actor_id AND is_active = true"
+        ),
+        {"hospital_id": hospital_id, "actor_id": actor_id},
+    )
+    if not isinstance(assigned, UUID):
+        raise _problem(403, "FORBIDDEN", "Permission denied", "No staff department is assigned.")
+    return assigned
+
+
+@router.get("/patients/lookup")
+async def lookup_patients(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+    opd_number: Annotated[str | None, Query(max_length=24)] = None,
+    phone: Annotated[str | None, Query(pattern=r"^[6-9][0-9]{9}$")] = None,
+) -> dict[str, Any]:
+    """Find a registered patient by OPD card number or phone, to confirm with them at the desk.
+
+    A phone number can belong to several family members, so it returns every match; staff
+    check age and sex with the patient before linking. Only what verification needs is
+    returned (no clinical details), and every lookup is audited.
+    """
+    if (opd_number is None) == (phone is None):
+        raise _problem(
+            422, "VALIDATION_FAILED", "One search term", "Search by OPD number or by phone."
+        )
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _staff_department(
+            connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+        )
+        repository = PatientRepository(connection, request.app.state.settings)
+        if opd_number is not None:
+            number = normalize_mrn(opd_number)
+            record = (
+                await repository.by_mrn(hospital_id=hospital_id, mrn=number) if number else None
+            )
+            candidates = []
+            if record is not None:
+                summary = await connection.execute(
+                    text(
+                        "SELECT count(*) AS visit_count, max(service_date) AS last_visit "
+                        "FROM visits WHERE hospital_id = :hospital_id "
+                        "AND patient_id = :patient_id AND token_number IS NOT NULL"
+                    ),
+                    {"hospital_id": hospital_id, "patient_id": record["id"]},
+                )
+                candidates = [{**record, **dict(summary.mappings().one())}]
+        else:
+            candidates = await repository.by_phone(hospital_id=hospital_id, phone=phone or "")
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="patient.lookup",
+            resource_type="patient",
+            meta={
+                "by": "opd_number" if opd_number is not None else "phone",
+                "matches": len(candidates),
+            },
+        )
+    this_year = datetime.now(_HOSPITAL_TZ).year
+    return {
+        "items": [
+            {
+                "opd_number": item["mrn"],
+                "age_years": this_year - item["year_of_birth"] if item["year_of_birth"] else None,
+                "sex": item["sex"],
+                "visit_count": int(item["visit_count"] or 0),
+                "last_visit": item["last_visit"].isoformat() if item["last_visit"] else None,
+            }
+            for item in candidates
+        ]
+    }
+
+
+@router.post("/queue/{visit_id}/link-patient")
+async def link_patient(
+    visit_id: UUID,
+    payload: LinkPatientPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("nurse", "admin"))],
+) -> dict[str, Any]:
+    """Join a visit to a registered patient after checking who they are at the desk.
+
+    For patients without their OPD card. The nurse confirms identity in person first; the
+    link is audited, and the doctor's view says it was made by staff.
+    """
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    number = normalize_mrn(payload.opd_number)
+    if number is None:
+        raise _problem(422, "VALIDATION_FAILED", "Not an OPD number", "Check the number.")
+
+    async def operation() -> dict[str, Any]:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            department = await _staff_department(
+                connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+            )
+            visit_department = await connection.scalar(
+                text(
+                    "SELECT department_id FROM visits WHERE hospital_id = :hospital_id "
+                    "AND id = :visit_id AND status IN ('registering', 'awaiting_confirmation', "
+                    "'queued', 'called', 'in_consult')"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id},
+            )
+            if visit_department is None or (
+                department is not None and visit_department != department
+            ):
+                raise _problem(404, "NOT_FOUND", "Visit unavailable", "This visit is unavailable.")
+            repository = PatientRepository(connection, request.app.state.settings)
+            record = await repository.by_mrn(hospital_id=hospital_id, mrn=number)
+            if record is None:
+                raise _problem(404, "PATIENT_NOT_FOUND", "No such OPD number", "Check the number.")
+            try:
+                changed = await repository.link_visit(
+                    hospital_id=hospital_id,
+                    visit_id=visit_id,
+                    patient_id=record["id"],
+                    source="staff",
+                )
+            except ValueError as exc:
+                raise _problem(
+                    409,
+                    "ALREADY_LINKED",
+                    "Already linked",
+                    "This visit already belongs to a patient with other visits.",
+                ) from exc
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user",
+                actor_id=actor_id,
+                action="queue.patient_linked",
+                resource_type="visit",
+                resource_id=visit_id,
+                meta={"source": "staff", "changed": changed},
+            )
+        return {"visit_id": str(visit_id), "opd_number": number, "linked": True}
+
+    return await IdempotencyStore(request.app.state.redis_state).execute(
+        request,
+        hospital_id=hospital_id,
+        actor_id=actor_id,
+        body={"visit_id": str(visit_id), "opd_number": number},
+        operation=operation,
+    )
 
 
 def _complaint(case_sheet: dict[str, Any] | None) -> str:

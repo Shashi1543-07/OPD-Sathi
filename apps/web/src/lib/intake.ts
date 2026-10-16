@@ -31,6 +31,9 @@ type Session = {
   expires_at?: number;
 };
 
+/** The OPD card a patient brings to the next visit: registration number and PIN. */
+export type OpdCard = { number: string; pin: string };
+
 /** A token issued on this phone: shown again instead of starting a second visit. */
 export type MobileTicket = {
   token: string;
@@ -38,6 +41,15 @@ export type MobileTicket = {
   departmentName: string | null;
   hospitalName: string | null;
   issuedAt: string;
+  opdCard?: OpdCard | null;
+};
+
+/** The result of linking today's visit with an OPD card (the kiosk never sees history). */
+export type CardLink = {
+  linked: boolean;
+  opd_number: string;
+  visit_count: number;
+  previous_visit: { id: string; date: string } | null;
 };
 
 export class IntakeRequestError extends Error {
@@ -493,6 +505,18 @@ export const intake = {
         body: JSON.stringify({ tile_ids: tileIds }),
       },
     ),
+  /** Join today's visit to the patient's earlier record with their OPD card. */
+  linkOpdCard: (number: string, pin: string) =>
+    patientRequest<CardLink>("/opd-card", {
+      method: "POST",
+      body: JSON.stringify({ number, pin }),
+    }),
+  /** Whether today's visit continues an earlier one (null: a new problem). */
+  markFollowUp: (previousVisitId: string | null) =>
+    patientRequest<{ previous_visit_id: string | null }>("/follow-up", {
+      method: "POST",
+      body: JSON.stringify({ previous_visit_id: previousVisitId }),
+    }),
   dangerTiles: () => patientRequest<{ tiles: DangerTile[] }>("/danger-tiles"),
   nextQuestion: () =>
     patientRequest<IntakeResponse>("/interview/next-question"),
@@ -535,6 +559,7 @@ export const intake = {
       status_token: string;
       status_url: string;
       position: number | null;
+      opd_card?: OpdCard | null;
     }>("/confirm", {
       method: "POST",
       headers: { "Idempotency-Key": newRequestId() },

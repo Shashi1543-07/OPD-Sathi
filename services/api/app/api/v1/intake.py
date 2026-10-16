@@ -33,6 +33,7 @@ from app.db.repositories import (
     IntakeRepository,
     InterviewTurnRepository,
     KioskUnavailableError,
+    PatientRepository,
     QueueRepository,
 )
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
@@ -59,6 +60,7 @@ from app.domain.interview.engine import (
     visible_question,
     with_language,
 )
+from app.domain.patients import card_pin, demographics_consistent, normalize_mrn, pin_matches
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
 from app.domain.queue.tokens import create_status_token, status_token_digest
@@ -1318,28 +1320,21 @@ async def save_identity(
         raise _error(
             409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
         )
-    try:
-        async with request.app.state.engine.begin() as connection:
-            await set_hospital_scope(connection, hospital_id)
-            await IntakeRepository(connection, request.app.state.settings).update_identity(
-                hospital_id=hospital_id,
-                visit_id=visit_id,
-                patient_id=context["patient_id"],
-                age=payload.age,
-                sex=payload.sex,
-                phone=payload.phone,
-                sms_opt_in=payload.sms_opt_in,
-                name=payload.name if state.get("assisted") is True else None,
-            )
-    except Exception as exc:
-        if "uq_patients_hospital_phone_hmac" in str(exc):
-            raise _error(
-                409,
-                "PHONE_ALREADY_REGISTERED",
-                "Contact already registered",
-                "Ask staff to help complete this intake.",
-            ) from exc
-        raise
+    # Phone numbers are not unique: families share one phone and returning patients give
+    # theirs again. A number is a contact detail, never an identity.
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await IntakeRepository(connection, request.app.state.settings).update_identity(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            patient_id=context["patient_id"],
+            age=payload.age,
+            sex=payload.sex,
+            phone=payload.phone,
+            sms_opt_in=payload.sms_opt_in,
+            name=payload.name if state.get("assisted") is True else None,
+            linked=context.get("patient_link") is not None,
+        )
     state["phase"] = "danger_signs"
     await request.app.state.redis_state.set(
         key,
@@ -1347,6 +1342,213 @@ async def save_identity(
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
     return {"next": "danger_signs"}
+
+
+class OpdCardPayload(StrictPayload):
+    number: str = Field(min_length=6, max_length=24)
+    pin: str = Field(min_length=4, max_length=12)
+
+
+class FollowUpPayload(StrictPayload):
+    previous_visit_id: UUID | None = None
+
+
+@router.post("/sessions/{visit_id}/opd-card")
+async def link_opd_card(
+    visit_id: UUID,
+    payload: OpdCardPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, Any]:
+    """A returning patient joins today's visit to their record with their OPD card.
+
+    Nothing from the earlier record is shown here (a kiosk screen is shared); the doctor sees
+    it. The card links only when today's age and sex fit the record, attempts are limited per
+    visit and per card, and every attempt is audited.
+    """
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=True
+    )
+    settings = request.app.state.settings
+    if context["status"] != "registering":
+        raise _error(
+            409, "SESSION_COMPLETE", "Too late to change", "Please ask at the registration desk."
+        )
+    if context.get("age_years") is None:
+        raise _error(
+            409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Enter your age first."
+        )
+    too_many = "Too many attempts. Please ask at the registration desk."
+    await _rate_limit(
+        request,
+        key=f"osa:{settings.app_env}:rl:opd-card:visit:{visit_id}",
+        limit=5,
+        window_seconds=900,
+        detail=too_many,
+    )
+    number = normalize_mrn(payload.number)
+    if number is not None:
+        await _rate_limit(
+            request,
+            key=f"osa:{settings.app_env}:rl:opd-card:number:{hospital_id}:{number}",
+            limit=10,
+            window_seconds=3600,
+            detail=too_many,
+        )
+    outcome = "linked"
+    response: dict[str, Any] = {}
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        patients = PatientRepository(connection, settings)
+        record = await patients.by_mrn(hospital_id=hospital_id, mrn=number) if number else None
+        # Derive a PIN even for an unknown number, so both answers take the same time.
+        expected = card_pin(
+            key=settings.app_hmac_key_bytes,
+            hospital_id=hospital_id,
+            patient_id=record["id"] if record else visit_id,
+            version=int(record["card_version"]) if record else 1,
+        )
+        if record is None or not pin_matches(payload.pin, expected):
+            outcome = "not_recognised"
+        elif not demographics_consistent(
+            stored_birth_year=record["year_of_birth"],
+            stored_sex=record["sex"],
+            age=context.get("age_years"),
+            sex=context.get("sex"),
+            current_year=datetime.now(UTC).year,
+        ):
+            outcome = "identity_mismatch"
+        else:
+            try:
+                await patients.link_visit(
+                    hospital_id=hospital_id,
+                    visit_id=visit_id,
+                    patient_id=record["id"],
+                    source="card",
+                )
+            except ValueError:
+                outcome = "already_linked"
+            if outcome == "linked":
+                earlier = await patients.visit_history(
+                    hospital_id=hospital_id,
+                    patient_id=record["id"],
+                    exclude_visit_id=visit_id,
+                    limit=1,
+                )
+                visit_count = await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM visits WHERE hospital_id = :hospital_id "
+                        "AND patient_id = :patient_id AND id <> :visit_id "
+                        "AND token_number IS NOT NULL"
+                    ),
+                    {
+                        "hospital_id": hospital_id,
+                        "patient_id": record["id"],
+                        "visit_id": visit_id,
+                    },
+                )
+                response = {
+                    "linked": True,
+                    "opd_number": record["mrn"],
+                    "visit_count": int(visit_count or 0),
+                    # Only the date: the kiosk never shows what an earlier visit was about.
+                    "previous_visit": (
+                        {
+                            "id": str(earlier[0]["visit_id"]),
+                            "date": earlier[0]["service_date"].isoformat(),
+                        }
+                        if earlier
+                        else None
+                    ),
+                }
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="patient",
+            actor_id=visit_id,
+            action="intake.opd_card.linked" if outcome == "linked" else "intake.opd_card.refused",
+            resource_type="visit",
+            resource_id=visit_id,
+            meta={"outcome": outcome},
+        )
+    if outcome == "identity_mismatch":
+        raise _error(
+            409,
+            "CARD_IDENTITY_MISMATCH",
+            "Details do not match",
+            "These details do not match the card. Please ask at the registration desk.",
+        )
+    if outcome == "already_linked":
+        raise _error(
+            409,
+            "ALREADY_LINKED",
+            "Already linked",
+            "This visit is already linked to a record. Please ask at the registration desk.",
+        )
+    if outcome != "linked":
+        raise _error(
+            422,
+            "CARD_NOT_RECOGNISED",
+            "Card not recognised",
+            "We could not match this OPD card. Check the number and PIN, "
+            "or ask at the registration desk.",
+        )
+    return response
+
+
+@router.post("/sessions/{visit_id}/follow-up")
+async def mark_follow_up(
+    visit_id: UUID,
+    payload: FollowUpPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, Any]:
+    """Say whether today's visit continues an earlier one; the earlier visit is not changed."""
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=True
+    )
+    if context["status"] != "registering":
+        raise _error(
+            409, "SESSION_COMPLETE", "Too late to change", "Please ask at the registration desk."
+        )
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        if payload.previous_visit_id is not None:
+            earlier = await connection.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM visits WHERE hospital_id = :hospital_id "
+                    "AND id = :previous_id AND patient_id = :patient_id AND id <> :visit_id "
+                    "AND token_number IS NOT NULL)"
+                ),
+                {
+                    "hospital_id": hospital_id,
+                    "previous_id": payload.previous_visit_id,
+                    "patient_id": context["patient_id"],
+                    "visit_id": visit_id,
+                },
+            )
+            if not earlier:
+                raise _error(
+                    422,
+                    "VALIDATION_FAILED",
+                    "Earlier visit not found",
+                    "Choose one of your own earlier visits.",
+                )
+        await connection.execute(
+            text(
+                "UPDATE visits SET previous_visit_id = :previous_id "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {
+                "previous_id": payload.previous_visit_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+            },
+        )
+    return {
+        "previous_visit_id": str(payload.previous_visit_id) if payload.previous_visit_id else None
+    }
 
 
 @router.post("/sessions/{visit_id}/danger-signs")
@@ -2300,6 +2502,7 @@ async def _queue_receipt(
     department_id: UUID,
     visit_status: str,
     status_token: str,
+    opd_card: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """The patient's token receipt, also kept in the session so a repeat request gets it."""
     settings = request.app.state.settings
@@ -2372,6 +2575,8 @@ async def _queue_receipt(
         "position": position,
         "department_name": department_name,
         "wait_minutes": round(max(position - 1, 0) * consult_minutes) if position else None,
+        # The OPD card (registration number and PIN) to bring to the next visit.
+        "opd_card": opd_card,
     }
     state["phase"] = "confirmed"
     state["queue"] = receipt
@@ -2396,9 +2601,11 @@ async def _confirmed_receipt(
             (
                 await connection.execute(
                     text(
-                        "SELECT status, token_label, status_token_hash, department_id "
-                        "FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id "
-                        "AND token_number IS NOT NULL AND status_token_hash IS NOT NULL"
+                        "SELECT v.status, v.token_label, v.status_token_hash, v.department_id, "
+                        "v.patient_id, p.mrn, p.card_version FROM visits v JOIN patients p "
+                        "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id "
+                        "AND v.token_number IS NOT NULL AND v.status_token_hash IS NOT NULL"
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},
                 )
@@ -2424,7 +2631,26 @@ async def _confirmed_receipt(
         department_id=row["department_id"],
         visit_status=str(row["status"]),
         status_token=status_token,
+        opd_card=(
+            _opd_card(request, hospital_id, row["patient_id"], str(row["mrn"]), row["card_version"])
+            if row["mrn"]
+            else None
+        ),
     )
+
+
+def _opd_card(
+    request: Request, hospital_id: UUID, patient_id: UUID, number: str, version: int
+) -> dict[str, str]:
+    return {
+        "number": number,
+        "pin": card_pin(
+            key=request.app.state.settings.app_hmac_key_bytes,
+            hospital_id=hospital_id,
+            patient_id=patient_id,
+            version=int(version),
+        ),
+    }
 
 
 @router.post("/sessions/{visit_id}/confirm")
@@ -2553,6 +2779,21 @@ async def _confirm_new_summary(
             visit_id=visit_id,
             status_hash=status_token_digest(status_token),
         )
+        # A first visit becomes a registered patient with an OPD card; a returning patient
+        # (joined by card or by staff) keeps their number. The visit's current patient is
+        # read here because a card link moves the visit off its placeholder.
+        patient_id = await connection.scalar(
+            text("SELECT patient_id FROM visits WHERE hospital_id = :hospital_id AND id = :id"),
+            {"hospital_id": hospital_id, "id": visit_id},
+        )
+        mrn, card_version = await PatientRepository(
+            connection, request.app.state.settings
+        ).assign_mrn(
+            hospital_id=hospital_id,
+            patient_id=patient_id,
+            year=queue_record["service_date"].year,
+        )
+        opd_card = _opd_card(request, hospital_id, patient_id, mrn, card_version)
         details = (
             (
                 await connection.execute(
@@ -2620,6 +2861,7 @@ async def _confirm_new_summary(
         department_id=queue_record["department_id"],
         visit_status="queued",
         status_token=status_token,
+        opd_card=opd_card,
     )
     if getattr(request.app.state.llm_provider, "name", "mock") == "gemini" and (
         await _hospital_llm_enabled(request, hospital_id)

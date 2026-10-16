@@ -15,6 +15,7 @@ from app.core.crypto import decrypt_field, encrypt_field, lookup_digest
 from app.core.ids import uuid7
 from app.core.pagination import CursorPosition, Page, decode_cursor, encode_cursor
 from app.domain.checkin import checkin_code, checkin_code_digest
+from app.domain.patients import format_mrn
 
 
 async def _list_page(
@@ -165,6 +166,193 @@ class PatientRepository:
                 else None
             )
         return patient
+
+    async def assign_mrn(
+        self, *, hospital_id: UUID, patient_id: UUID, year: int
+    ) -> tuple[str, int]:
+        """The patient's registration number and card version, numbering them on first use."""
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT mrn, card_version FROM patients "
+                        "WHERE hospital_id = :hospital_id AND id = :patient_id FOR UPDATE"
+                    ),
+                    {"hospital_id": hospital_id, "patient_id": patient_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise LookupError("patient not found")
+        if row["mrn"]:
+            return str(row["mrn"]), int(row["card_version"])
+        value = await self.connection.scalar(
+            text(
+                "INSERT INTO patient_number_counters (hospital_id, year, last_value) "
+                "VALUES (:hospital_id, :year, 1) ON CONFLICT (hospital_id, year) "
+                "DO UPDATE SET last_value = patient_number_counters.last_value + 1 "
+                "RETURNING last_value"
+            ),
+            {"hospital_id": hospital_id, "year": year},
+        )
+        mrn = format_mrn(year, int(value))
+        await self.connection.execute(
+            text(
+                "UPDATE patients SET mrn = :mrn WHERE hospital_id = :hospital_id "
+                "AND id = :patient_id"
+            ),
+            {"mrn": mrn, "hospital_id": hospital_id, "patient_id": patient_id},
+        )
+        return mrn, int(row["card_version"])
+
+    async def by_mrn(self, *, hospital_id: UUID, mrn: str) -> dict[str, Any] | None:
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT id, mrn, card_version, year_of_birth, sex FROM patients "
+                        "WHERE hospital_id = :hospital_id AND mrn = :mrn"
+                    ),
+                    {"hospital_id": hospital_id, "mrn": mrn},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row is not None else None
+
+    async def by_phone(self, *, hospital_id: UUID, phone: str) -> list[dict[str, Any]]:
+        """Registered patients who gave this phone number: a hint for staff, never a match."""
+        digest = lookup_digest(phone.strip(), key=self.settings.app_hmac_key_bytes)
+        result = await self.connection.execute(
+            text(
+                "SELECT p.id, p.mrn, p.year_of_birth, p.sex, count(v.id) AS visit_count, "
+                "max(v.service_date) AS last_visit FROM patients p LEFT JOIN visits v "
+                "ON v.hospital_id = p.hospital_id AND v.patient_id = p.id "
+                "AND v.token_number IS NOT NULL "
+                "WHERE p.hospital_id = :hospital_id AND p.phone_hmac = :digest "
+                "AND p.mrn IS NOT NULL GROUP BY p.id ORDER BY max(v.service_date) DESC "
+                "NULLS LAST LIMIT 20"
+            ),
+            {"hospital_id": hospital_id, "digest": digest},
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    async def link_visit(
+        self, *, hospital_id: UUID, visit_id: UUID, patient_id: UUID, source: str
+    ) -> bool:
+        """Join a new visit to an existing patient; False when it already belongs to them.
+
+        A visit starts with a placeholder patient of its own. After the link the placeholder
+        is emptied (its phone and birth year cleared): today's phone number is kept on the
+        patient's record only when the record has none. A placeholder numbered for this one
+        visit (a patient who forgot their card and was registered as new) gives the number
+        up. Joining two records that each have visits is a record merge, which is refused.
+        """
+        visit = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT patient_id, patient_link FROM visits "
+                        "WHERE hospital_id = :hospital_id AND id = :visit_id FOR UPDATE"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if visit is None:
+            raise LookupError("visit not found")
+        if visit["patient_id"] == patient_id:
+            return False
+        if visit["patient_link"] is not None:
+            raise ValueError("this visit is already linked to another patient")
+        placeholder_id = visit["patient_id"]
+        placeholder = await self.get(hospital_id=hospital_id, patient_id=placeholder_id)
+        others = await self.connection.scalar(
+            text(
+                "SELECT count(*) FROM visits WHERE hospital_id = :hospital_id "
+                "AND patient_id = :patient_id AND id <> :visit_id"
+            ),
+            {"hospital_id": hospital_id, "patient_id": placeholder_id, "visit_id": visit_id},
+        )
+        if others:
+            raise ValueError("this visit belongs to a patient with other visits")
+        target_phone = await self.connection.scalar(
+            text("SELECT phone_hmac FROM patients WHERE hospital_id = :hospital_id AND id = :id"),
+            {"hospital_id": hospital_id, "id": patient_id},
+        )
+        phone = placeholder.get("phone") if placeholder else None
+        if target_phone is None and phone:
+            await self.connection.execute(
+                text(
+                    "UPDATE patients SET phone_enc = :phone_enc, phone_hmac = :phone_hmac "
+                    "WHERE hospital_id = :hospital_id AND id = :id"
+                ),
+                {
+                    "phone_enc": encrypt_field(
+                        phone,
+                        key=self.settings.app_data_key_bytes,
+                        associated_data=f"patients:phone_enc:{patient_id}",
+                    ),
+                    "phone_hmac": lookup_digest(phone, key=self.settings.app_hmac_key_bytes),
+                    "hospital_id": hospital_id,
+                    "id": patient_id,
+                },
+            )
+        await self.connection.execute(
+            text(
+                "UPDATE visits SET patient_id = :patient_id, patient_link = :source "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {
+                "patient_id": patient_id,
+                "source": source,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+            },
+        )
+        await self.connection.execute(
+            text(
+                "UPDATE patients SET phone_enc = NULL, phone_hmac = NULL, year_of_birth = NULL, "
+                "sex = 'unknown', mrn = NULL WHERE hospital_id = :hospital_id AND id = :id"
+            ),
+            {"hospital_id": hospital_id, "id": placeholder_id},
+        )
+        return True
+
+    async def visit_history(
+        self, *, hospital_id: UUID, patient_id: UUID, exclude_visit_id: UUID, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """The patient's earlier registered visits, newest first, with their case sheets."""
+        result = await self.connection.execute(
+            text(
+                "SELECT v.id AS visit_id, v.service_date, v.status, v.token_label, v.urgency, "
+                "v.registered_at, d.name_en AS department, cs.data AS case_sheet_data, "
+                "(cs.last_edited_by IS NOT NULL) AS staff_edited "
+                "FROM visits v JOIN departments d ON d.hospital_id = v.hospital_id "
+                "AND d.id = v.department_id LEFT JOIN case_sheets cs "
+                "ON cs.hospital_id = v.hospital_id AND cs.visit_id = v.id "
+                "WHERE v.hospital_id = :hospital_id AND v.patient_id = :patient_id "
+                "AND v.id <> :exclude_visit_id AND v.token_number IS NOT NULL "
+                "ORDER BY v.registered_at DESC, v.id DESC LIMIT :limit"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "patient_id": patient_id,
+                "exclude_visit_id": exclude_visit_id,
+                "limit": limit,
+            },
+        )
+        rows = [dict(row) for row in result.mappings().all()]
+        for row in rows:
+            row["case_sheet_data"] = decrypt_case_sheet(
+                row.pop("case_sheet_data"), row["visit_id"], self.settings
+            )
+        return rows
 
     async def list(
         self, *, hospital_id: UUID, limit: int, cursor: str | None
@@ -1069,7 +1257,7 @@ class IntakeRepository:
                 await self.connection.execute(
                     text(
                         "SELECT v.id, v.patient_id, v.language, v.status, v.age_years, "
-                        "v.pregnant, p.sex, "
+                        "v.pregnant, v.patient_link, p.sex, "
                         "c.granted AS consent_granted FROM visits v LEFT JOIN consents c "
                         "ON c.hospital_id = v.hospital_id AND c.visit_id = v.id "
                         "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
@@ -1132,7 +1320,25 @@ class IntakeRepository:
         phone: str | None,
         sms_opt_in: bool = False,
         name: str | None = None,
+        linked: bool = False,
     ) -> None:
+        if linked:
+            # A visit joined to an existing patient (OPD card or staff) never rewrites the
+            # patient's record from a self-service screen; staff correct it if needed.
+            await self.connection.execute(
+                text(
+                    "UPDATE visits SET age_years = :age, sms_opt_in = :sms_opt_in, "
+                    "sms_opt_in_at = CASE WHEN :sms_opt_in THEN now() ELSE NULL END "
+                    "WHERE hospital_id = :hospital_id AND id = :visit_id"
+                ),
+                {
+                    "age": age,
+                    "sms_opt_in": sms_opt_in,
+                    "hospital_id": hospital_id,
+                    "visit_id": visit_id,
+                },
+            )
+            return
         name_enc = (
             encrypt_field(
                 name,

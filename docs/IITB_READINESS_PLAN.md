@@ -186,16 +186,24 @@ Redis read model; explainable triage with every point listed for staff; extensiv
 - **Matching never trusts demographics.** The unique phone index is replaced by a non-unique index
   (shared family phones). A phone match is only a *suggestion* shown to staff.
 - **Linking a returning patient** requires something only that patient holds: the **OPD card** — a
-  hospital registration number (`OPD-26-000123`) plus a high-entropy card code printed as a QR on the
-  token slip and shown on the phone. Presenting it at a kiosk or phone links the new visit to the existing
-  patient. Without the card, a nurse searches (registration number, phone, name) and links after verbal
-  verification; every link is audited. No automatic merges.
+  hospital registration number (`26-000123`, assigned when the first visit is confirmed) plus a 6-digit
+  PIN, both printed on the token slip and shown on the phone. The PIN is derived with the HMAC key from
+  the patient id and a card version, so it is never stored and can be re-printed. Entering both at a
+  kiosk or phone links the new visit to the existing patient, provided today's age and sex fit the record
+  (birth year ±1; female/male must agree). Attempts are rate-limited (5 per visit per 15 min, 10 per
+  number per hour) and every outcome is audited. *Changed from the first draft:* a typed number + PIN
+  instead of a QR card code, because the kiosk then needs no camera and the code needs no stored hash.
+- **Without the card**, a nurse searches by OPD number or phone (results show number, age, sex, visit
+  count and last visit — no names) and links after checking identity in person; the search and the link
+  are audited. A patient who registered as new because they forgot the card can be joined later; their
+  one-visit record is retired. No automatic merges: linking is refused when both records have history.
 - **What each side sees.** The shared kiosk never displays past clinical details (privacy on a public
-  screen); it only asks focused follow-up questions ("Any change in your regular medicines?"). The doctor
-  sees a *Previous visits* panel — date, department, chief complaint, doctor-reviewed summary,
-  allergies/medicines on record — clearly separated from today's interview and labelled by source
-  (patient-reported / AI draft / doctor-reviewed). Reads are authorised server-side only while the
-  patient has an active visit in the staff member's department (admins always), and audited.
+  screen); after a card link it shows only the date of the last visit and asks whether today is a
+  follow-up. The doctor sees a *Previous visits* tab — date, department, token, chief complaint, red
+  flags, the AI draft brief (marked when staff edited the case sheet), and allergies/medicines/conditions
+  reported at earlier visits with the date last reported — separated from today's interview and
+  labelled as patient-reported. Reads are authorised server-side only through a visit in the staff
+  member's department that is open or from today (admins always), and audited.
 - **Follow-up encounters** reference the earlier visit (`previous_visit_id`) without modifying it.
 
 ### 4.3 Queue: state machine, fair priority, abuse resistance (Features 3 and 4)
@@ -249,14 +257,17 @@ All changes are additive Alembic migrations with working downgrades; nothing is 
 | Migration | Change | Why |
 |---|---|---|
 | 0017 `mobile_checkin` | `kiosks.kind` (`device`/`mobile`), `kiosks.checkin_code_hash` (unique, own RLS lookup policy), constraints that a mobile point never has device secrets; `consents.channel` allows `mobile` | Phone check-in points |
-| 0018 `patient_identity` | Drop unique `uq_patients_hospital_phone_hmac`, add a non-unique index; `patients.mrn` (unique per hospital), `patients.card_code_hash` (unique, own RLS lookup policy); `visits.previous_visit_id` (tenant FK) | Returning patients, shared phones (D3) |
+| 0018 `patient_identity` (done) | Drop unique `uq_patients_hospital_phone_hmac`, add a non-unique index; `patients.mrn` (unique per hospital) and `patients.card_version`; `patient_number_counters` (per hospital and year, RLS); `visits.patient_link` (`card`/`staff`) and `visits.previous_visit_id` (tenant FK) | Returning patients, shared phones (D3) |
 | 0019 `queue_recall` | `visits.status` allows `skipped`; `visits.called_by`, `skipped_at`, `recalled_at`, `skip_count`; `visit_events` table (RLS, insert/select only for the app role); hospital setting `call_grace_seconds` | Missed-patient workflow, audit history |
 | later | `documents` storage fields; consent purposes | Phase 4–5 |
 
-New/changed endpoints (all server-authorised): `POST /intake/self-sessions` (public, rate-limited,
-check-in code), `POST /intake/sessions/{id}/link-card`, `GET /patients/{id}/history` (staff, department
-rule), `POST /patients/link` (nurse), `POST /queue/{id}/skip`, `POST /queue/{id}/recall`,
-admin CRUD for phone check-in points, `GET /system/phone-access`.
+New/changed endpoints (all server-authorised). Built: `GET /intake/checkin/{code}` and
+`POST /intake/checkin/{code}/sessions` (public, rate-limited), `GET`/`POST /admin/kiosks/{id}/checkin-link`,
+`POST /intake/sessions/{id}/opd-card`, `POST /intake/sessions/{id}/follow-up`,
+`GET /visits/{id}/history` (staff, department and open-visit rule), `GET /patients/lookup` (staff),
+`POST /queue/{id}/link-patient` (nurse/admin). Planned: `POST /queue/{id}/skip`,
+`POST /queue/{id}/recall`. Dropped: `GET /system/phone-access` — `scripts/lan-check.ps1` covers it
+from the host, where the firewall and network profile can actually be read.
 
 ---
 
@@ -377,5 +388,11 @@ against the demo database (failed tests leave synthetic hospitals in the sign-in
 | 1.7 Phone check-in points (migration 0017) | done | `0017_mobile_checkin.py`, `domain/checkin.py`, `intake.py`, `admin.py`, `auth.py`, `repositories.py`, `cli.py`, `MobileCheckin.tsx`, `KioskShell.tsx`, `KioskIntake.tsx`, `AdminConsole.tsx`, `StaffQueueBoard.tsx`, locales | 4 integration + 2 unit + 3 e2e (phone viewport) | Rate limits 6/phone/QR and 150/QR per 10 min; Phone badge for staff |
 | 1.8 D2 stale QR address: diagnosis and operator tooling | done | `scripts/lan-check.ps1`, `start-demo.ps1`, `MOBILE_LAN.md`, `start.md` | script run on this PC: reports the 172.17.134.95 vs 172.27.14.36 mismatch | Fix for the running stack: run `start-demo.ps1 -NoBuild` |
 | Phase 1 gate | green | — | API 838 passed / 1 skipped; web 57; e2e 135; ruff, mypy, eslint, tsc, locales, contrast, build, bandit, semgrep (python, security-audit, sql-injection packs), migrations base→head | Entry bundle 566.8 kB vs 547.3 kB on `main` (+19.5 kB, mostly new hi/mr strings; all locales ship in the entry, a lazy-loading follow-up) |
-| 2 Identity and longitudinal records | next | | | D3 fix lands here (migration 0018) |
+| 2.1 D3 shared phones no longer block check-in | done | `0018_patient_identity.py`, `intake.py`, `KioskIntake.tsx` | `test_a_shared_phone_number_no_longer_blocks_a_second_patient` | The phone-conflict screen is gone; a phone number never links records by itself |
+| 2.2 OPD number and card PIN on the token slip | done | `0018`, `domain/patients.py`, `repositories.py` (`assign_mrn`), `intake.py` (`_opd_card`), `KioskIntake.tsx` | unit (`test_patient_identity.py`, 10 cases) + integration | Number assigned on first confirmation; PIN derived, never stored; the returning visit's slip shows the same card |
+| 2.3 Patient links today's visit with the card | done | `intake.py` (`/opd-card`, `/follow-up`), `KioskIntake.tsx` (new "returning" step), locales | integration: link + follow-up; refusals (wrong PIN, unknown number, age/sex mismatch, 6th attempt → 429, cross-hospital); 3 web unit; e2e flows updated | A separate step after age/sex, because the card fields overflowed the identity screen at kiosk size |
+| 2.4 Nurse finds and links a patient without the card | done | `queue.py` (`/patients/lookup`, `/queue/{id}/link-patient`), `PreviousVisits.tsx` | 2 integration (desk link; joining a patient who registered as new, merge refused) | Search shows no names or clinical details; both actions audited |
+| 2.5 Doctor's *Previous visits* tab | done | `case_sheets.py` (`/visits/{id}/history`), `PreviousVisits.tsx`, `DoctorConsultation.tsx`, `screens.css` | integration: department, hospital and closed-visit isolation; 2 web unit | Reads audited; refused (`HISTORY_CLOSED`) once the visit is closed and in the past; admins exempt |
+| 2.6 Privacy notes | done | `PRIVACY.md` | — | Data map rows for OPD number, PIN, visit links, phone storage; linking and history rules |
+| Phase 2 gate | green | — | API 854 passed / 1 skipped; web 61; e2e 135 of 136 in the full run — the 5,000-row queue timing test missed its 100 ms limit while a migration round trip ran alongside, then passed 3 of 3 alone (29.7 ms); ruff, mypy, eslint, tsc, locales (916 keys), prompt-audio check, bandit, semgrep (same packs), migrations head→base→head as in CI | Lesson: data steps in a downgrade must lift `FORCE ROW LEVEL SECURITY`, or they silently touch no rows. Also regenerated prompt audio for strings that changed in Phase 1 |
 | 3 Queue: skip/recall, claims, department checks | planned | | | D4–D7 |

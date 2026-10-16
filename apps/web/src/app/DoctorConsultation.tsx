@@ -41,6 +41,7 @@ import type { components } from "../lib/api-types";
 import { staffAuth } from "../lib/auth";
 import { ConfidenceChip, Popover } from "../components/ui";
 import { ConsultPatientRailView } from "./ConsultPatientRail";
+import { PreviousVisits, type PatientHistory } from "./PreviousVisits";
 import { useConsultQueue } from "./consultQueue";
 import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
 import { newRequestId } from "../lib/ids";
@@ -88,13 +89,15 @@ type CaseSheetResult = {
   patient?: PatientContext | null;
 };
 type Draft = { path: string; value: string; initial: string; label: string };
-type Tab = "overview" | "history" | "transcript" | "notes";
+type Tab = "overview" | "history" | "previous" | "transcript" | "notes";
 type StepState = "done" | "active" | "next" | "upcoming";
 
 const emptyText = "—";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "tabOverview" },
   { id: "history", label: "tabHistory" },
+  // Earlier visits stay apart from today's history so the two are never confused.
+  { id: "previous", label: "tabPrevious" },
   { id: "transcript", label: "tabTranscript" },
   { id: "notes", label: "tabNotes" },
 ];
@@ -235,6 +238,32 @@ export function DoctorConsultation() {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  // Earlier visits load on their own: a failure there never blocks today's case sheet.
+  const [history, setHistory] = useState<{ visitId: string; data: PatientHistory }>();
+  const [historyFailed, setHistoryFailed] = useState<"error" | "closed" | null>(null);
+  const loadHistory = useCallback(async () => {
+    if (!visitId) return;
+    try {
+      const response = await staffAuth.request(`/visits/${visitId}/history`);
+      if (response.status === 403) {
+        setHistoryFailed("closed");
+        return;
+      }
+      if (!response.ok) throw new Error("history unavailable");
+      const data = (await response.json()) as PatientHistory;
+      if (!Array.isArray(data.previous_visits)) throw new Error("unexpected history");
+      setHistory({ visitId, data });
+      setHistoryFailed(null);
+    } catch {
+      setHistoryFailed("error");
+    }
+  }, [visitId]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadHistory(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadHistory]);
+  const patientHistory = history?.visitId === visitId ? history.data : undefined;
 
   // Printing always produces the full case sheet, whichever section is on screen.
   useEffect(() => {
@@ -986,6 +1015,15 @@ export function DoctorConsultation() {
         <p className="cx-disclaimer">{data.disclaimer}</p>
       </article>
     );
+  } else if (tab === "previous") {
+    panel = (
+      <PreviousVisits
+        visitId={visitId}
+        history={patientHistory}
+        failed={historyFailed}
+        onLinked={() => void loadHistory()}
+      />
+    );
   } else if (tab === "transcript") {
     panel = (
       <section className="cx-transcript" aria-labelledby={`${baseId}-transcript`}>
@@ -1321,6 +1359,9 @@ export function DoctorConsultation() {
                 )}
                 {item.id === "transcript" && transcript.length > 0 && (
                   <span className="cx-tab-badge">{transcript.length}</span>
+                )}
+                {item.id === "previous" && (patientHistory?.previous_visits.length ?? 0) > 0 && (
+                  <span className="cx-tab-badge">{patientHistory?.previous_visits.length}</span>
                 )}
                 {item.id === "history" && dirty && (
                   <span className="cx-tab-dot">
