@@ -10,6 +10,7 @@ import {
 import { flushSync } from "react-dom";
 import { Link, useBlocker, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import "../locales/staff";
 import {
   AlertTriangle,
   ArrowRight,
@@ -31,11 +32,14 @@ import {
   Play,
   Printer,
   RefreshCw,
+  RotateCcw,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
   Stethoscope,
+  Undo2,
   UserRound,
+  UserX,
 } from "lucide-react";
 import type { components } from "../lib/api-types";
 import { staffAuth } from "../lib/auth";
@@ -45,7 +49,8 @@ import { PreviousVisits, type PatientHistory } from "./PreviousVisits";
 import { useConsultQueue } from "./consultQueue";
 import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
 import { newRequestId } from "../lib/ids";
-import type { Triage } from "./queueBoardModel";
+import { formatCountdown, graceLeft, type Triage } from "./queueBoardModel";
+import { queueProblem } from "./queueProblem";
 import { TriageWhy } from "./TriageWhy";
 
 type CaseSheet = components["schemas"]["CaseSheet"] & {
@@ -127,7 +132,27 @@ const WORKFLOW: Record<string, StepState[]> = {
   queued: ["next", "upcoming", "upcoming"],
   called: ["done", "next", "upcoming"],
   in_consult: ["done", "active", "next"],
+  // Missed the call: recalled to the queue, then called again.
+  skipped: ["next", "upcoming", "upcoming"],
   done: ["done", "done", "done"],
+};
+type QueueAction = "call" | "start" | "complete" | "skip" | "recall" | "return";
+const NEXT_STATUS: Record<QueueAction, string> = {
+  call: "called",
+  start: "in_consult",
+  complete: "done",
+  skip: "skipped",
+  recall: "queued",
+  return: "queued",
+};
+type QueueEvent = {
+  from: string;
+  to: string;
+  actor_type: "user" | "patient" | "system";
+  actor_name: string | null;
+  actor_role: string | null;
+  reason: string | null;
+  at: string;
 };
 
 const visitParam = (search: string) => new URLSearchParams(search).get("visit_id");
@@ -265,6 +290,37 @@ export function DoctorConsultation() {
   }, [loadHistory]);
   const patientHistory = history?.visitId === visitId ? history.data : undefined;
 
+  // The visit's queue timeline (token, calls, missed calls, recalls); extra information only.
+  const [timeline, setTimeline] = useState<{ visitId: string; events: QueueEvent[] }>();
+  const loadTimeline = useCallback(async () => {
+    if (!visitId) return;
+    try {
+      const response = await staffAuth.request(`/visits/${visitId}/queue-events`);
+      if (!response.ok) return;
+      const body = (await response.json()) as { events?: QueueEvent[] };
+      if (Array.isArray(body.events)) setTimeline({ visitId, events: body.events });
+    } catch {
+      // The consultation works without the timeline.
+    }
+  }, [visitId]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadTimeline(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadTimeline]);
+  const visitTimeline = timeline?.visitId === visitId ? timeline.events : [];
+
+  // A called patient can be marked absent once the hospital's grace period has passed.
+  const calledAt = queue.items.find((item) => item.visit_id === visitId)?.called_at;
+  const [tick, setTick] = useState(() => Date.now());
+  const absentWait =
+    visitStatus === "called" ? graceLeft(calledAt, queue.graceSeconds ?? 180, tick) : 0;
+  const countingDown = absentWait > 0;
+  useEffect(() => {
+    if (!countingDown) return;
+    const timer = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [countingDown]);
+
   // Printing always produces the full case sheet, whichever section is on screen.
   useEffect(() => {
     const before = () => flushSync(() => setPrinting(true));
@@ -360,31 +416,28 @@ export function DoctorConsultation() {
     }
   }
 
-  async function transition(action: "call" | "start" | "complete") {
+  async function transition(action: QueueAction) {
     if (!visitId) return;
+    const status = NEXT_STATUS[action];
     try {
       const response = await staffAuth.request(`/queue/${visitId}/${action}`, {
         method: "POST",
         headers: { "Idempotency-Key": newRequestId() },
       });
-      if (!response.ok) throw new Error(t("consultActionError"));
+      if (!response.ok)
+        throw new Error((await queueProblem(response, t)) ?? t("consultActionError"));
       setSearchParams(
         (current) => {
           const next = new URLSearchParams(current);
-          next.set(
-            "status",
-            action === "call" ? "called" : action === "start" ? "in_consult" : "done",
-          );
+          next.set("status", status);
           return next;
         },
         { replace: true },
       );
-      setActionState({
-        visitId,
-        status:
-          action === "call" ? "called" : action === "start" ? "in_consult" : "done",
-      });
+      setActionState({ visitId, status });
+      setError("");
       queue.reload();
+      void loadTimeline();
       if (action === "complete") navigate("/staff/consultations");
     } catch (reason) {
       setError(
@@ -897,6 +950,31 @@ export function DoctorConsultation() {
       )}
     </section>
   );
+  const timelineTime = new Intl.DateTimeFormat(i18n.language, {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata",
+  });
+  const timelineLabel = (event: QueueEvent) => {
+    if (event.to === "queued") {
+      if (event.from === "skipped") return t("timelineRecalled");
+      return event.from === "called" ? t("timelineReturned") : t("timelineTokenIssued");
+    }
+    const labels: Record<string, string> = {
+      called: t("timelineCalled"),
+      in_consult: t("timelineStarted"),
+      skipped: t("timelineSkipped"),
+      done: t("timelineDone"),
+      no_show: t("timelineNoShow"),
+      cancelled: t("timelineCancelled"),
+    };
+    return labels[event.to] ?? event.to;
+  };
+  const timelineActor = (event: QueueEvent) => {
+    if (event.actor_type === "patient") return t("timelineByPatient");
+    if (event.actor_type === "system") return t("timelineBySystem");
+    return event.actor_name ? t("timelineBy", { name: event.actor_name }) : "";
+  };
   const stepStates = visitStatus ? WORKFLOW[visitStatus] : undefined;
   const steps = [
     { title: t("workflowCall"), hint: t("workflowCallHint") },
@@ -930,6 +1008,24 @@ export function DoctorConsultation() {
         })}
       </ol>
       {!stepStates && <p className="cx-none">{t("workflowUnknown")}</p>}
+      {visitStatus === "skipped" && <p className="cx-panel-note">{t("consultSkippedNote")}</p>}
+      {visitTimeline.length > 0 && (
+        <div className="cx-timeline">
+          <h5>
+            <History aria-hidden="true" size={14} /> {t("timelineTitle")}
+          </h5>
+          <ol>
+            {visitTimeline.map((event, index) => (
+              <li key={`${event.at}-${index}`} className={`cx-timeline-item cx-timeline-item--${event.to}`}>
+                <time dateTime={event.at}>{timelineTime.format(new Date(event.at))}</time>
+                <span>
+                  {timelineLabel(event)} <small>{timelineActor(event)}</small>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       <div className="cx-card-actions">
         <button type="button" className="cx-btn" onClick={() => openTab("transcript")}>
           <MessageSquareText aria-hidden="true" size={15} /> {t("viewTranscript")}
@@ -1155,10 +1251,35 @@ export function DoctorConsultation() {
       <button type="button" className="cx-btn cx-btn--primary" onClick={() => void transition("call")}>
         <Megaphone aria-hidden="true" size={15} /> {t("callPatient")}
       </button>
-    ) : visitStatus === "called" || visitStatus === null ? (
-      <button type="button" className="cx-btn cx-btn--primary" onClick={() => void transition("start")}>
-        <Play aria-hidden="true" size={15} /> {t("startConsult")}
+    ) : visitStatus === "skipped" ? (
+      <button
+        type="button"
+        className="cx-btn cx-btn--primary"
+        title={t("recallHint")}
+        onClick={() => void transition("recall")}
+      >
+        <RotateCcw aria-hidden="true" size={15} /> {t("recall")}
       </button>
+    ) : visitStatus === "called" || visitStatus === null ? (
+      <>
+        {visitStatus === "called" && (
+          <button
+            type="button"
+            className="cx-btn"
+            disabled={absentWait > 0}
+            title={absentWait > 0 ? t("markAbsentHint") : undefined}
+            onClick={() => void transition("skip")}
+          >
+            <UserX aria-hidden="true" size={15} />
+            {absentWait > 0
+              ? t("markAbsentIn", { time: formatCountdown(absentWait) })
+              : t("markAbsent")}
+          </button>
+        )}
+        <button type="button" className="cx-btn cx-btn--primary" onClick={() => void transition("start")}>
+          <Play aria-hidden="true" size={15} /> {t("startConsult")}
+        </button>
+      </>
     ) : visitStatus === "in_consult" ? (
       <button type="button" className="cx-btn cx-btn--primary" onClick={() => void transition("complete")}>
         <CheckCircle2 aria-hidden="true" size={15} /> {t("finishConsult")}
@@ -1251,6 +1372,18 @@ export function DoctorConsultation() {
                     }}
                   >
                     <CheckCircle2 aria-hidden="true" size={15} /> {t("finishConsult")}
+                  </button>
+                )}
+                {visitStatus === "called" && (
+                  <button
+                    type="button"
+                    className="cx-menu-item"
+                    onClick={() => {
+                      closeMenu();
+                      void transition("return");
+                    }}
+                  >
+                    <Undo2 aria-hidden="true" size={15} /> {t("putBack")}
                   </button>
                 )}
                 <button

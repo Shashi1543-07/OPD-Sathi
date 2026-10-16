@@ -94,11 +94,18 @@ const emptyHistory = {
 const historyResponse = (history: object = emptyHistory) =>
   new Response(JSON.stringify(history), { status: 200 });
 
+const noEvents = { visit_id: "visit-1", events: [] };
+
 /**
- * Answer the consultation's requests in order. The earlier-visits panel loads on its own
- * and gets its own answer, so it never takes a response meant for the case sheet.
+ * Answer the consultation's requests in order. The earlier-visits panel and the queue
+ * timeline load on their own and get their own answers, so they never take a response
+ * meant for the case sheet.
  */
-function mockRequests(responses: Response[], history: object | (() => Response) = emptyHistory) {
+function mockRequests(
+  responses: Response[],
+  history: object | (() => Response) = emptyHistory,
+  events: object = noEvents,
+) {
   const queue = [...responses];
   const request = vi.spyOn(staffAuth, "request").mockImplementation((path) =>
     Promise.resolve(
@@ -106,10 +113,15 @@ function mockRequests(responses: Response[], history: object | (() => Response) 
         ? typeof history === "function"
           ? history()
           : historyResponse(history)
-        : (queue.shift() ?? new Response(null, { status: 500 })),
+        : path.endsWith("/queue-events")
+          ? new Response(JSON.stringify(events), { status: 200 })
+          : (queue.shift() ?? new Response(null, { status: 500 })),
     ),
   );
-  const calls = () => request.mock.calls.filter(([path]) => !String(path).endsWith("/history"));
+  const calls = () =>
+    request.mock.calls.filter(
+      ([path]) => !String(path).endsWith("/history") && !String(path).endsWith("/queue-events"),
+    );
   return { request, calls };
 }
 
@@ -324,6 +336,85 @@ describe("Phase 7.4 doctor consultation", () => {
       "true",
     );
     expect(screen.getByText(/are not stored in OPD Saathi yet/)).toBeVisible();
+  });
+
+  it("marks a called patient absent once the grace period is over, then offers a recall", async () => {
+    const { calls } = mockRequests(
+      [
+        sheetResponse(1),
+        transcriptResponse(),
+        new Response(JSON.stringify({ visit_id: "visit-1", status: "skipped" }), { status: 200 }),
+      ],
+      emptyHistory,
+      {
+        visit_id: "visit-1",
+        events: [
+          { from: "awaiting_confirmation", to: "queued", actor_type: "patient", actor_name: null, actor_role: null, reason: null, at: "2026-10-16T04:30:00Z" },
+          { from: "queued", to: "called", actor_type: "user", actor_name: "Dr Rao", actor_role: "doctor", reason: null, at: "2026-10-16T04:40:00Z" },
+        ],
+      },
+    );
+    queueState.current = {
+      items: [
+        {
+          visit_id: "visit-1",
+          department_id: "dept-1",
+          token: "MED-001",
+          urgency: "routine",
+          status: "called",
+          age_years: 40,
+          sex: "female",
+          complaint: "Synthetic headache",
+          position: 1,
+          queued_at: "2026-10-16T04:30:00Z",
+          called_at: new Date(Date.now() - 240_000).toISOString(),
+        },
+      ],
+      graceSeconds: 180,
+      state: "ready",
+      now: Date.now(),
+      reload: () => undefined,
+    };
+
+    renderConsult("/staff/consultations?visit_id=visit-1&status=called");
+    // The queue timeline shows the token and the call, and who made each change.
+    expect(await screen.findByText("Token issued")).toBeVisible();
+    expect(screen.getByText("by the patient")).toBeVisible();
+    expect(screen.getByText("by Dr Rao")).toBeVisible();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Mark absent" }));
+    await waitFor(() => expect(calls()[2][0]).toBe("/queue/visit-1/skip"));
+    expect(await screen.findByRole("button", { name: "Recall" })).toBeVisible();
+    expect(screen.getByText("Missed call")).toBeVisible();
+  });
+
+  it("waits out the grace period before a just-called patient can be marked absent", async () => {
+    mockRequests([sheetResponse(1), transcriptResponse()]);
+    queueState.current = {
+      items: [
+        {
+          visit_id: "visit-1",
+          department_id: "dept-1",
+          token: "MED-001",
+          urgency: "routine",
+          status: "called",
+          age_years: 40,
+          sex: "female",
+          complaint: "Synthetic headache",
+          position: 1,
+          queued_at: "2026-10-16T04:30:00Z",
+          called_at: new Date(Date.now() - 20_000).toISOString(),
+        },
+      ],
+      graceSeconds: 180,
+      state: "ready",
+      now: Date.now(),
+      reload: () => undefined,
+    };
+
+    renderConsult("/staff/consultations?visit_id=visit-1&status=called");
+    expect(await screen.findByRole("button", { name: /Mark absent in 2:/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start consultation" })).toBeEnabled();
   });
 
   it("asks before an unsaved edit is lost by leaving the page", async () => {

@@ -221,14 +221,18 @@ registering ──► awaiting_confirmation ──► queued ──► called �
   configurable grace period (default 3 minutes; the timer prompts, it never cancels by itself) and calls
   the next eligible patient. **Recall** returns the patient to `queued` with the *same* token, encounter,
   urgency and original arrival time, so they are seen next within their priority class. `no_show` is
-  reached only from `skipped` (manually, or at end of day).
+  reached only from `skipped` (manually, or at end of day). *Added while building:* **put back**
+  (`called → queued`) for a call made by mistake, without a missed call on record; and the end-of-day
+  close-out now records still-waiting patients as `cancelled` (not seen before closing), not `no_show`.
+  The full rules, permissions and open decisions are in `docs/QUEUE_POLICY.md`.
 - **One active claim per doctor:** a doctor cannot call or start a patient while already holding one in
   `called`/`in_consult`; `called_by` is recorded. **`call-next` is serialised per department** with a
   transaction-scoped advisory lock, so two doctors never receive the same patient.
 - **Department authorisation** on every transition (fixes D5); admins may act hospital-wide.
 - **Audit and history:** each transition writes an immutable `visit_events` row (from, to, actor,
-  reason) besides the audit log, so the doctor and the patient status page can show the history and the
-  original encounter is never lost.
+  reason) besides the audit log; the doctor's consultation page shows this timeline, the patient's
+  status page shows the current state (including "We missed you, go to the desk"), and the original
+  encounter is never lost.
 - **Priority policy (documented in `docs/QUEUE_POLICY.md`):** urgent first (always, never capped);
   within routine/priority, virtual arrival time = arrival − head start (bounded by level; at most
   45 minutes); ties by arrival then id (deterministic). Self-reported urgent flags stay at the front but
@@ -258,16 +262,18 @@ All changes are additive Alembic migrations with working downgrades; nothing is 
 |---|---|---|
 | 0017 `mobile_checkin` | `kiosks.kind` (`device`/`mobile`), `kiosks.checkin_code_hash` (unique, own RLS lookup policy), constraints that a mobile point never has device secrets; `consents.channel` allows `mobile` | Phone check-in points |
 | 0018 `patient_identity` (done) | Drop unique `uq_patients_hospital_phone_hmac`, add a non-unique index; `patients.mrn` (unique per hospital) and `patients.card_version`; `patient_number_counters` (per hospital and year, RLS); `visits.patient_link` (`card`/`staff`) and `visits.previous_visit_id` (tenant FK) | Returning patients, shared phones (D3) |
-| 0019 `queue_recall` | `visits.status` allows `skipped`; `visits.called_by`, `skipped_at`, `recalled_at`, `skip_count`; `visit_events` table (RLS, insert/select only for the app role); hospital setting `call_grace_seconds` | Missed-patient workflow, audit history |
+| 0019 `queue_recall` (done) | `visits.status` allows `skipped`; `visits.called_by`, `skipped_at`, `recalled_at`, `skip_count`; `visit_events` table (RLS, insert/select only for the app role, insert for the worker); `hospital_queue_settings.call_grace_seconds` | Missed-patient workflow, audit history |
 | later | `documents` storage fields; consent purposes | Phase 4–5 |
 
 New/changed endpoints (all server-authorised). Built: `GET /intake/checkin/{code}` and
 `POST /intake/checkin/{code}/sessions` (public, rate-limited), `GET`/`POST /admin/kiosks/{id}/checkin-link`,
 `POST /intake/sessions/{id}/opd-card`, `POST /intake/sessions/{id}/follow-up`,
 `GET /visits/{id}/history` (staff, department and open-visit rule), `GET /patients/lookup` (staff),
-`POST /queue/{id}/link-patient` (nurse/admin). Planned: `POST /queue/{id}/skip`,
-`POST /queue/{id}/recall`. Dropped: `GET /system/phone-access` — `scripts/lan-check.ps1` covers it
-from the host, where the firewall and network profile can actually be read.
+`POST /queue/{id}/link-patient` (nurse/admin), `POST /queue/{id}/skip`, `POST /queue/{id}/recall`,
+`POST /queue/{id}/return` (put back after a mistaken call), `POST /queue/call-next` (now serialised
+and idempotent), `GET /visits/{id}/queue-events`, `GET`/`PATCH /admin/queue-settings`. Dropped:
+`GET /system/phone-access` — `scripts/lan-check.ps1` covers it from the host, where the firewall
+and network profile can actually be read.
 
 ---
 
@@ -395,4 +401,13 @@ against the demo database (failed tests leave synthetic hospitals in the sign-in
 | 2.5 Doctor's *Previous visits* tab | done | `case_sheets.py` (`/visits/{id}/history`), `PreviousVisits.tsx`, `DoctorConsultation.tsx`, `screens.css` | integration: department, hospital and closed-visit isolation; 2 web unit | Reads audited; refused (`HISTORY_CLOSED`) once the visit is closed and in the past; admins exempt |
 | 2.6 Privacy notes | done | `PRIVACY.md` | — | Data map rows for OPD number, PIN, visit links, phone storage; linking and history rules |
 | Phase 2 gate | green | — | API 854 passed / 1 skipped; web 61; e2e 135 of 136 in the full run — the 5,000-row queue timing test missed its 100 ms limit while a migration round trip ran alongside, then passed 3 of 3 alone (29.7 ms); ruff, mypy, eslint, tsc, locales (916 keys), prompt-audio check, bandit, semgrep (same packs), migrations head→base→head as in CI | Lesson: data steps in a downgrade must lift `FORCE ROW LEVEL SECURITY`, or they silently touch no rows. Also regenerated prompt audio for strings that changed in Phase 1 |
-| 3 Queue: skip/recall, claims, department checks | planned | | | D4–D7 |
+| 3.1 D4 missed calls: skip, recall, put back, no-show only after a miss | done | `0019_queue_recall.py`, `domain/queue/state.py`, `repositories.py` (`transition_visit`), `queue.py` (`/skip`, `/recall`, `/return`), `workers/main.py` (close-out) | unit state machine; integration: skip before/after grace, recall to original place, status page, no-show rules, day close-out labels | Grace period enforced by the server, set per hospital (`/admin/queue-settings`, Settings → Departments) |
+| 3.2 D5 department checks on every queue action | done | `queue.py` (transitions, call-next, override, timeline) | integration: other department → 404 for 7 actions, call-next → 403, other hospital → 404 | |
+| 3.3 D6 concurrent call-next | done | `repositories.py` (`lock_calls`, `call_next`), `queue.py` | integration with two database sessions: the second doctor waits, then gets the other patient | Board's "Call next" now lets the server choose |
+| 3.4 D7 one patient per doctor; who called is recorded | done | `repositories.py`, `0019` (`called_by`) | integration: `DOCTOR_BUSY`, `CLAIMED_BY_ANOTHER_DOCTOR`, nurse calls without reserving | Board shows "Called by …" |
+| 3.5 Visit timeline | done | `0019` (`visit_events`, append-only), `queue.py` (`/visits/{id}/queue-events`), `DoctorConsultation.tsx` | integration: event order and actors; grants checked (app cannot update/delete, worker can insert) | |
+| 3.6 Self-reported danger sign marked "Nurse to confirm" | done | `repositories.py` (`queued_visits`), `StaffQueueBoard.tsx` | integration: marker cleared by acknowledging the alert | |
+| 3.7 Screens and wording | done | `StaffQueueBoard.tsx` (missed-calls panel, countdown), `ConsultPatientRail.tsx`, `DoctorConsultation.tsx`, `PatientStatus.tsx`, `QueueSettingsCard.tsx`, locales (en/hi/mr) | 8 web unit tests; e2e `queue-recall.spec.ts` (status page, mark absent → recall, axe, 390 px width) | |
+| 3.8 Queue policy document | done | `QUEUE_POLICY.md`, `PRIVACY.md` | — | Lists the decisions the hospital must sign off |
+| 3.9 Staff screens and wording load separately | done | `router.tsx` (staff shell lazy), `locales/staff.ts`, `i18n.ts` | Lighthouse: performance 89–91 on `/kiosk` and `/s/demo` (85–88 before; budget 85) | Entry bundle 444.8 kB (140.8 kB gzip), down from 593.5 kB; staff strings are a 139.7 kB chunk loaded only for staff. Closes the Phase 1 lazy-loading follow-up |
+| Phase 3 gate | green | — | API 870 passed / 1 skipped, core+domain coverage 96% (gate 95%); web 69; e2e 137 of 138 with CI's 2 workers — one kiosk preview screenshot test (a different one each run) missed its 5 s wait for the heading on the dev server under load and passes alone (27/27); PWA e2e; Lighthouse; ruff, mypy --strict, eslint, tsc, locales (965 keys), contrast, prompt-audio check, API types unchanged when regenerated as CI does, bandit, semgrep (same packs); migrations head→base→head, and the 0019 downgrade turns a real skipped visit into a no-show | CI retries a failed e2e test once |

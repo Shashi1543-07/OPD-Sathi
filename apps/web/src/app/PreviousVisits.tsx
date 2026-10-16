@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
+import "../locales/staff";
 import { History, IdCard, Info, Link2, Search, ShieldAlert, Sparkles } from "lucide-react";
 import { staffAuth } from "../lib/auth";
 import { newRequestId } from "../lib/ids";

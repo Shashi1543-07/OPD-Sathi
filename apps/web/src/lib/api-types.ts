@@ -177,6 +177,27 @@ export interface paths {
         patch: operations["patch_ai_settings_admin_ai_settings_patch"];
         trace?: never;
     };
+    "/admin/queue-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Queue Settings
+         * @description How long staff wait after calling a patient before they may mark them absent.
+         */
+        get: operations["get_queue_settings_admin_queue_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Queue Settings */
+        patch: operations["patch_queue_settings_admin_queue_settings_patch"];
+        trace?: never;
+    };
     "/admin/{resource}": {
         parameters: {
             query?: never;
@@ -978,7 +999,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Call Next */
+        /**
+         * Call Next
+         * @description Call the next patient in calling order (urgent first, then queue score).
+         *
+         *     Calls in a department are serialised, so two doctors pressing this together get two
+         *     different patients. A doctor who already has a patient called or in consultation is
+         *     asked to finish with them first.
+         */
         post: operations["call_next_queue_call_next_post"];
         delete?: never;
         options?: never;
@@ -1037,6 +1065,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/queue/{visit_id}/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Visit
+         * @description Mark a called patient absent once the call grace period has passed.
+         *
+         *     They keep their token, urgency and arrival time, so a recall puts them back where they were.
+         */
+        post: operations["skip_visit_queue__visit_id__skip_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/queue/{visit_id}/recall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recall Visit
+         * @description Put a skipped patient back in the queue on their original arrival time.
+         */
+        post: operations["recall_visit_queue__visit_id__recall_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/queue/{visit_id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Return Visit
+         * @description Put a called patient back in the queue unchanged, e.g. after a call made by mistake.
+         */
+        post: operations["return_visit_queue__visit_id__return_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/queue/{visit_id}/no-show": {
         parameters: {
             query?: never;
@@ -1046,8 +1136,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** No Show Visit */
+        /**
+         * No Show Visit
+         * @description Close a skipped visit as a no-show (the patient has left). Only skipped visits qualify.
+         */
         post: operations["no_show_visit_queue__visit_id__no_show_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/visits/{visit_id}/queue-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Visit Queue Events
+         * @description The visit's queue timeline (token, calls, missed calls, recalls) for its department.
+         */
+        get: operations["visit_queue_events_visits__visit_id__queue_events_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1812,6 +1925,11 @@ export interface components {
              */
             no_known_allergies: boolean;
         };
+        /** QueueSettingsPatch */
+        QueueSettingsPatch: {
+            /** Call Grace Seconds */
+            call_grace_seconds: number;
+        };
         /** RedFlag */
         RedFlag: {
             /** Id */
@@ -2265,6 +2383,63 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_queue_settings_admin_queue_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    patch_queue_settings_admin_queue_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueueSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };
@@ -3924,7 +4099,139 @@ export interface operations {
             };
         };
     };
+    skip_visit_queue__visit_id__skip_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recall_visit_queue__visit_id__recall_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    return_visit_queue__visit_id__return_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     no_show_visit_queue__visit_id__no_show_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    visit_queue_events_visits__visit_id__queue_events_get: {
         parameters: {
             query?: never;
             header?: never;

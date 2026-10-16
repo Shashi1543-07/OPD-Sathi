@@ -120,12 +120,24 @@ async def test_staff_queue_filters_sorts_and_paginates_department_rows(monkeypat
     async def scope(*_args: object, **_kwargs: object) -> None:
         return None
 
+    missed = {
+        **row(uuid4(), department_id),
+        "skip_count": 1,
+        "skipped_at": datetime.now(UTC),
+    }
+
     class Repository:
         def __init__(self, *_args: object) -> None:
             pass
 
         async def queued_visits(self, **_kwargs: object) -> list[dict[str, object]]:
             return visits
+
+        async def missed_visits(self, **_kwargs: object) -> list[dict[str, object]]:
+            return [missed]
+
+        async def call_grace_seconds(self, _hospital_id: object) -> int:
+            return 120
 
     monkeypatch.setattr(queue, "set_hospital_scope", scope)
     monkeypatch.setattr(queue, "QueueRepository", Repository)
@@ -146,6 +158,10 @@ async def test_staff_queue_filters_sorts_and_paginates_department_rows(monkeypat
     assert first_page["items"][0]["urgency"] == "urgent"
     assert first_page["items"][0]["complaint"] == "Synthetic complaint"
     assert first_page["next_cursor"]
+    # Missed patients wait apart from the line, with the grace period for the countdown.
+    assert [item["skip_count"] for item in first_page["missed"]] == [1]
+    assert first_page["missed"][0]["visit_id"] == str(missed["visit_id"])
+    assert first_page["call_grace_seconds"] == 120
 
     second_page = await queue.staff_queue(
         request,
@@ -381,6 +397,8 @@ async def test_status_change_commits_then_publishes_and_maps_repo_errors(monkeyp
                 "department_id": department_id,
                 "token_label": "GM-042",
                 "urgency": "urgent",
+                "status": kwargs["target"],
+                "previous_status": "called",
             }
 
     class PubSubQueue:
@@ -410,13 +428,17 @@ async def test_status_change_commits_then_publishes_and_maps_repo_errors(monkeyp
     monkeypatch.setattr(queue, "audit", audit)
     monkeypatch.setattr(queue, "QueueRepository", Repository)
     monkeypatch.setattr(queue, "QueueRedis", PubSubQueue)
-    request = make_request(Connection([]))
+    request = make_request(Connection([], assigned=department_id))
     principal = {"hospital_id": str(hospital_id), "sub": str(actor_id), "role": "doctor"}
 
     assert await queue._perform_status_change(request, visit_id, principal, "in_consult") == {
         "visit_id": str(visit_id),
         "status": "in_consult",
+        "token": "GM-042",
     }
+    # The change is confined to the doctor's department and carries their role.
+    assert changes[0]["department_id"] == department_id
+    assert changes[0]["actor_role"] == "doctor"
     assert changes[-2]["ops"][0]["op"] == "upsert"
     assert changes[-1]["payload"] == {"changed": True}
 

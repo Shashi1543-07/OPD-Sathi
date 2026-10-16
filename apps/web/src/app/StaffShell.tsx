@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import "../locales/staff";
 import { Button, ConnectionIndicator, Toast } from "../components/ui";
 import { apiOrigin } from "../lib/api";
 import { staffAuth, StaffUser } from "../lib/auth";

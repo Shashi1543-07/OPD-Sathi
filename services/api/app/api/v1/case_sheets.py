@@ -524,7 +524,8 @@ async def get_patient_history(
                     text(
                         "SELECT v.patient_id, v.patient_link, v.previous_visit_id, p.mrn, "
                         "(v.status IN ('registering', 'awaiting_confirmation', 'queued', "
-                        "'called', 'in_consult') OR v.service_date = :today) AS in_care "
+                        "'called', 'in_consult', 'skipped') OR v.service_date = :today) "
+                        "AS in_care "
                         "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
                         "AND p.id = v.patient_id "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"

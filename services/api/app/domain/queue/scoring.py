@@ -1,8 +1,10 @@
 """Deterministic queue scoring and conservative wait estimates."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from math import ceil
-from typing import Literal
+from typing import Any, Literal
 
 from app.domain.triage.score import head_start_minutes
 
@@ -42,6 +44,27 @@ def queue_score(
     vulnerable = pregnant or (age_years is not None and (age_years >= 65 or age_years < 5))
     bonus_min = bonuses[urgency] + (vulnerable_bonus_min if vulnerable else 0)
     return arrival_ms - bonus_min * MILLISECONDS_PER_MINUTE
+
+
+def visit_score(row: Mapping[str, Any], settings: Any) -> int:
+    """``queue_score`` for a visit row; the arrival is ``queued_at``, kept through recalls."""
+    arrival = row["queued_at"] or datetime.now(UTC)
+    return queue_score(
+        int(arrival.timestamp() * 1000),
+        row["urgency"],
+        row["age_years"],
+        bool(row["pregnant"]),
+        urgent_bonus_min=settings.urgent_bonus_min,
+        priority_bonus_min=settings.priority_bonus_min,
+        vulnerable_bonus_min=settings.vulnerable_bonus_min,
+        acuity_score=row.get("acuity_score"),
+    )
+
+
+def calling_order(row: Mapping[str, Any], settings: Any) -> tuple[int, int, str]:
+    """Sort key for whom to call next: urgent always first, then score, then a stable id."""
+    visit_id = row.get("visit_id", row.get("id"))
+    return (0 if row["urgency"] == "urgent" else 1, visit_score(row, settings), str(visit_id))
 
 
 @dataclass(frozen=True)

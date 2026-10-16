@@ -1,7 +1,8 @@
 import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ChevronDown, Clock3, RefreshCw } from "lucide-react";
+import "../locales/staff";
+import { AlertTriangle, ChevronDown, Clock3, RefreshCw, UserX } from "lucide-react";
 import { waitMinutes } from "./queueBoardModel";
 import { useConsultQueue, type ConsultQueue } from "./consultQueue";
 
@@ -38,6 +39,7 @@ export function ConsultPatientRailView({
 }) {
   const { t } = useTranslation("staff");
   const { items, state, now, reload } = queue;
+  const missed = queue.missed ?? [];
   const bodyId = useId();
   const [open, setOpen] = useState(!activeVisitId);
   const [openFor, setOpenFor] = useState(activeVisitId);
@@ -128,6 +130,40 @@ export function ConsultPatientRailView({
             );
           })}
         </ul>
+        {missed.length > 0 && (
+          <>
+            <h4 className="cx-rail-subhead">
+              <UserX aria-hidden="true" size={14} /> {t("railMissed")}
+            </h4>
+            <ul>
+              {missed.map((patient) => {
+                const active = patient.visit_id === activeVisitId;
+                return (
+                  <li key={patient.visit_id}>
+                    <Link
+                      to={`/staff/consultations?visit_id=${patient.visit_id}&status=skipped`}
+                      className={`cx-rail-item cx-rail-item--missed${active ? " is-active" : ""}`}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      <span className="cx-rail-top">
+                        <strong>{patient.token}</strong>
+                        <span className="cx-pill cx-pill--skipped">
+                          {t("queueStatus_skipped")}
+                        </span>
+                      </span>
+                      <span className="cx-rail-complaint">
+                        {sentenceCase(patient.complaint) || t("complaintMissing")}
+                      </span>
+                      <span className="cx-rail-foot">
+                        {t("missedCount", { count: patient.skip_count })}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
         <Link className="cx-rail-footer" to="/staff/queue">
           {t("openFullQueue")}
         </Link>

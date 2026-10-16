@@ -49,14 +49,17 @@ async function signedInNurse(page: Page) {
   await page.route(/\/alerts(?:\?.*)?$/, (route) => route.fulfill({ json: { items: [] } }));
 }
 
-test("search, priority filter and KPI cards narrow the queue; next action calls the right patient", async ({
+test("search, priority filter and KPI cards narrow the queue; next action asks the server to call", async ({
   page,
 }) => {
   await signedInNurse(page);
   const calls: string[] = [];
-  await page.route(/\/queue\/[^/]+\/call$/, async (route) => {
+  // The server chooses whom to call, so two doctors pressing at once get different patients.
+  await page.route(/\/queue\/call-next\?/, async (route) => {
     calls.push(route.request().url());
-    await route.fulfill({ json: { status: "called" } });
+    await route.fulfill({
+      json: { visit_id: "00000000-0000-7000-8000-00000000d002", status: "called", token: "GEN-002" },
+    });
   });
   await page.goto("/staff");
   const list = page.getByRole("region", { name: "Queue patients" });
@@ -80,9 +83,10 @@ test("search, priority filter and KPI cards narrow the queue; next action calls 
   // Counts always describe the whole queue, whatever is filtered.
   await expect(page.getByRole("button", { name: /Waiting/ }).first()).toContainText("2");
 
-  await next.getByRole("button", { name: "Call GEN-002" }).click();
+  await next.getByRole("button", { name: "Call next" }).click();
   await expect.poll(() => calls.length).toBe(1);
-  expect(calls[0]).toContain("00000000-0000-7000-8000-00000000d002/call");
+  expect(calls[0]).toContain(`department_id=${department.id}`);
+  await expect(page.getByText("Called GEN-002.")).toBeVisible();
 });
 
 test("the queue never scrolls sideways, from a wide desktop down to a narrow phone", async ({

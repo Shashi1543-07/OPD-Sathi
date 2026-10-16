@@ -267,6 +267,134 @@ describe("Phase 7.2 queue board", () => {
     );
   });
 
+  it("keeps missed calls apart from the line and recalls a patient who comes back", async () => {
+    const request = vi.spyOn(staffAuth, "request").mockImplementation(async (path) => {
+      if (path.startsWith("/alerts")) return response({ items: [] });
+      if (path === "/queue/visit-missed/recall") return response({ status: "queued" });
+      return response({
+        items: [item({ visit_id: "visit-waiting", token: "MED-003" })],
+        departments,
+        next_cursor: null,
+        missed: [
+          {
+            visit_id: "visit-missed",
+            department_id: departments[0].id,
+            token: "MED-001",
+            urgency: "routine",
+            age_years: 60,
+            sex: "male",
+            complaint: "dizziness",
+            skip_count: 1,
+            skipped_at: "2026-10-16T05:00:00Z",
+            queued_at: "2026-10-16T04:30:00Z",
+          },
+        ],
+        call_grace_seconds: 180,
+      });
+    });
+
+    renderBoard();
+    const missed = await screen.findByRole("region", { name: "Missed calls" });
+    expect(within(missed).getByText("MED-001")).toBeInTheDocument();
+    expect(within(missed).getByText(/Missed 1 call/)).toBeInTheDocument();
+    // The missed patient is not in the line itself.
+    const queue = screen.getByRole("region", { name: "Queue patients" });
+    expect(within(queue).queryByText("MED-001")).toBeNull();
+
+    fireEvent.click(within(missed).getByRole("button", { name: "Recall" }));
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "/queue/visit-missed/recall",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({ "Idempotency-Key": expect.any(String) }),
+        }),
+      ),
+    );
+  });
+
+  it("lets the server pick the next patient and says who was called", async () => {
+    const request = vi.spyOn(staffAuth, "request").mockImplementation(async (path) => {
+      if (path.startsWith("/alerts")) return response({ items: [] });
+      if (path.startsWith("/queue/call-next")) return response({ status: "called", token: "MED-002" });
+      return response({
+        items: [item({ visit_id: "visit-2", token: "MED-002" })],
+        departments,
+        next_cursor: null,
+        missed: [],
+        call_grace_seconds: 180,
+      });
+    });
+
+    renderBoard();
+    fireEvent.click(await screen.findByRole("button", { name: "Call next" }));
+    expect(await screen.findByText("Called MED-002.")).toHaveAttribute("role", "status");
+    expect(request).toHaveBeenCalledWith(
+      `/queue/call-next?department_id=${departments[0].id}`,
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("lets a nurse mark a called patient absent only after the grace period", async () => {
+    vi.spyOn(staffAuth, "user", "get").mockReturnValue({
+      id: "nurse-1",
+      name: "Synthetic Nurse",
+      email: "nurse@example.test",
+      role: "nurse",
+      hospital_id: "hospital-1",
+    });
+    const calledAt = (secondsAgo: number) => new Date(Date.now() - secondsAgo * 1000).toISOString();
+    const request = vi.spyOn(staffAuth, "request").mockImplementation(async (path) => {
+      if (path.startsWith("/alerts")) return response({ items: [] });
+      if (path.endsWith("/skip")) return response({ status: "skipped" });
+      return response({
+        items: [
+          item({ visit_id: "just-called", token: "MED-004", status: "called", called_at: calledAt(30), called_by_name: "Dr Rao" }),
+          item({ visit_id: "long-called", token: "MED-005", status: "called", called_at: calledAt(400), position: 2 }),
+        ],
+        departments,
+        next_cursor: null,
+        missed: [],
+        call_grace_seconds: 180,
+      });
+    });
+
+    renderBoard();
+    const queue = await screen.findByRole("region", { name: "Queue patients" });
+    const waiting = await within(queue).findByRole("button", { name: /Mark absent in 2:/ });
+    expect(waiting).toBeDisabled();
+    expect(within(queue).getByText("Called by Dr Rao")).toBeInTheDocument();
+    // Nurses do not start consultations.
+    expect(within(queue).queryByRole("button", { name: "Start consult" })).toBeNull();
+
+    fireEvent.click(within(queue).getByRole("button", { name: "Mark absent" }));
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith("/queue/long-called/skip", expect.objectContaining({ method: "POST" })),
+    );
+  });
+
+  it("explains a refused action without locking the board", async () => {
+    vi.spyOn(staffAuth, "request").mockImplementation(async (path) => {
+      if (path.startsWith("/alerts")) return response({ items: [] });
+      if (path === "/queue/visit-1/call")
+        return new Response(
+          JSON.stringify({ code: "DOCTOR_BUSY", active_token: "MED-009", detail: "busy" }),
+          { status: 409 },
+        );
+      return response({ items: [item({})], departments, next_cursor: null, missed: [] });
+    });
+
+    renderBoard();
+    const queue = await screen.findByRole("region", { name: "Queue patients" });
+    fireEvent.click(await within(queue).findByRole("button", { name: "Call patient" }));
+    expect(
+      await screen.findByText(
+        "Finish with MED-009 first: start the consultation, mark them absent or put them back in the queue.",
+      ),
+    ).toHaveAttribute("role", "alert");
+    expect(within(queue).getByRole("button", { name: "Call patient" })).toBeEnabled();
+  });
+
   it("persists the alert sound preference", async () => {
     vi.spyOn(staffAuth, "request").mockImplementation(async (path) =>
       path.startsWith("/alerts")

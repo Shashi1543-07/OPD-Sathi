@@ -147,27 +147,40 @@ async def relay_once(connection: AsyncConnection, client: Any, *, settings: Any)
     return processed
 
 
+# (open state on an earlier day, what it becomes at close-out)
+CLOSE_OUT = (
+    # Still waiting when the OPD closed: not seen, but not absent either.
+    ("queued", "cancelled"),
+    # Called, or called and missed, and never seen.
+    ("called", "no_show"),
+    ("skipped", "no_show"),
+    ("in_consult", "done"),
+    ("registering", "cancelled"),
+    ("awaiting_confirmation", "cancelled"),
+)
+
+
 async def close_previous_days(connection: AsyncConnection) -> int:
     """End-of-day close-out: earlier days' open visits must not stay in today's queue.
 
-    Waiting or called patients become no-shows, consultations left open are completed,
-    and registrations that never finished are cancelled.
+    Every visit closed this way gets a ``day_closed`` line on its timeline, so staff can tell
+    a closed-out visit from one a person ended.
     """
     closed = 0
-    for statuses, target in (
-        (("queued", "called"), "no_show"),
-        (("in_consult",), "done"),
-        (("registering", "awaiting_confirmation"), "cancelled"),
-    ):
-        result = await connection.execute(
+    for source, target in CLOSE_OUT:
+        count = await connection.scalar(
             text(
-                "UPDATE visits SET status = :target "
+                "WITH closed AS (UPDATE visits SET status = :target "
                 "WHERE service_date < (now() AT TIME ZONE 'Asia/Kolkata')::date "
-                "AND status = ANY(:statuses)"
+                "AND status = :source RETURNING id, hospital_id), "
+                "events AS (INSERT INTO visit_events (id, hospital_id, visit_id, from_status, "
+                "to_status, actor_type, reason) SELECT gen_random_uuid(), hospital_id, id, "
+                ":source, :target, 'system', 'day_closed' FROM closed) "
+                "SELECT count(*) FROM closed"
             ),
-            {"target": target, "statuses": list(statuses)},
+            {"source": source, "target": target},
         )
-        closed += int(getattr(result, "rowcount", 0) or 0)
+        closed += int(count or 0)
     return closed
 
 

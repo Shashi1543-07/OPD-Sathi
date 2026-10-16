@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import "../locales/staff";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, RefreshCw, Search, UserPlus, X } from "lucide-react";
 import type { Language } from "../i18n";

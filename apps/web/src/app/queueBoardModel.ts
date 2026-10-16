@@ -27,7 +27,46 @@ export type QueueItem = {
     department_code: string;
     needs_nurse_confirmation: boolean;
   } | null;
+  called_at?: string | null;
+  called_by_name?: string | null;
+  called_by_me?: boolean;
+  /** Times this patient was called and not there (they were recalled each time). */
+  skip_count?: number;
+  /** A danger sign the patient tapped that no nurse has confirmed yet. */
+  nurse_check?: boolean;
 };
+
+/** Called and not there: kept apart from the line until staff recall them. */
+export type MissedItem = {
+  visit_id: string;
+  department_id: string;
+  token: string;
+  urgency: QueueItem["urgency"];
+  age_years: number | null;
+  sex: string;
+  complaint: string;
+  skip_count: number;
+  skipped_at: string | null;
+  queued_at: string | null;
+};
+
+/** Seconds left before a called patient may be marked absent (0 once allowed). */
+export function graceLeft(
+  calledAt: string | null | undefined,
+  graceSeconds: number,
+  now: number,
+): number {
+  if (!calledAt) return 0;
+  const calledAtMs = Date.parse(calledAt);
+  if (!Number.isFinite(calledAtMs)) return 0;
+  return Math.max(0, Math.ceil((calledAtMs + graceSeconds * 1000 - now) / 1000));
+}
+
+/** "2:05" for a short countdown. */
+export function formatCountdown(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
 
 export type QueueOperation =
   | { op: "remove"; visit_id: string }

@@ -1,7 +1,6 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { KioskShell } from "./KioskShell";
 import { KioskWelcome } from "./KioskWelcome";
-import { StaffShell } from "./StaffShell";
 import {
   StaffLanding,
   StaffPageGate,
@@ -52,7 +51,11 @@ export const router = createBrowserRouter([
   },
   {
     path: "/staff",
-    element: <StaffShell />,
+    // Staff screens and their wording load only for staff, not with the kiosk or patient pages.
+    lazy: async () => {
+      const { StaffShell } = await import("./StaffShell");
+      return { Component: StaffShell };
+    },
     HydrateFallback: RouteLoading,
     children: [
       { index: true, element: <StaffLanding /> },

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import "../locales/staff";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Building2,
@@ -26,6 +27,7 @@ import { Popover } from "../components/ui/Popover";
 import type { StaffRole } from "../lib/auth";
 import { staffAuth } from "../lib/auth";
 import { newRequestId } from "../lib/ids";
+import { QueueSettingsCard } from "./QueueSettingsCard";
 
 type Resource = "departments" | "users" | "kiosks";
 type Department = {
@@ -977,6 +979,7 @@ export function AdminConsole() {
               {saving ? t("savingAdmin") : t(`adminCreate${cap(resource)}`)}
             </button>
           </form>
+          {resource === "departments" && <QueueSettingsCard />}
         </div>
 
         <section className="adm-card adm-list" aria-labelledby={`${baseId}-list`}>

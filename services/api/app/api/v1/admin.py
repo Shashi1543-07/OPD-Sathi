@@ -18,6 +18,7 @@ from app.core.security import create_opaque_secret, digest_secret, hash_password
 from app.db.repositories import AdminRepository
 from app.db.session import set_hospital_scope
 from app.domain.checkin import checkin_code
+from app.domain.queue.state import DEFAULT_CALL_GRACE_SECONDS
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _admin_principal = require_role("admin")
@@ -118,6 +119,11 @@ class AISettingsPatch(Payload):
     llm_enabled: bool
 
 
+class QueueSettingsPatch(Payload):
+    # Seconds after a call before staff may mark the patient absent (0 to 15 minutes).
+    call_grace_seconds: int = Field(ge=0, le=900)
+
+
 def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
     return UUID(principal["hospital_id"]), UUID(principal["sub"])
 
@@ -207,6 +213,88 @@ async def patch_ai_settings(
             meta={"llm_enabled": payload.llm_enabled},
         )
     return {"llm_enabled": payload.llm_enabled}
+
+
+async def _queue_settings(connection: Any, hospital_id: UUID) -> dict[str, Any]:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT s.call_grace_seconds, s.updated_at, u.name AS updated_by_name "
+                    "FROM hospital_queue_settings s LEFT JOIN users u "
+                    "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
+                    "WHERE s.hospital_id = :hospital_id"
+                ),
+                {"hospital_id": hospital_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return {
+            "call_grace_seconds": DEFAULT_CALL_GRACE_SECONDS,
+            "is_default": True,
+            "updated_at": None,
+            "updated_by_name": None,
+        }
+    return {
+        "call_grace_seconds": int(row["call_grace_seconds"]),
+        "is_default": False,
+        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+        "updated_by_name": row["updated_by_name"],
+    }
+
+
+@router.get("/queue-settings")
+async def get_queue_settings(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """How long staff wait after calling a patient before they may mark them absent."""
+    hospital_id, _ = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        return await _queue_settings(connection, hospital_id)
+
+
+@router.patch("/queue-settings")
+async def patch_queue_settings(
+    payload: QueueSettingsPatch,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    hospital_id, actor_id = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        before = await _queue_settings(connection, hospital_id)
+        await connection.execute(
+            text(
+                "INSERT INTO hospital_queue_settings (hospital_id, call_grace_seconds, "
+                "updated_by) VALUES (:hospital_id, :grace, :actor_id) "
+                "ON CONFLICT (hospital_id) DO UPDATE SET "
+                "call_grace_seconds = EXCLUDED.call_grace_seconds, "
+                "updated_by = EXCLUDED.updated_by, updated_at = now()"
+            ),
+            {"hospital_id": hospital_id, "grace": payload.call_grace_seconds, "actor_id": actor_id},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.queue_settings.updated",
+            resource_type="hospital_queue_settings",
+            resource_id=hospital_id,
+            meta={
+                "call_grace_seconds": {
+                    "before": before["call_grace_seconds"],
+                    "after": payload.call_grace_seconds,
+                }
+            },
+        )
+        return await _queue_settings(connection, hospital_id)
 
 
 @router.get("/{resource}")

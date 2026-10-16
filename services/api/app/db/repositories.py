@@ -2,12 +2,13 @@
 
 import json
 from datetime import UTC, date, datetime
+from math import ceil
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from redis.exceptions import RedisError
-from sqlalchemy import bindparam, column, func, select, table, text, tuple_, update
+from sqlalchemy import bindparam, column, exists, func, select, table, text, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.config import Settings
@@ -569,6 +570,14 @@ class QueueRepository:
                 "visit_id": visit_id,
             },
         )
+        # The patient confirms their own summary; the timeline starts with their token.
+        await self.record_event(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            from_status="awaiting_confirmation",
+            to_status="queued",
+            actor_type="patient",
+        )
         await self.connection.execute(
             text(
                 "INSERT INTO outbox (id, hospital_id, topic, payload) VALUES "
@@ -624,6 +633,8 @@ class QueueRepository:
                     "assigned_doctor_id",
                     "needs_assistance",
                     "kiosk_id",
+                    "called_by",
+                    "skip_count",
                 )
             ],
         )
@@ -632,6 +643,21 @@ class QueueRepository:
         )
         patients = table("patients", column("hospital_id"), column("id"), column("sex"))
         kiosks = table("kiosks", column("hospital_id"), column("id"), column("kind"))
+        callers = table("users", column("hospital_id"), column("id"), column("name"))
+        red_flags = table(
+            "red_flag_events",
+            column("hospital_id"),
+            column("visit_id"),
+            column("rule_id"),
+            column("acknowledged_at"),
+        )
+        # A danger sign the patient tapped puts them first, but a nurse confirms it in person.
+        tile_unconfirmed = exists().where(
+            red_flags.c.hospital_id == visits.c.hospital_id,
+            red_flags.c.visit_id == visits.c.id,
+            red_flags.c.rule_id == "RF_DS_TILE",
+            red_flags.c.acknowledged_at.is_(None),
+        )
         statement = (
             select(
                 visits.c.id.label("visit_id"),
@@ -651,9 +677,13 @@ class QueueRepository:
                 visits.c.consult_ended_at,
                 visits.c.assigned_doctor_id,
                 visits.c.needs_assistance,
+                visits.c.called_by,
+                visits.c.skip_count,
                 case_sheets.c.data.label("case_sheet_data"),
                 patients.c.sex,
                 kiosks.c.kind.label("checkin_kind"),
+                callers.c.name.label("called_by_name"),
+                tile_unconfirmed.label("tile_unconfirmed"),
             )
             .outerjoin(
                 case_sheets,
@@ -663,6 +693,11 @@ class QueueRepository:
             .outerjoin(
                 kiosks,
                 (kiosks.c.hospital_id == visits.c.hospital_id) & (kiosks.c.id == visits.c.kiosk_id),
+            )
+            .outerjoin(
+                callers,
+                (callers.c.hospital_id == visits.c.hospital_id)
+                & (callers.c.id == visits.c.called_by),
             )
             .join(
                 patients,
@@ -717,6 +752,59 @@ class QueueRepository:
         row = result.mappings().first()
         return dict(row) if row is not None else None
 
+    async def call_grace_seconds(self, hospital_id: UUID) -> int:
+        """Seconds after a call before staff may mark the patient absent."""
+        from app.domain.queue.state import DEFAULT_CALL_GRACE_SECONDS
+
+        value = await self.connection.scalar(
+            text(
+                "SELECT call_grace_seconds FROM hospital_queue_settings "
+                "WHERE hospital_id = :hospital_id"
+            ),
+            {"hospital_id": hospital_id},
+        )
+        return DEFAULT_CALL_GRACE_SECONDS if value is None else int(value)
+
+    async def lock_calls(self, *, hospital_id: UUID, department_id: UUID) -> None:
+        """Serialise every call in one department, so two doctors never get the same patient.
+
+        Lock order everywhere: department calls, then the visit row, then the doctor.
+        """
+        await self.connection.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+            {"lock_key": f"calls:{hospital_id}:{department_id}"},
+        )
+
+    async def record_event(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        from_status: str,
+        to_status: str,
+        actor_type: str,
+        actor_id: UUID | None = None,
+        reason: str | None = None,
+    ) -> None:
+        """Add one line to the visit's timeline (the table is append-only for the app)."""
+        await self.connection.execute(
+            text(
+                "INSERT INTO visit_events (id, hospital_id, visit_id, from_status, to_status, "
+                "actor_type, actor_id, reason) VALUES (:id, :hospital_id, :visit_id, "
+                ":from_status, :to_status, :actor_type, :actor_id, :reason)"
+            ),
+            {
+                "id": uuid7(),
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "from_status": from_status,
+                "to_status": to_status,
+                "actor_type": actor_type,
+                "actor_id": actor_id,
+                "reason": reason,
+            },
+        )
+
     async def transition_visit(
         self,
         *,
@@ -724,17 +812,30 @@ class QueueRepository:
         visit_id: UUID,
         target: str,
         actor_id: UUID,
+        actor_role: str = "admin",
+        department_id: UUID | None = None,
         reason: str | None = None,
+        expected: str | None = None,
     ) -> dict[str, Any]:
-        """Transition a visit and write its outbox event atomically."""
-        from app.domain.queue.state import require_transition
+        """Change a visit's queue state with its timeline line and outbox event, atomically.
+
+        ``department_id`` confines the change to one department (None: hospital-wide, for
+        administrators); a visit elsewhere is reported as not found. A doctor sees one patient
+        at a time: they cannot call or start a patient while another is called or in
+        consultation for them, nor act on a patient another doctor has called. A patient can
+        be marked absent only after the hospital's grace period since the call. Recalling or
+        putting a patient back keeps their token, urgency and arrival time, hence their place.
+        """
+        from app.domain.queue.state import ACTIVE_CLAIM, QueueRuleError, require_transition
 
         row = (
             (
                 await self.connection.execute(
                     text(
                         "SELECT department_id, status, urgency, age_years, pregnant, token_label, "
-                        "queued_at FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id "
+                        "queued_at, acuity_score, assigned_doctor_id, "
+                        "extract(epoch FROM now() - called_at) AS called_seconds_ago "
+                        "FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id "
                         "FOR UPDATE"
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},
@@ -743,46 +844,119 @@ class QueueRepository:
             .mappings()
             .first()
         )
-        if row is None:
+        if row is None or (department_id is not None and row["department_id"] != department_id):
             raise LookupError("visit not found")
-        require_transition(row["status"], target)
+        current: dict[str, Any] = dict(row)
+        waited = current.pop("called_seconds_ago")
+        if expected is not None and current["status"] != expected:
+            raise ValueError(f"invalid visit transition: {current['status']} -> {target}")
+        require_transition(current["status"], target)
+        doctor = actor_role == "doctor"
+        holder = current["assigned_doctor_id"]
+        if doctor and current["status"] in ACTIVE_CLAIM and holder not in (None, actor_id):
+            raise QueueRuleError(
+                "CLAIMED_BY_ANOTHER_DOCTOR",
+                "Another doctor has called this patient.",
+            )
+        if doctor and target in ACTIVE_CLAIM:
+            await self.connection.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+                {"lock_key": f"doctor:{hospital_id}:{actor_id}"},
+            )
+            busy = (
+                (
+                    await self.connection.execute(
+                        text(
+                            "SELECT id, token_label, status FROM visits "
+                            "WHERE hospital_id = :hospital_id AND assigned_doctor_id = :actor_id "
+                            "AND status IN ('called', 'in_consult') AND id <> :visit_id "
+                            "ORDER BY called_at NULLS LAST, id LIMIT 1"
+                        ),
+                        {"hospital_id": hospital_id, "actor_id": actor_id, "visit_id": visit_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if busy is not None:
+                raise QueueRuleError(
+                    "DOCTOR_BUSY",
+                    f"You already have {busy['token_label']}. Start, finish or mark them "
+                    "absent first.",
+                    active_visit_id=str(busy["id"]),
+                    active_token=busy["token_label"],
+                    active_status=busy["status"],
+                )
+        if target == "skipped" and waited is not None:
+            grace = await self.call_grace_seconds(hospital_id)
+            if float(waited) < grace:
+                remaining = max(1, ceil(grace - float(waited)))
+                raise QueueRuleError(
+                    "CALL_GRACE_NOT_OVER",
+                    f"Give the patient time to come. You can mark them absent in "
+                    f"{remaining} seconds.",
+                    retry_after_seconds=remaining,
+                )
         visits = table(
             "visits",
-            column("hospital_id"),
-            column("id"),
-            column("status"),
-            column("called_at"),
-            column("consult_started_at"),
-            column("consult_ended_at"),
-            column("assigned_doctor_id"),
+            *[
+                column(name)
+                for name in (
+                    "hospital_id",
+                    "id",
+                    "status",
+                    "called_at",
+                    "called_by",
+                    "consult_started_at",
+                    "consult_ended_at",
+                    "assigned_doctor_id",
+                    "skipped_at",
+                    "recalled_at",
+                    "skip_count",
+                )
+            ],
         )
         values: dict[str, Any] = {"status": target}
-        timestamp_column = {
-            "called": "called_at",
-            "in_consult": "consult_started_at",
-            "done": "consult_ended_at",
-        }.get(target)
-        if timestamp_column is not None:
-            values[timestamp_column] = func.now()
-        if target == "in_consult":
-            values["assigned_doctor_id"] = actor_id
+        if target == "called":
+            values.update(
+                called_at=func.now(),
+                called_by=actor_id,
+                assigned_doctor_id=actor_id if doctor else None,
+            )
+        elif target == "in_consult":
+            values.update(consult_started_at=func.now(), assigned_doctor_id=actor_id)
+        elif target == "done":
+            values["consult_ended_at"] = func.now()
+        elif target == "skipped":
+            values.update(
+                skipped_at=func.now(),
+                skip_count=visits.c.skip_count + 1,
+                assigned_doctor_id=None,
+            )
+        elif target == "queued":
+            # Back in line on the original arrival time: same token, urgency and place.
+            values.update(called_at=None, called_by=None, assigned_doctor_id=None)
+            if current["status"] == "skipped":
+                values["recalled_at"] = func.now()
         await self.connection.execute(
             update(visits)
             .where(visits.c.hospital_id == hospital_id, visits.c.id == visit_id)
             .values(**values)
         )
-        if target in {"cancelled", "no_show", "done"}:
-            event = {
-                "op": "remove",
-                "visit_id": str(visit_id),
-                "department_id": str(row["department_id"]),
-            }
-        else:
-            event = {
-                "op": "upsert",
-                "visit_id": str(visit_id),
-                "department_id": str(row["department_id"]),
-            }
+        await self.record_event(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            from_status=current["status"],
+            to_status=target,
+            actor_type="user",
+            actor_id=actor_id,
+            reason=reason,
+        )
+        event = {
+            "op": "upsert" if target in {"queued", "called", "in_consult"} else "remove",
+            "visit_id": str(visit_id),
+            "department_id": str(current["department_id"]),
+        }
         await self.connection.execute(
             text(
                 "INSERT INTO outbox (id, hospital_id, topic, payload) VALUES "
@@ -790,7 +964,85 @@ class QueueRepository:
             ),
             {"id": uuid7(), "hospital_id": hospital_id, "payload": json.dumps(event)},
         )
-        return {**dict(row), "visit_id": visit_id, "status": target, "override_reason": reason}
+        return {
+            **current,
+            "visit_id": visit_id,
+            "previous_status": current["status"],
+            "status": target,
+            "override_reason": reason,
+        }
+
+    async def call_next(
+        self, *, hospital_id: UUID, department_id: UUID, actor_id: UUID, actor_role: str
+    ) -> dict[str, Any] | None:
+        """Call the first waiting patient in calling order; None when nobody is waiting.
+
+        The caller holds ``lock_calls`` for the department, so two doctors never receive the
+        same patient. Skipped patients wait for a recall and are never called from here.
+        """
+        from app.domain.queue.scoring import calling_order
+
+        result = await self.connection.execute(
+            text(
+                "SELECT id, urgency, age_years, pregnant, queued_at, acuity_score "
+                "FROM visits WHERE hospital_id = :hospital_id "
+                "AND department_id = :department_id AND status = 'queued'"
+            ),
+            {"hospital_id": hospital_id, "department_id": department_id},
+        )
+        rows = [dict(row) for row in result.mappings().all()]
+        for candidate in sorted(rows, key=lambda row: calling_order(row, self.settings)):
+            try:
+                return await self.transition_visit(
+                    hospital_id=hospital_id,
+                    visit_id=candidate["id"],
+                    target="called",
+                    actor_id=actor_id,
+                    actor_role=actor_role,
+                    department_id=department_id,
+                )
+            except ValueError:
+                continue  # Cancelled by staff a moment ago: call the next one.
+        return None
+
+    async def missed_visits(
+        self, *, hospital_id: UUID, department_id: UUID | None = None
+    ) -> list[dict[str, Any]]:
+        """Patients who were called and not there, oldest miss first, waiting for a recall."""
+        result = await self.connection.execute(
+            text(
+                "SELECT v.id AS visit_id, v.department_id, v.token_label, v.urgency, "
+                "v.age_years, p.sex, v.skip_count, v.skipped_at, v.queued_at, "
+                "cs.data AS case_sheet_data FROM visits v JOIN patients p "
+                "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
+                "LEFT JOIN case_sheets cs ON cs.hospital_id = v.hospital_id "
+                "AND cs.visit_id = v.id WHERE v.hospital_id = :hospital_id "
+                "AND v.status = 'skipped' AND (CAST(:department_id AS uuid) IS NULL "
+                "OR v.department_id = CAST(:department_id AS uuid)) "
+                "ORDER BY v.skipped_at, v.id LIMIT 100"
+            ),
+            {"hospital_id": hospital_id, "department_id": department_id},
+        )
+        rows = [dict(row) for row in result.mappings().all()]
+        for row in rows:
+            row["case_sheet_data"] = decrypt_case_sheet(
+                row.get("case_sheet_data"), row["visit_id"], self.settings
+            )
+        return rows
+
+    async def visit_events(self, *, hospital_id: UUID, visit_id: UUID) -> list[dict[str, Any]]:
+        """The visit's queue timeline, oldest first, with the staff member's name and role."""
+        result = await self.connection.execute(
+            text(
+                "SELECT e.from_status, e.to_status, e.actor_type, e.reason, e.created_at, "
+                "u.name AS actor_name, u.role AS actor_role FROM visit_events e "
+                "LEFT JOIN users u ON u.hospital_id = e.hospital_id AND u.id = e.actor_id "
+                "WHERE e.hospital_id = :hospital_id AND e.visit_id = :visit_id "
+                "ORDER BY e.created_at, e.id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        return [dict(row) for row in result.mappings().all()]
 
 
 def decrypt_case_sheet(stored: Any, visit_id: UUID, settings: Settings) -> dict[str, Any] | None:
