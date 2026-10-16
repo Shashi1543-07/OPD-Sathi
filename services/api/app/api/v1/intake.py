@@ -2,8 +2,11 @@
 
 import asyncio
 import json
+import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import structlog
@@ -184,6 +187,55 @@ def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
 
 def _session_key(hospital_id: UUID, visit_id: UUID) -> str:
     return f"osa:intake:{hospital_id}:{visit_id}"
+
+
+# A patient session changes its visit only before the token is issued.
+_REGISTRATION_STATES = frozenset({"registering", "awaiting_confirmation"})
+# What a session keeps after confirmation (R12): enough to end it, ask for help or rebuild the
+# receipt from the database, but none of the answers.
+_CONFIRMED_SESSION_KEYS = ("visit_id", "kiosk_id", "channel", "language", "assisted", "nurse_id")
+_SESSION_LOCK_SECONDS = 20
+_SESSION_LOCK_WAIT_SECONDS = 8.0
+_RELEASE_SESSION_LOCK = (
+    "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end "
+    "return 0"
+)
+
+
+def _require_registering(context: dict[str, Any]) -> None:
+    """Answers are fixed once the patient confirms the summary: the visit is in the queue."""
+    if context.get("status") not in _REGISTRATION_STATES:
+        raise _error(
+            409,
+            "SESSION_COMPLETE",
+            "Already checked in",
+            "Your token has been issued. Please tell the desk or the doctor about any change.",
+        )
+
+
+@asynccontextmanager
+async def _session_lock(request: Request, hospital_id: UUID, visit_id: UUID) -> AsyncIterator[None]:
+    """One interview change at a time per session.
+
+    A second tap, or a retry on a slow network, waits for the first request and then sees its
+    result, instead of applying the same answer twice.
+    """
+    redis = request.app.state.redis_state
+    key = f"{_session_key(hospital_id, visit_id)}:lock"
+    owner = secrets.token_urlsafe(16)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _SESSION_LOCK_WAIT_SECONDS
+    while not await redis.set(key, owner, nx=True, ex=_SESSION_LOCK_SECONDS):
+        if loop.time() >= deadline:
+            raise _error(409, "SESSION_BUSY", "Still saving", "Please wait a moment and try again.")
+        await asyncio.sleep(0.05)
+    try:
+        yield
+    finally:
+        try:
+            await redis.eval(_RELEASE_SESSION_LOCK, 1, key, owner)
+        except RedisError:
+            pass  # The lock expires by itself.
 
 
 async def _hospital_ayurveda_enabled(request: Request, hospital_id: UUID) -> bool:
@@ -1025,6 +1077,9 @@ _CHECKIN_WINDOW_SECONDS = 600
 _CHECKIN_SESSIONS_PER_CLIENT = 6
 # All phones together, per check-in point, in ten minutes.
 _CHECKIN_SESSIONS_PER_POINT = 150
+# "Call staff" presses per visit in ten minutes; each one rings the staff board.
+_HELP_REQUESTS_PER_VISIT = 5
+_HELP_WINDOW_SECONDS = 600
 
 
 async def _rate_limit(
@@ -2049,9 +2104,19 @@ async def get_next_question(
     principal: Annotated[dict[str, Any], Depends(require_patient())],
 ) -> dict[str, Any]:
     hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=True)
-    state = _read_state(
-        await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
-    )
+    async with _session_lock(request, hospital_id, visit_id):
+        state = _read_state(
+            await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
+        )
+        return await _current_interview(
+            request, hospital_id=hospital_id, visit_id=visit_id, state=state
+        )
+
+
+async def _current_interview(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, state: dict[str, Any]
+) -> dict[str, Any]:
+    """Where the interview stands: the next question, or the summary once all are answered."""
     if state.get("phase") == "summary":
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
@@ -2075,6 +2140,18 @@ async def get_next_question(
     )
 
 
+def _already_answered(state: dict[str, Any], question_id: str) -> bool:
+    """Whether this question was answered and the interview has already moved past it."""
+    interview = state.get("interview")
+    if state.get("phase") not in {"interview", "summary"} or not isinstance(interview, dict):
+        return False
+    current = InterviewState.model_validate(interview)
+    if question_id not in current.asked:
+        return False
+    upcoming = next_question(current)
+    return upcoming is None or upcoming.id != question_id
+
+
 @router.post("/sessions/{visit_id}/interview/answers")
 async def submit_answer(
     visit_id: UUID,
@@ -2082,82 +2159,18 @@ async def submit_answer(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_patient())],
 ) -> dict[str, Any]:
-    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=True)
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=True
+    )
+    _require_registering(context)
     _validate_answer_size(payload.answer)
     idempotency_body = payload.model_dump()
 
     async def operation() -> dict[str, Any]:
-        key = _session_key(hospital_id, visit_id)
-        state = _read_state(await request.app.state.redis_state.get(key))
-        if state.get("phase") != "interview":
-            raise _error(
-                409,
-                "FLOW_OUT_OF_ORDER",
-                "Please continue in order",
-                "Return to the current screen.",
+        async with _session_lock(request, hospital_id, visit_id):
+            return await _save_answer(
+                request, hospital_id=hospital_id, visit_id=visit_id, payload=payload
             )
-        previous_state = InterviewState.model_validate(state["interview"])
-        try:
-            next_state = apply_answer(
-                previous_state,
-                payload.question_id,
-                payload.answer,
-                skip=payload.skip,
-            )
-        except InterviewValidationError as exc:
-            raise _error(422, "VALIDATION_FAILED", "Answer not accepted", str(exc)) from exc
-        raw_answer = None if payload.skip or payload.answer is None else str(payload.answer)
-        turn_index = _next_turn_index(state, next_state)
-        alerts: list[dict[str, Any]] = []
-        async with request.app.state.engine.begin() as connection:
-            await set_hospital_scope(connection, hospital_id)
-            await InterviewTurnRepository(connection, request.app.state.settings).add(
-                hospital_id=hospital_id,
-                visit_id=visit_id,
-                turn_index=turn_index,
-                question_id=payload.question_id,
-                input_mode=payload.input_mode,
-                text_original=raw_answer,
-            )
-            await _sync_pregnancy(
-                connection, hospital_id=hospital_id, visit_id=visit_id, interview_state=next_state
-            )
-            _, _, alerts = await _evaluate_visit(
-                connection,
-                hospital_id=hospital_id,
-                visit_id=visit_id,
-                answers=next_state.answers,
-                tile_ids=next_state.red_flag_ids,
-                request=request,
-            )
-        state["interview"] = next_state.model_dump(mode="json")
-        state.pop("ai_selected_question", None)
-        draft_followups_now = (
-            payload.question_id == _FOLLOWUP_TRIGGER
-            and isinstance(next_state.answers.get("chief_concern"), str)
-            and not state.get("followups_requested")
-            and await _followups_enabled(request, hospital_id)
-        )
-        if draft_followups_now:
-            state["followups_requested"] = True
-        await request.app.state.redis_state.set(
-            key,
-            json.dumps(state, separators=(",", ":")),
-            ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
-        )
-        if draft_followups_now:
-            _schedule_followups(
-                request, hospital_id=hospital_id, visit_id=visit_id, interview_state=next_state
-            )
-        await _publish_alerts(
-            request.app.state.redis_state,
-            app_env=request.app.state.settings.app_env,
-            hospital_id=hospital_id,
-            alerts=alerts,
-        )
-        return await _question_response(
-            request, hospital_id=hospital_id, visit_id=visit_id, state=state
-        )
 
     return await IdempotencyStore(request.app.state.redis_state).execute(
         request,
@@ -2168,6 +2181,89 @@ async def submit_answer(
     )
 
 
+async def _save_answer(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, payload: AnswerPayload
+) -> dict[str, Any]:
+    key = _session_key(hospital_id, visit_id)
+    state = _read_state(await request.app.state.redis_state.get(key))
+    if _already_answered(state, payload.question_id):
+        # Saved by an earlier request whose response never arrived (the connection dropped)
+        # or by a second tap: show where the interview stands now instead of an error. The
+        # patient can still change the answer on the review screen.
+        return await _current_interview(
+            request, hospital_id=hospital_id, visit_id=visit_id, state=state
+        )
+    if state.get("phase") != "interview":
+        raise _error(
+            409,
+            "FLOW_OUT_OF_ORDER",
+            "Please continue in order",
+            "Return to the current screen.",
+        )
+    previous_state = InterviewState.model_validate(state["interview"])
+    try:
+        next_state = apply_answer(
+            previous_state,
+            payload.question_id,
+            payload.answer,
+            skip=payload.skip,
+        )
+    except InterviewValidationError as exc:
+        raise _error(422, "VALIDATION_FAILED", "Answer not accepted", str(exc)) from exc
+    raw_answer = None if payload.skip or payload.answer is None else str(payload.answer)
+    turn_index = _next_turn_index(state, next_state)
+    alerts: list[dict[str, Any]] = []
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await InterviewTurnRepository(connection, request.app.state.settings).add(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            turn_index=turn_index,
+            question_id=payload.question_id,
+            input_mode=payload.input_mode,
+            text_original=raw_answer,
+        )
+        await _sync_pregnancy(
+            connection, hospital_id=hospital_id, visit_id=visit_id, interview_state=next_state
+        )
+        _, _, alerts = await _evaluate_visit(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            answers=next_state.answers,
+            tile_ids=next_state.red_flag_ids,
+            request=request,
+        )
+    state["interview"] = next_state.model_dump(mode="json")
+    state.pop("ai_selected_question", None)
+    draft_followups_now = (
+        payload.question_id == _FOLLOWUP_TRIGGER
+        and isinstance(next_state.answers.get("chief_concern"), str)
+        and not state.get("followups_requested")
+        and await _followups_enabled(request, hospital_id)
+    )
+    if draft_followups_now:
+        state["followups_requested"] = True
+    await request.app.state.redis_state.set(
+        key,
+        json.dumps(state, separators=(",", ":")),
+        ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+    )
+    if draft_followups_now:
+        _schedule_followups(
+            request, hospital_id=hospital_id, visit_id=visit_id, interview_state=next_state
+        )
+    await _publish_alerts(
+        request.app.state.redis_state,
+        app_env=request.app.state.settings.app_env,
+        hospital_id=hospital_id,
+        alerts=alerts,
+    )
+    return await _question_response(
+        request, hospital_id=hospital_id, visit_id=visit_id, state=state
+    )
+
+
 @router.patch("/sessions/{visit_id}/interview/answers")
 async def correct_interview_answer(
     visit_id: UUID,
@@ -2175,12 +2271,26 @@ async def correct_interview_answer(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_patient())],
 ) -> dict[str, Any]:
-    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=True)
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=True
+    )
+    # The database decides, not the session: a confirmation whose session update was lost
+    # must not reopen the answers of a patient who is already in the queue.
+    _require_registering(context)
     if payload.skip or payload.answer is None:
         raise _error(
             422, "VALIDATION_FAILED", "Answer not accepted", "Enter an answer to continue."
         )
     _validate_answer_size(payload.answer)
+    async with _session_lock(request, hospital_id, visit_id):
+        return await _apply_correction(
+            request, hospital_id=hospital_id, visit_id=visit_id, payload=payload
+        )
+
+
+async def _apply_correction(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, payload: AnswerPayload
+) -> dict[str, Any]:
     key = _session_key(hospital_id, visit_id)
     state = _read_state(await request.app.state.redis_state.get(key))
     if state.get("phase") not in {"interview", "summary"}:
@@ -2281,7 +2391,17 @@ async def go_back_one_question(
     Answers after it are not affected; going back to the main problem re-plans the
     symptom questions once it is answered again.
     """
-    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=True)
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=True
+    )
+    _require_registering(context)
+    async with _session_lock(request, hospital_id, visit_id):
+        return await _undo_last_answer(request, hospital_id=hospital_id, visit_id=visit_id)
+
+
+async def _undo_last_answer(
+    request: Request, *, hospital_id: UUID, visit_id: UUID
+) -> dict[str, Any]:
     key = _session_key(hospital_id, visit_id)
     state = _read_state(await request.app.state.redis_state.get(key))
     if state.get("phase") != "interview":
@@ -2391,8 +2511,27 @@ async def request_staff_help(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_patient())],
 ) -> dict[str, bool]:
-    """The patient pressed "Call staff": raise an acknowledgeable alert on the staff board."""
-    hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=False)
+    """The patient pressed "Call staff": raise an acknowledgeable alert on the staff board.
+
+    Each press re-opens the visit's one help alert and rings the board, so presses are limited
+    per visit (a script holding a phone session cannot keep the board ringing), and a visit
+    that has finished cannot call staff any more.
+    """
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=False
+    )
+    if context.get("status") in {"done", "no_show"}:
+        raise _error(
+            409, "SESSION_COMPLETE", "Visit finished", "Please ask at the registration desk."
+        )
+    settings = request.app.state.settings
+    await _rate_limit(
+        request,
+        key=f"osa:{settings.app_env}:rl:patient-help:{visit_id}",
+        limit=_HELP_REQUESTS_PER_VISIT,
+        window_seconds=_HELP_WINDOW_SECONDS,
+        detail="Staff have been asked to come to you. Please wait, or go to the desk.",
+    )
     try:
         raw_state = await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
         channel = json.loads(raw_state).get("channel") if raw_state else None
@@ -2605,14 +2744,18 @@ async def _queue_receipt(
         # The OPD card (registration number and PIN) to bring to the next visit.
         "opd_card": opd_card,
     }
-    state["phase"] = "confirmed"
-    state["queue"] = receipt
+    # The session keeps only what ending it or calling staff needs. The answers, the status
+    # link and the card PIN leave Redis: the database holds them, and a repeated confirmation
+    # rebuilds this receipt from it.
+    confirmed = {key: state[key] for key in _CONFIRMED_SESSION_KEYS if key in state}
+    confirmed["phase"] = "confirmed"
     try:
         await request.app.state.redis_state.set(
             _session_key(hospital_id, visit_id),
-            json.dumps(state, separators=(",", ":")),
+            json.dumps(confirmed, separators=(",", ":")),
             ex=settings.patient_session_hours * _SESSION_TTL_FACTOR,
         )
+        await request.app.state.redis_state.delete(_followup_key(hospital_id, visit_id))
     except RedisError:
         pass  # The database holds the confirmation; a repeat request rebuilds this receipt.
     return receipt
@@ -2691,10 +2834,8 @@ async def confirm_summary(
     state = _read_state(
         await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
     )
-    if state.get("phase") == "confirmed" and isinstance(state.get("queue"), dict):
-        return cast(dict[str, Any], state["queue"])
-    # The database, not the session, records a confirmation: when an earlier attempt
-    # committed but its session update was lost, answer with the token it issued.
+    # The database, not the session, records a confirmation: a repeated request, or one whose
+    # earlier attempt committed while its session update was lost, gets the token it issued.
     existing = await _confirmed_receipt(
         request, hospital_id=hospital_id, visit_id=visit_id, state=state
     )
@@ -3051,17 +3192,22 @@ async def cancel_session(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_role("patient", "kiosk"))],
 ) -> Response:
+    """End a check-in that did not finish: the patient quit, or left the kiosk idle.
+
+    A visit that already has a token is not cancelled here. The patient is in the queue, and
+    only staff take a patient out of it (with the queue's own timeline entry), so a kiosk reset
+    or a stray request after confirmation never costs a patient their place.
+    """
     hospital_id, subject_id = _identity(principal)
-    key = _session_key(hospital_id, visit_id)
-    state = _read_state(await request.app.state.redis_state.get(key))
     role = principal.get("role")
+    key = _session_key(hospital_id, visit_id)
     if role == "patient":
-        if subject_id != visit_id:
-            raise _error(
-                404, "NOT_FOUND", "Session not found", "This intake session is unavailable."
-            )
+        # Who is asking is checked first, so a refusal says nothing about other visits.
+        await _authorized_visit(request, visit_id, principal, consent_required=False)
     elif role == "kiosk":
-        if state.get("kiosk_id") != str(subject_id):
+        # A kiosk ends only a session it started, as its session state records.
+        raw = await request.app.state.redis_state.get(key)
+        if raw is None or _read_state(raw).get("kiosk_id") != str(subject_id):
             raise _error(
                 404, "NOT_FOUND", "Session not found", "This intake session is unavailable."
             )
@@ -3069,8 +3215,35 @@ async def cancel_session(
         raise _error(403, "FORBIDDEN", "Permission denied", "This session cannot be ended here.")
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        await IntakeRepository(connection, request.app.state.settings).set_visit_status(
+        previous = await IntakeRepository(connection, request.app.state.settings).set_visit_status(
             hospital_id=hospital_id, visit_id=visit_id, status="cancelled"
+        )
+        if previous is not None:
+            await QueueRepository(connection, request.app.state.settings).record_event(
+                hospital_id=hospital_id,
+                visit_id=visit_id,
+                from_status=previous,
+                to_status="cancelled",
+                actor_type="patient",
+                reason="session_ended",
+            )
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="patient" if role == "patient" else "kiosk",
+                actor_id=visit_id if role == "patient" else subject_id,
+                action="intake.session.cancelled",
+                resource_type="visit",
+                resource_id=visit_id,
+                meta={"from": previous},
+            )
+    if previous is None:
+        raise _error(
+            409,
+            "SESSION_COMPLETE",
+            "Already checked in",
+            "This visit already has a token. Please ask at the registration desk to cancel it.",
         )
     await request.app.state.redis_state.delete(key)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

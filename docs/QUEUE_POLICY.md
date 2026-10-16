@@ -17,7 +17,9 @@ real patients use the system. Triage weights are marked `draft_needs_clinician_r
 
 The server alone computes urgency and position. A patient cannot change their answers after
 confirming their summary, cannot see anyone else's position, and their phone or the kiosk never
-sends a score.
+sends a score. Once a token is issued, only staff can take the patient out of the queue: ending
+the kiosk or phone session (Quit, or the kiosk's idle reset) cancels only a check-in that never
+got a token.
 
 **Self-reported danger signs.** A patient who taps a danger sign (chest pain, breathing
 difficulty, heavy bleeding and so on) is placed first as urgent, and the nurse is alerted at
@@ -93,7 +95,8 @@ reported as not found. Administrators act across the hospital.
 ## 4. Records
 
 - **Visit timeline** (`visit_events`): every queue change with its previous and new state, who
-  made it (staff member, the patient, or the system) and when. The application can add and read
+  made it (staff member, the patient, or the system) and when. A check-in the patient left
+  before getting a token is recorded too (`cancelled`, by the patient, reason `session_ended`). The application can add and read
   entries but never change or delete them. Doctors see it on the consultation page; it is
   available to staff of the visit's department (`GET /visits/{id}/queue-events`).
 - **Audit log**: `queue.called`, `queue.in_consult`, `queue.done`, `queue.skipped`,
@@ -111,6 +114,7 @@ reported as not found. Administrators act across the hospital.
 | No-show only after a missed call; day close-out labels | State machine; close-out mapping | `test_only_a_missed_patient_becomes_a_no_show`, `test_end_of_day_cancels_waiting_visits_and_closes_missed_calls` |
 | A tapped danger sign is marked until a nurse confirms it | Unacknowledged danger-tile alert on the visit | `test_a_tapped_danger_sign_is_marked_until_a_nurse_confirms_it` |
 | A double tap does not repeat an action | `Idempotency-Key` on every queue action | Existing idempotency tests |
+| A patient's own session never takes them out of the queue or changes confirmed answers | Registration steps change only a visit without a token; answers are checked against the database, not the session | `test_session_safety.py::test_ending_a_session_after_the_token_leaves_the_patient_in_the_queue`, `::test_answers_stay_fixed_after_confirmation_even_if_the_session_lags` |
 
 Integration tests are in `services/api/tests/integration/test_queue_workflow.py`; the state
 machine is unit-tested in `tests/unit/test_queue_state.py`; screens are covered by

@@ -634,7 +634,15 @@ export const intake = {
         body: photo,
       },
     );
-    if (!response.ok) throw new Error("Prescription could not be read");
+    if (!response.ok) {
+      // 413: too large; 415: not a photo; anything else: could not be read.
+      const problem = (await response.json().catch(() => ({}))) as { code?: string };
+      throw new IntakeRequestError(
+        problem.code ?? "REQUEST_FAILED",
+        "Prescription could not be read",
+        response.status,
+      );
+    }
     return (
       (await response.json()) as {
         medicines: { name: string; dose: string; how_often: string }[];

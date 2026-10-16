@@ -189,6 +189,17 @@ async def speak_prompt(
 
 
 _IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
+# The kiosk sends a ~1280 px JPEG (about 200 kB); the API refuses any request over 1 MiB.
+MAX_IMAGE_BYTES = 1_000_000
+
+
+def _looks_like(content_type: str, image: bytes) -> bool:
+    """Whether the file starts with the signature of the image type it claims to be."""
+    if content_type == "image/jpeg":
+        return image.startswith(b"\xff\xd8\xff")
+    if content_type == "image/png":
+        return image.startswith(b"\x89PNG\r\n\x1a\n")
+    return image[:4] == b"RIFF" and image[8:12] == b"WEBP"
 
 
 @router.post("/sessions/{visit_id}/prescription-photo")
@@ -197,19 +208,31 @@ async def read_prescription_photo(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_patient())],
 ) -> dict[str, Any]:
-    """Read medicine names from an old prescription photo; the image is never stored."""
+    """Read medicine names from an old prescription photo; the image is never stored.
+
+    Only a JPEG, PNG or WebP photo whose contents match its declared type is read, so a PDF
+    or any other file renamed as a photo is refused before it reaches the model.
+    """
     _, state = await _session_state(request, visit_id, principal)
     if state.get("phase") not in {"interview", "summary"}:
         raise _error(409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Finish the step.")
-    provider = request.app.state.llm_provider
-    if not isinstance(provider, GeminiProvider):
-        raise _error(503, "AI_UNAVAILABLE", "Scanning unavailable", "Please say or type it.")
-    content_type = request.headers.get("content-type", "").lower().split(";")[0]
+    content_type = request.headers.get("content-type", "").lower().split(";")[0].strip()
     if content_type not in _IMAGE_TYPES:
-        raise _error(415, "UNSUPPORTED_IMAGE", "Unsupported photo", "Take the photo again.")
+        raise _error(
+            415, "UNSUPPORTED_IMAGE", "Unsupported photo", "Take a photo of the prescription."
+        )
     image = await request.body()
     if not image:
         raise _error(400, "EMPTY_IMAGE", "No photo", "Take the photo again.")
+    if len(image) > MAX_IMAGE_BYTES:
+        raise _error(413, "IMAGE_TOO_LARGE", "Photo too large", "Take the photo again.")
+    if not _looks_like(content_type, image):
+        raise _error(
+            415, "UNSUPPORTED_IMAGE", "Not a photo", "This file is not a photo. Take a photo."
+        )
+    provider = request.app.state.llm_provider
+    if not isinstance(provider, GeminiProvider):
+        raise _error(503, "AI_UNAVAILABLE", "Scanning unavailable", "Please say or type it.")
     settings = request.app.state.settings
     limit = await check_rate_limit(
         request.app.state.redis_state,

@@ -4,7 +4,7 @@ COMPOSE ?= docker compose
 WEB_DIR := apps/web
 API_DIR := services/api
 
-.PHONY: up down api worker web migrate seed seed-bulk demo-seed demo-data clear-demo-data demo-history clear-demo-history clear-bulk types lint fmt test test-unit test-int e2e eval eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live prompts-audio prompts-audio-check simulate-queue demo-ratelimit load load-test chaos chaos-isolated scan sbom backup restore retention retention-apply screenshots
+.PHONY: up down api worker web migrate seed seed-bulk demo-seed demo-data clear-demo-data demo-history clear-demo-history clear-bulk types lint fmt test test-unit test-int e2e eval eval-interview eval-redflags eval-routing eval-stt eval-extraction eval-adversarial eval-redflags-llm eval-live prompts-audio prompts-audio-check simulate-queue demo-ratelimit load load-test load-smoke chaos chaos-isolated scan sbom backup restore retention retention-apply screenshots
 
 up:
 	$(COMPOSE) up -d postgres redis
@@ -108,6 +108,10 @@ load: load-test
 
 load-test:
 	k6 run infra/k6/smoke.js
+
+# 40 synthetic patients through the whole check-in on the running stack (.env settings).
+load-smoke:
+	LOAD_SMOKE_URL=$(or $(LOAD_SMOKE_URL),http://127.0.0.1:5173/api) pytest $(API_DIR)/tests/perf -s
 
 chaos:
 	PYTHONPATH=$(API_DIR) $(PYTHON) scripts/chaos_smoke.py

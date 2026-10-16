@@ -415,3 +415,52 @@ describe("Phase 7.2 queue board", () => {
     );
   });
 });
+
+describe("Phase 5 live board connection", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("renews an expired sign-in before reconnecting the live board", async () => {
+    const sockets: FakeSocket[] = [];
+    class FakeSocket {
+      onopen?: () => void;
+      onmessage?: (event: { data: string }) => void;
+      onclose?: (event: { code: number }) => void;
+      onerror?: () => void;
+      sent: string[] = [];
+      constructor(readonly url: URL) {
+        sockets.push(this);
+      }
+      send(data: string) {
+        this.sent.push(data);
+      }
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", FakeSocket);
+    let token = "first-sign-in";
+    vi.spyOn(staffAuth, "accessToken", "get").mockImplementation(() => token);
+    const refresh = vi.spyOn(staffAuth, "refresh").mockImplementation(async () => {
+      token = "renewed-sign-in";
+      return null;
+    });
+    vi.spyOn(staffAuth, "request").mockImplementation(async (path) =>
+      path.startsWith("/alerts")
+        ? response({ items: [] })
+        : response({ items: [], departments: [departments[0]], next_cursor: null }),
+    );
+    const boards = () => sockets.filter((socket) => !socket.url.searchParams.has("alerts_only"));
+
+    renderBoard();
+    await waitFor(() => expect(boards()).toHaveLength(1));
+    const [first] = boards();
+    first.onopen?.();
+    expect(JSON.parse(first.sent[0])).toEqual({ type: "auth", token: "first-sign-in" });
+
+    // The server closes the socket when the 10-minute sign-in runs out.
+    first.onclose?.({ code: 4401 });
+    await waitFor(() => expect(boards()).toHaveLength(2));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    const renewed = boards()[1];
+    renewed.onopen?.();
+    expect(JSON.parse(renewed.sent[0])).toEqual({ type: "auth", token: "renewed-sign-in" });
+  });
+});

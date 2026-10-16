@@ -67,12 +67,22 @@ class MemoryRedis:
     async def get(self, key: str) -> str | None:
         return self.values.get(key)
 
-    async def set(self, key: str, value: str, **_kwargs: object) -> None:
+    async def set(self, key: str, value: str, *, nx: bool = False, **_kwargs: object) -> bool:
+        if nx and key in self.values:
+            return False
         self.values[key] = value
+        return True
 
     async def delete(self, key: str) -> None:
         self.deleted.append(key)
         self.values.pop(key, None)
+
+    async def eval(self, _script: str, _count: int, key: str, owner: str) -> int:
+        """Release a session lock the way the Lua script does: only if still held by owner."""
+        if self.values.get(key) == owner:
+            self.values.pop(key)
+            return 1
+        return 0
 
     async def publish(self, *_args: object) -> None:
         return None
@@ -511,7 +521,7 @@ async def test_interview_answer_route_validates_records_and_advances_idempotentl
             return await operation()
 
     async def authorized(*_args: object, **_kwargs: object) -> tuple[object, object]:
-        return hospital_id, {}
+        return hospital_id, {"status": "registering"}
 
     async def scope(*_args: object, **_kwargs: object) -> None:
         return None
@@ -598,7 +608,7 @@ async def test_answer_correction_route_updates_summary_and_rejects_unasked_quest
             saved.append(kwargs)
 
     async def authorized(*_args: object, **_kwargs: object) -> tuple[object, object]:
-        return hospital_id, {}
+        return hospital_id, {"status": "awaiting_confirmation"}
 
     async def scope(*_args: object, **_kwargs: object) -> None:
         return None
@@ -643,8 +653,9 @@ async def test_answer_correction_route_updates_summary_and_rejects_unasked_quest
         def __init__(self, *_args: object) -> None:
             pass
 
-        async def set_visit_status(self, **kwargs: object) -> None:
+        async def set_visit_status(self, **kwargs: object) -> str:
             statuses.append(str(kwargs["status"]))
+            return "awaiting_confirmation"
 
     monkeypatch.setattr(intake, "IntakeRepository", Intake)
     reopened = await intake.correct_interview_answer(
@@ -697,7 +708,7 @@ async def test_back_undoes_one_answer_and_refills_it(monkeypatch: pytest.MonkeyP
     )
 
     async def authorized(*_args: object, **_kwargs: object) -> tuple[object, object]:
-        return hospital_id, {}
+        return hospital_id, {"status": "registering"}
 
     async def scope(*_args: object, **_kwargs: object) -> None:
         return None
@@ -743,11 +754,16 @@ async def test_intake_read_routes_and_patient_cancellation_enforce_session_owner
         def __init__(self, *_args: object) -> None:
             pass
 
-        async def set_visit_status(self, **kwargs: object) -> None:
+        async def set_visit_status(self, **kwargs: object) -> str:
             cancelled.append(kwargs)
+            return "registering"
 
-    async def authorized(*_args: object, **_kwargs: object) -> tuple[object, object]:
-        return hospital_id, {"language": "en"}
+    async def authorized(
+        _request: object, visit: object, principal: dict[str, str], **_kwargs: object
+    ) -> tuple[object, object]:
+        if principal["sub"] != str(visit):
+            raise ApiProblemError(status=404, code="NOT_FOUND", title="Not found", detail="")
+        return hospital_id, {"language": "en", "status": "registering"}
 
     async def scope(*_args: object, **_kwargs: object) -> None:
         return None

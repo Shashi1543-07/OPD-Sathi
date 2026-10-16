@@ -44,6 +44,8 @@ router = APIRouter(tags=["queue"])
 STAFF_ROLES = ("nurse", "doctor", "admin")
 RED_FLAG_REASONS = {rule.id: rule.reason_en for rule in RULES}
 _CHANNELS = {"device": "kiosk", "mobile": "phone"}
+# How often an open staff board re-sends overdue alerts and re-checks the account behind it.
+_SOCKET_REVIEW_SECONDS = 60.0
 # Alerts that do not come from a red-flag rule.
 _SPECIAL_ALERTS = {
     "PATIENT_HELP": "Patient asked for help",
@@ -1493,15 +1495,44 @@ async def staff_queue_socket(
             last_ping = time.monotonic()
             last_escalation = last_ping
             while True:
+                if time.time() >= claims["exp"]:
+                    # The sign-in expired: the board reconnects with a fresh token.
+                    await websocket.close(code=4401)
+                    return
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
                 if message and message.get("data"):
                     await websocket.send_text(str(message["data"]))
                 if time.monotonic() - last_ping >= 25:
                     await websocket.send_json({"type": "ping"})
                     last_ping = time.monotonic()
-                if time.monotonic() - last_escalation >= 60:
+                if time.monotonic() - last_escalation >= _SOCKET_REVIEW_SECONDS:
                     async with websocket.app.state.engine.begin() as connection:
                         await set_hospital_scope(connection, hospital_id)
+                        # An account deactivated or moved to another department while its
+                        # board is open stops receiving this department's patients.
+                        account = (
+                            (
+                                await connection.execute(
+                                    text(
+                                        "SELECT is_active, department_id FROM users "
+                                        "WHERE hospital_id = :hospital_id AND id = :actor_id"
+                                    ),
+                                    {"hospital_id": hospital_id, "actor_id": actor_id},
+                                )
+                            )
+                            .mappings()
+                            .first()
+                        )
+                        if (
+                            account is None
+                            or account["is_active"] is not True
+                            or (
+                                claims["role"] != "admin"
+                                and account["department_id"] != department_id
+                            )
+                        ):
+                            await websocket.close(code=4403)
+                            return
                         overdue = await connection.execute(
                             text(
                                 "SELECT e.id, e.visit_id, e.rule_id, e.level, e.evidence "

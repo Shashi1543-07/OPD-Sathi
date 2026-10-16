@@ -1718,7 +1718,24 @@ class IntakeRepository:
                 },
             )
 
-    async def set_visit_status(self, *, hospital_id: UUID, visit_id: UUID, status: str) -> None:
+    async def set_visit_status(
+        self, *, hospital_id: UUID, visit_id: UUID, status: str
+    ) -> str | None:
+        """Move a visit between registration steps; returns its earlier status.
+
+        Only a visit without a token yet (registering or awaiting confirmation) changes here.
+        A confirmed visit is in the queue, where only the queue's state machine moves it, so a
+        patient session can never take a patient out of the queue. None: nothing changed.
+        """
+        previous = await self.connection.scalar(
+            text(
+                "SELECT status FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id "
+                "FOR UPDATE"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        if previous not in {"registering", "awaiting_confirmation"}:
+            return None
         await self.connection.execute(
             text(
                 "UPDATE visits SET status = :status "
@@ -1726,6 +1743,7 @@ class IntakeRepository:
             ),
             {"status": status, "hospital_id": hospital_id, "visit_id": visit_id},
         )
+        return str(previous)
 
 
 class DepartmentRepository:

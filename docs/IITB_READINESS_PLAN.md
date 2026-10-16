@@ -273,7 +273,7 @@ All changes are additive Alembic migrations with working downgrades; nothing is 
 | 0018 `patient_identity` (done) | Drop unique `uq_patients_hospital_phone_hmac`, add a non-unique index; `patients.mrn` (unique per hospital) and `patients.card_version`; `patient_number_counters` (per hospital and year, RLS); `visits.patient_link` (`card`/`staff`) and `visits.previous_visit_id` (tenant FK) | Returning patients, shared phones (D3) |
 | 0020 `interview_settings` (done) | `hospital_interview_settings.ayurveda_module` (RLS, audited changes) | Ayurveda history per hospital |
 | 0019 `queue_recall` (done) | `visits.status` allows `skipped`; `visits.called_by`, `skipped_at`, `recalled_at`, `skip_count`; `visit_events` table (RLS, insert/select only for the app role, insert for the worker); `hospital_queue_settings.call_grace_seconds` | Missed-patient workflow, audit history |
-| later | `documents` storage fields; consent purposes | Phase 4–5 |
+| later | `documents` storage fields; consent purposes | Phase 6 (both moved from Phase 4–5) |
 
 New/changed endpoints (all server-authorised). Built: `GET /intake/checkin/{code}` and
 `POST /intake/checkin/{code}/sessions` (public, rate-limited), `GET`/`POST /admin/kiosks/{id}/checkin-link`,
@@ -330,6 +330,17 @@ and network profile can actually be read.
   and document what a hospital deployment would still need (DPO, notice in all languages, retention
   schedule, breach process, processor agreements with AI providers).
 
+*As built (Phase 5):* every route that names a record by id is probed as another hospital, another
+department and another patient's session, and must answer "not found" without changing anything
+(`test_access_isolation.py`; an inventory check fails when a new record route has no probe). The
+probes and the fifteen scenarios found eight defects, all fixed and listed in
+`docs/E2E_SCENARIOS.md`. Most serious: a patient or kiosk session could cancel a visit that already
+had a token, and a correction sent after a lost confirmation reply could reopen the interview and
+drop a queued patient back to `registering`. Patient sessions now change a visit only until its
+token is issued, checked against the database rather than the session. A staff board's live
+connection closes when its sign-in expires or the account is deactivated. Session data is cleared
+after submission (R12): the Redis session then keeps only the visit, kiosk, channel and language.
+
 ---
 
 ## 8. Test plan and acceptance criteria
@@ -367,6 +378,8 @@ and network profile can actually be read.
 7 skip and recall · 8 patient returns after being marked absent · 9 AI provider unavailable ·
 10 network interruption · 11 two doctors in conflict · 12 another patient's records ·
 13 another hospital's records · 14 invalid/oversized document · 15 simultaneous registrations.
+
+What each must do, the tests that show it, and the defects they found: `docs/E2E_SCENARIOS.md`.
 
 ## 11. Deferred (with reasons)
 
@@ -427,3 +440,14 @@ against the demo database (failed tests leave synthetic hospitals in the sign-in
 | 4.4 D10 answer corrections safe to retry | done | `repositories.py` (`next_correction_index`), `intake.py` | integration: fails before the fix with `uq_interview_turns_order`, passes after | Numbering comes from the stored turns under a per-visit lock |
 | 4.5 R6 documents | deferred to Phase 6 | — | — | Upload, preview and review need a storage adapter and migration; the phase went to the exit criterion and the AYUSH module first |
 | Phase 4 gate | green | — | API 888 passed / 1 skipped, core+domain coverage 96%; web 78; e2e 139 of 139 with 2 workers; PWA e2e; Lighthouse 89–91 (accessibility 100); ruff, mypy --strict, eslint, tsc, locales (1037 keys), contrast, prompt-audio check (24 new prompts), golden interviews 30/30 regenerated, red-flag/routing/extraction evaluations unchanged, case-sheet schema and API types regenerated, bandit, semgrep; migrations head→base→head | Entry bundle unchanged at 444.8 kB; staff strings chunk 156 kB |
+| 5.1 Every record route isolated by hospital, department and patient | done | `test_access_isolation.py`, `synthetic.py` (an Orthopaedics nurse) | 5 integration: a route inventory that fails when a route naming a record has no probe; 19 visit and alert routes as another hospital and another department; 9 admin routes as another hospital; 19 patient-session routes as another patient (same and other hospital) and as the kiosk; staff routes with a patient session; the audio socket; queue, register, alerts, lookup, audit log and live board show no other hospital's or department's patients | Every refusal is "not found", changes nothing and leaves no entry in the owner's audit trail. Found that the session `DELETE` answered another hospital's id with 410 (fixed in 5.2) |
+| 5.2 A patient or kiosk session cannot cancel a visit that has a token | done | `repositories.py` (`set_visit_status` changes only visits still registering), `intake.py` (`cancel_session`) | integration `test_session_safety.py` (failed before: 204 and the queued patient cancelled) | Reachable after a lost confirmation reply plus the kiosk's idle reset, or by anyone holding the phone's session for its two hours. Ending an unfinished check-in is now in the visit timeline (`session_ended`) and the audit log |
+| 5.3 Answers fixed after confirmation, checked against the database | done | `intake.py` (`_require_registering` on answers, corrections and Back) | integration (failed before: after a lost confirmation reply, a new main problem reopened the interview and set the queued visit back to `registering`, off the board) | `QUEUE_POLICY.md` already promised this; it was enforced only by the Redis session |
+| 5.4 Scenarios 5 and 10: an answer sent twice is saved once | done | `intake.py` (`_session_lock`, `_already_answered`, `_current_interview`), `KioskIntake.tsx`, locales (`connectionRetry`) | integration: retry after a lost reply, concurrent double tap, last answer replayed after the summary (failed before: 422 "answer does not match the current question", in English, and the kiosk stuck); 1 web unit | One change at a time per session (Redis lock, 20 s); the kiosk says "tap again, your answers are kept" instead of "Failed to fetch" |
+| 5.5 Scenario 14: only real photos of a sensible size reach the model | done | `speech.py` (signature must match the declared type, 1 MB limit, checks before the AI provider), `intake.ts`, `KioskIntake.tsx`, locales (`scanTooLarge`, `scanNotPhoto`) | integration: PDF, PDF named as a photo, empty, over the limit, over the request limit, a real photo, 5 per visit then 429 (failed before: the PDF reached the model); 1 web unit | The prescription photo is the only upload today; document upload (R6) adds its own cases in Phase 6 |
+| 5.6 "Call staff" limited; R12 session data cleared after submission | done | `intake.py` (`request_staff_help`, `_queue_receipt`, `confirm_summary`), `PRIVACY.md` | 2 integration (both failed before) | 5 presses per visit in 10 minutes, none after the visit finished. After confirmation Redis keeps only visit, kiosk, channel and language; the answers, status link, PIN and AI follow-up drafts leave Redis, and a repeated confirmation rebuilds the receipt from the database |
+| 5.7 An open staff board stops when its sign-in ends | done | `queue.py` (the staff socket re-checks the account every minute and closes at sign-in expiry), `StaffQueueBoard.tsx` (renews the sign-in on close code 4401) | integration: expiry → 4401, deactivation → 4403; 1 web unit (failed before) | A deactivated nurse's open screen kept receiving patients' red-flag words |
+| 5.8 The fifteen scenarios | done | `docs/E2E_SCENARIOS.md`, `test_scenarios.py` | 7 integration (3, 5 and 10, 8, 9 down and hanging, 14, 15); the others mapped to existing tests | 15 of 15 covered; 8 defects found, each with a test that failed before its fix |
+| 5.9 Load smoke | done | `tests/perf/test_load_smoke.py`, `make load-smoke` | On the running stack (Docker Desktop on this PC, gunicorn with 2 workers behind nginx, AI off): 40 patients arriving within 10 s finished in 14.1 s with 0 failed requests and every step's p95 at or under 107 ms (answers 105 ms, confirmation 86 ms). Stress at 150 patients in 10 s: 0 failed requests, every token unique and in order, answers p95 1.7–2.0 s, confirmation p95 3.0 s | A busy OPD sees well under one new patient per second; the smoke runs four a second. Confirmation is the slowest step because token numbers are issued one at a time per department |
+| 5.10 R9 consent purposes | moved to Phase 6 | — | — | Grouped with document upload (R6), which needs its own consent purpose |
+| Phase 5 gate | green | — | API 905 passed / 2 skipped (the load smoke skips without `LOAD_SMOKE_URL`), core+domain coverage 96%; web 81; e2e 139 of 139 with 2 workers; PWA e2e; Lighthouse 89–92 (accessibility 100); ruff, mypy --strict, eslint, tsc, locales (1040 keys), contrast, prompt-audio check, golden interviews, red-flag/routing/extraction/adversarial evaluations unchanged, case-sheet schema unchanged, API types regenerated (endpoint descriptions only), bandit, semgrep (327 rules, 0 findings); 10 of 10 live checks of the fixes on the rebuilt stack | No migration. Entry bundle 446.1 kB (+1.3 kB, three new strings in three languages); staff chunk 156.5 kB. The demo database was still at 0019 and was migrated to 0020 before the rebuilt API went live |
