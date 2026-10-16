@@ -46,6 +46,16 @@ class FakeConnection:
             return FakeResult(values=self.existing)
         return FakeResult()
 
+    async def scalar(self, query: object, parameters: object = None) -> object:
+        sql = str(query)
+        if "INSERT INTO red_flag_events" in sql:
+            # Red-flag events are inserted with RETURNING id; a new row returns its id.
+            self.executed.append((query, parameters))
+            return uuid4()
+        if "hospital_ai_settings" in sql:
+            return False  # This synthetic hospital has AI switched off.
+        return None
+
 
 class MemoryRedis:
     def __init__(self, initial: dict[str, object] | None = None):

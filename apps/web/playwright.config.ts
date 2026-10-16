@@ -21,5 +21,8 @@ export default defineConfig({
     url: "http://127.0.0.1:4173/kiosk",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // Specs mock every API call they rely on. Point the /api proxy at a closed port so a
+    // request a spec forgot to mock fails fast, as in CI, instead of reaching a local API.
+    env: { VITE_DEV_API_TARGET: "http://127.0.0.1:9" },
   },
 });

@@ -80,6 +80,50 @@ const sheetResponse = (version: number, caseSheet: object = sheet) =>
   );
 const transcriptResponse = (turns: object[] = []) =>
   new Response(JSON.stringify({ visit_id: "visit-1", turns }), { status: 200 });
+const emptyHistory = {
+  visit_id: "visit-1",
+  opd_number: "26-000007",
+  linked_by: null,
+  follow_up_of: null,
+  previous_visits: [],
+  known_allergies: [],
+  known_medications: [],
+  known_conditions: [],
+  no_known_allergies_reported: null,
+};
+const historyResponse = (history: object = emptyHistory) =>
+  new Response(JSON.stringify(history), { status: 200 });
+
+const noEvents = { visit_id: "visit-1", events: [] };
+
+/**
+ * Answer the consultation's requests in order. The earlier-visits panel and the queue
+ * timeline load on their own and get their own answers, so they never take a response
+ * meant for the case sheet.
+ */
+function mockRequests(
+  responses: Response[],
+  history: object | (() => Response) = emptyHistory,
+  events: object = noEvents,
+) {
+  const queue = [...responses];
+  const request = vi.spyOn(staffAuth, "request").mockImplementation((path) =>
+    Promise.resolve(
+      path.endsWith("/history")
+        ? typeof history === "function"
+          ? history()
+          : historyResponse(history)
+        : path.endsWith("/queue-events")
+          ? new Response(JSON.stringify(events), { status: 200 })
+          : (queue.shift() ?? new Response(null, { status: 500 })),
+    ),
+  );
+  const calls = () =>
+    request.mock.calls.filter(
+      ([path]) => !String(path).endsWith("/history") && !String(path).endsWith("/queue-events"),
+    );
+  return { request, calls };
+}
 
 afterEach(() => {
   cleanup();
@@ -133,22 +177,20 @@ describe("Phase 7.4 doctor consultation", () => {
   });
 
   it("opens on a focused overview and keeps the full record in the other sections", async () => {
-    const request = vi.spyOn(staffAuth, "request");
-    request
-      .mockResolvedValueOnce(sheetResponse(3))
-      .mockResolvedValueOnce(
-        transcriptResponse([
-          {
-            turn_index: 1,
-            question_id: "chief_complaint",
-            input_mode: "text",
-            text_original: "Synthetic headache since two days, worse in the evening",
-            text_english: null,
-            stt_confidence: null,
-          },
-        ]),
-      )
-      .mockResolvedValueOnce(sheetResponse(4));
+    const { calls } = mockRequests([
+      sheetResponse(3),
+      transcriptResponse([
+        {
+          turn_index: 1,
+          question_id: "chief_complaint",
+          input_mode: "text",
+          text_original: "Synthetic headache since two days, worse in the evening",
+          text_english: null,
+          stt_confidence: null,
+        },
+      ]),
+      sheetResponse(4),
+    ]);
 
     renderConsult();
     expect(await screen.findByText("Synthetic headache")).toBeVisible();
@@ -182,37 +224,92 @@ describe("Phase 7.4 doctor consultation", () => {
     });
     await user.click(screen.getByRole("button", { name: "Save edit" }));
 
-    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
-    expect(request.mock.calls[2][0]).toBe("/visits/visit-1/case-sheet");
-    expect(request.mock.calls[2][1]).toMatchObject({
+    await waitFor(() => expect(calls()).toHaveLength(3));
+    expect(calls()[2][0]).toBe("/visits/visit-1/case-sheet");
+    expect(calls()[2][1]).toMatchObject({
       method: "PATCH",
       headers: {
         "Content-Type": "application/json-patch+json",
         "If-Match": '"3"',
       },
     });
-    expect(request.mock.calls[2][1]?.body).toContain(
-      "Synthetic severe headache",
+    expect(calls()[2][1]?.body).toContain("Synthetic severe headache");
+  });
+
+  it("keeps earlier visits in their own section, labelled by source", async () => {
+    mockRequests([sheetResponse(1), transcriptResponse()], {
+      ...emptyHistory,
+      linked_by: "card",
+      follow_up_of: "visit-0",
+      previous_visits: [
+        {
+          visit_id: "visit-0",
+          service_date: "2026-10-03",
+          department: "General Medicine",
+          status: "done",
+          token: "MED-004",
+          urgency: "routine",
+          chief_complaint: "Fever and cough",
+          ai_brief: "Three days of fever with dry cough.",
+          staff_edited: true,
+          red_flags: [],
+          conditions: ["Diabetes"],
+          medications: ["Metformin"],
+          allergies: ["Penicillin"],
+          no_known_allergies: false,
+        },
+      ],
+      known_allergies: [{ text: "Penicillin", last_reported: "2026-10-03", visits: 1 }],
+      known_medications: [{ text: "Metformin", last_reported: "2026-10-03", visits: 1 }],
+      known_conditions: [{ text: "Diabetes", last_reported: "2026-10-03", visits: 1 }],
+    });
+
+    renderConsult();
+    const tab = await screen.findByRole("tab", { name: /Previous visits/ });
+    await waitFor(() => expect(tab).toHaveTextContent("1"));
+    await userEvent.setup().click(tab);
+    expect(screen.getByText("Linked by the patient's OPD card")).toBeVisible();
+    expect(screen.getByText(/Follow-up of the visit on .*: Fever and cough/)).toBeVisible();
+    expect(screen.getByText("Penicillin")).toBeVisible();
+    expect(
+      screen.getByText("Patient-reported at earlier visits. Confirm with the patient today."),
+    ).toBeVisible();
+    expect(screen.getByText("AI draft")).toBeVisible();
+    expect(screen.getByText("Edited by staff")).toBeVisible();
+    // Today's interview stays in its own section.
+    expect(screen.queryByText("Synthetic headache")).toBeNull();
+  });
+
+  it("explains that earlier visits close with the visit", async () => {
+    mockRequests([sheetResponse(1), transcriptResponse()], () =>
+      new Response(JSON.stringify({ code: "HISTORY_CLOSED" }), { status: 403 }),
     );
+
+    renderConsult();
+    await userEvent.setup().click(await screen.findByRole("tab", { name: /Previous visits/ }));
+    expect(
+      await screen.findByText(
+        "Earlier visits are shown only while the patient is under your care today.",
+      ),
+    ).toBeVisible();
   });
 
   it("puts red flags first, as reported information to verify", async () => {
-    vi.spyOn(staffAuth, "request")
-      .mockResolvedValueOnce(
-        sheetResponse(1, {
-          ...sheet,
-          red_flags: [
-            {
-              id: "RF_HAEMOPTYSIS",
-              level: "urgent",
-              source: "rule",
-              evidence: "blood in phlegm",
-              reason_en: "Blood in phlegm reported",
-            },
-          ],
-        }),
-      )
-      .mockResolvedValueOnce(transcriptResponse());
+    mockRequests([
+      sheetResponse(1, {
+        ...sheet,
+        red_flags: [
+          {
+            id: "RF_HAEMOPTYSIS",
+            level: "urgent",
+            source: "rule",
+            evidence: "blood in phlegm",
+            reason_en: "Blood in phlegm reported",
+          },
+        ],
+      }),
+      transcriptResponse(),
+    ]);
 
     renderConsult();
     const flags = await screen.findByRole("region", { name: "Red flags — review required" });
@@ -224,9 +321,7 @@ describe("Phase 7.4 doctor consultation", () => {
   });
 
   it("moves between sections with the arrow keys", async () => {
-    vi.spyOn(staffAuth, "request")
-      .mockResolvedValueOnce(sheetResponse(1))
-      .mockResolvedValueOnce(transcriptResponse());
+    mockRequests([sheetResponse(1), transcriptResponse()]);
 
     renderConsult();
     const overview = await screen.findByRole("tab", { name: "Overview" });
@@ -243,10 +338,87 @@ describe("Phase 7.4 doctor consultation", () => {
     expect(screen.getByText(/are not stored in OPD Saathi yet/)).toBeVisible();
   });
 
+  it("marks a called patient absent once the grace period is over, then offers a recall", async () => {
+    const { calls } = mockRequests(
+      [
+        sheetResponse(1),
+        transcriptResponse(),
+        new Response(JSON.stringify({ visit_id: "visit-1", status: "skipped" }), { status: 200 }),
+      ],
+      emptyHistory,
+      {
+        visit_id: "visit-1",
+        events: [
+          { from: "awaiting_confirmation", to: "queued", actor_type: "patient", actor_name: null, actor_role: null, reason: null, at: "2026-10-16T04:30:00Z" },
+          { from: "queued", to: "called", actor_type: "user", actor_name: "Dr Rao", actor_role: "doctor", reason: null, at: "2026-10-16T04:40:00Z" },
+        ],
+      },
+    );
+    queueState.current = {
+      items: [
+        {
+          visit_id: "visit-1",
+          department_id: "dept-1",
+          token: "MED-001",
+          urgency: "routine",
+          status: "called",
+          age_years: 40,
+          sex: "female",
+          complaint: "Synthetic headache",
+          position: 1,
+          queued_at: "2026-10-16T04:30:00Z",
+          called_at: new Date(Date.now() - 240_000).toISOString(),
+        },
+      ],
+      graceSeconds: 180,
+      state: "ready",
+      now: Date.now(),
+      reload: () => undefined,
+    };
+
+    renderConsult("/staff/consultations?visit_id=visit-1&status=called");
+    // The queue timeline shows the token and the call, and who made each change.
+    expect(await screen.findByText("Token issued")).toBeVisible();
+    expect(screen.getByText("by the patient")).toBeVisible();
+    expect(screen.getByText("by Dr Rao")).toBeVisible();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Mark absent" }));
+    await waitFor(() => expect(calls()[2][0]).toBe("/queue/visit-1/skip"));
+    expect(await screen.findByRole("button", { name: "Recall" })).toBeVisible();
+    expect(screen.getByText("Missed call")).toBeVisible();
+  });
+
+  it("waits out the grace period before a just-called patient can be marked absent", async () => {
+    mockRequests([sheetResponse(1), transcriptResponse()]);
+    queueState.current = {
+      items: [
+        {
+          visit_id: "visit-1",
+          department_id: "dept-1",
+          token: "MED-001",
+          urgency: "routine",
+          status: "called",
+          age_years: 40,
+          sex: "female",
+          complaint: "Synthetic headache",
+          position: 1,
+          queued_at: "2026-10-16T04:30:00Z",
+          called_at: new Date(Date.now() - 20_000).toISOString(),
+        },
+      ],
+      graceSeconds: 180,
+      state: "ready",
+      now: Date.now(),
+      reload: () => undefined,
+    };
+
+    renderConsult("/staff/consultations?visit_id=visit-1&status=called");
+    expect(await screen.findByRole("button", { name: /Mark absent in 2:/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start consultation" })).toBeEnabled();
+  });
+
   it("asks before an unsaved edit is lost by leaving the page", async () => {
-    vi.spyOn(staffAuth, "request")
-      .mockResolvedValueOnce(sheetResponse(1))
-      .mockResolvedValueOnce(transcriptResponse());
+    mockRequests([sheetResponse(1), transcriptResponse()]);
 
     renderConsult();
     const user = userEvent.setup();
@@ -270,14 +442,14 @@ describe("Phase 7.4 doctor consultation", () => {
   });
 
   it("offers a reload and applies a draft against the latest version after a conflict", async () => {
-    const request = vi.spyOn(staffAuth, "request");
-    request
-      .mockResolvedValueOnce(sheetResponse(3))
-      .mockResolvedValueOnce(transcriptResponse())
-      .mockResolvedValueOnce(new Response(null, { status: 409 }))
-      .mockResolvedValueOnce(sheetResponse(4))
-      .mockResolvedValueOnce(transcriptResponse())
-      .mockResolvedValueOnce(sheetResponse(5));
+    const { calls } = mockRequests([
+      sheetResponse(3),
+      transcriptResponse(),
+      new Response(null, { status: 409 }),
+      sheetResponse(4),
+      transcriptResponse(),
+      sheetResponse(5),
+    ]);
 
     renderConsult();
     const user = userEvent.setup();
@@ -290,26 +462,20 @@ describe("Phase 7.4 doctor consultation", () => {
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Apply my edit to latest" }));
 
-    await waitFor(() => expect(request).toHaveBeenCalledTimes(6));
-    expect(request.mock.calls[5][1]?.headers).toMatchObject({
-      "If-Match": '"4"',
-    });
-    expect(request.mock.calls[5][1]?.body).toContain(
-      "Updated synthetic headache",
-    );
+    await waitFor(() => expect(calls()).toHaveLength(6));
+    expect(calls()[5][1]?.headers).toMatchObject({ "If-Match": '"4"' });
+    expect(calls()[5][1]?.body).toContain("Updated synthetic headache");
   });
 
   it("downloads the audited PDF through the authenticated API", async () => {
-    const request = vi.spyOn(staffAuth, "request");
-    request
-      .mockResolvedValueOnce(sheetResponse(1))
-      .mockResolvedValueOnce(transcriptResponse())
-      .mockResolvedValueOnce(
-        new Response(new Blob(["synthetic pdf"]), {
-          status: 200,
-          headers: { "Content-Type": "application/pdf" },
-        }),
-      );
+    const { calls } = mockRequests([
+      sheetResponse(1),
+      transcriptResponse(),
+      new Response(new Blob(["synthetic pdf"]), {
+        status: 200,
+        headers: { "Content-Type": "application/pdf" },
+      }),
+    ]);
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:synthetic-pdf");
     const downloadClick = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
@@ -321,8 +487,8 @@ describe("Phase 7.4 doctor consultation", () => {
       .setup()
       .click(screen.getByRole("button", { name: "Download case sheet PDF" }));
 
-    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
-    expect(request.mock.calls[2][0]).toBe("/visits/visit-1/case-sheet.pdf");
+    await waitFor(() => expect(calls()).toHaveLength(3));
+    expect(calls()[2][0]).toBe("/visits/visit-1/case-sheet.pdf");
     expect(downloadClick).toHaveBeenCalledOnce();
   });
 });

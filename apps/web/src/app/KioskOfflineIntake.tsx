@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next";
 import { Link, useOutletContext } from "react-router-dom";
 import { useLanguageStore } from "../languageStore";
+import { newRequestId } from "../lib/ids";
 import { intake } from "../lib/intake";
 import consentCopies from "../lib/offlineConsent.json";
 import {
@@ -102,7 +103,7 @@ export function KioskOfflineIntake() {
     setSaving(true);
     try {
       const submission: OfflineSubmission = {
-        idempotency_key: crypto.randomUUID().replace(/-/g, ""),
+        idempotency_key: newRequestId().replace(/-/g, ""),
         language: intakeLanguage,
         consent_granted: true,
         consent_version: consentCopy.version,

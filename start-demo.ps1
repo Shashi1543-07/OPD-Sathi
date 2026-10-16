@@ -128,6 +128,19 @@ Write-Step "Creating a kiosk activation link"
 $kiosk = docker compose run --rm api python -m app.cli demo-kiosk --web-url $webUrl
 $kioskLink = ($kiosk | Select-String "activate=").ToString().Trim()
 
+$checkinLink = $null
+if ($phoneUrl) {
+  Write-Step "Preparing the phone check-in QR"
+  $checkin = docker compose run --rm api python -m app.cli demo-checkin --web-url $phoneUrl
+  $match = $checkin | Select-String "/m/" | Select-Object -First 1
+  if ($match) { $checkinLink = $match.ToString().Trim() }
+}
+$publicNetwork = $false
+if (Get-Command Get-NetConnectionProfile -ErrorAction SilentlyContinue) {
+  $publicNetwork = [bool](Get-NetConnectionProfile -ErrorAction SilentlyContinue |
+    Where-Object { $_.NetworkCategory -eq "Public" })
+}
+
 Write-Host ""
 Write-Host "OPD Saathi is running." -ForegroundColor Green
 Write-Host ""
@@ -144,6 +157,15 @@ Write-Host "      nurse01 ... nurse05@demo.opdsathi.test"
 Write-Host "  API docs:          http://localhost:8000/docs"
 if ($phoneUrl) {
   Write-Host "  Token QR codes open on phones via $phoneUrl (phone must be on the same Wi-Fi)." -ForegroundColor Green
+  if ($checkinLink) {
+    Write-Host "  Patients' own phones check in at (QR in Staff > Settings > Kiosks > Show QR):"
+    Write-Host "    $checkinLink" -ForegroundColor Yellow
+  }
+  Write-Host "  Phone test: open $phoneUrl/api/readyz on a phone; it should say ""ready""."
+  Write-Host "  Phones use this PC's CURRENT address: after a reboot or a network change, run this script again." -ForegroundColor Yellow
+  if ($publicNetwork) {
+    Write-Host "  Windows marks this network Public. If phones cannot connect, run .\scripts\lan-check.ps1" -ForegroundColor Yellow
+  }
 } else {
   Write-Host "  No Wi-Fi/LAN address found: token QR codes will only open on this PC." -ForegroundColor Yellow
 }

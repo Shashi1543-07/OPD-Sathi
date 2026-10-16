@@ -83,9 +83,9 @@ async function runAxe(page: Page) {
   expect(serious).toEqual([]);
 }
 
+// The API is reached at /api on the app's own address (or at an origin root via VITE_API_URL).
 function isQueueApiRequest(url: string) {
-  const parsed = new URL(url);
-  return parsed.pathname === "/queue";
+  return /^(?:\/api)?\/queue$/.test(new URL(url).pathname);
 }
 
 async function saveScreenshot(page: Page, name: string) {
@@ -222,7 +222,7 @@ test("nurse assisted registration presents consent before collecting identity", 
 }) => {
   await mockStaffSession(page, "nurse");
   let identitySubmissions = 0;
-  await page.route((url) => url.pathname === "/patients", (route) =>
+  await page.route((url) => /^(?:\/api)?\/patients$/.test(url.pathname), (route) =>
     route.fulfill({ json: { items: [], limit: 200 } }),
   );
   await page.route("**/intake/assisted-sessions", (route) =>
@@ -410,7 +410,7 @@ test("5,000-row virtual queue applies a live urgent update in under 100 ms", asy
   });
   await page.routeWebSocket(
     (url) =>
-      url.pathname === "/ws/staff/queue" &&
+      /^(?:\/api)?\/ws\/staff\/queue$/.test(url.pathname) &&
       !url.searchParams.has("alerts_only"),
     (socket) => {
       queueSocket = socket;

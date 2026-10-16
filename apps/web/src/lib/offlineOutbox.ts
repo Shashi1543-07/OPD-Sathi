@@ -24,6 +24,14 @@ type StoredSubmission = {
   nextAttemptAt: number;
 };
 
+/**
+ * Whether this browser can keep an encrypted offline outbox. Web Crypto's `subtle` exists only
+ * in a secure context (HTTPS or localhost), so a page opened over http://<LAN address> cannot.
+ */
+export function offlineOutboxAvailable(): boolean {
+  return typeof globalThis.crypto?.subtle !== "undefined" && typeof indexedDB !== "undefined";
+}
+
 const DATABASE = "opd-saathi-offline-v1";
 const SUBMISSIONS = "submissions";
 const KEYS = "keys";

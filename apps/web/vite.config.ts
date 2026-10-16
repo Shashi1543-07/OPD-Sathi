@@ -3,8 +3,23 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+// The browser calls the API at /api on the page's own address, as the Docker build does
+// through nginx. A phone that opens the dev server over Wi-Fi then reaches the API through
+// the same port, instead of calling its own "localhost:8000".
+const apiProxy = {
+  "/api": {
+    target: process.env.VITE_DEV_API_TARGET ?? "http://127.0.0.1:8000",
+    rewrite: (path: string) => path.replace(/^\/api/, ""),
+    ws: true,
+    // The API scopes the staff refresh cookie to /auth; behind /api that is /api/auth.
+    cookiePathRewrite: { "/auth": "/api/auth" },
+  },
+};
+
 export default defineConfig({
   envDir: "../..",
+  server: { proxy: apiProxy },
+  preview: { proxy: apiProxy },
   plugins: [
     tailwindcss(),
     react(),

@@ -24,10 +24,17 @@ from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.ids import uuid7
 from app.core.security import AuthenticationTokenError, decode_access_token
-from app.db.repositories import QueueRepository, decrypt_case_sheet
+from app.db.repositories import (
+    CaseSheetRepository,
+    PatientRepository,
+    QueueRepository,
+    decrypt_case_sheet,
+)
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
+from app.domain.patients import normalize_mrn
 from app.domain.queue.redis_queue import QueueRedis
-from app.domain.queue.scoring import average_consult_minutes, estimate_wait, queue_score
+from app.domain.queue.scoring import average_consult_minutes, estimate_wait, visit_score
+from app.domain.queue.state import QueueRuleError
 from app.domain.queue.tokens import status_token_digest
 from app.domain.redflags.engine import RULES
 
@@ -36,9 +43,10 @@ _HOSPITAL_TZ = ZoneInfo("Asia/Kolkata")
 router = APIRouter(tags=["queue"])
 STAFF_ROLES = ("nurse", "doctor", "admin")
 RED_FLAG_REASONS = {rule.id: rule.reason_en for rule in RULES}
+_CHANNELS = {"device": "kiosk", "mobile": "phone"}
 # Alerts that do not come from a red-flag rule.
 _SPECIAL_ALERTS = {
-    "PATIENT_HELP": "Patient asked for help at the kiosk",
+    "PATIENT_HELP": "Patient asked for help",
     "AI_TRIAGE_REVIEW": "AI review suggests this patient may be more urgent. Please check.",
 }
 
@@ -100,17 +108,26 @@ def _decode_queue_cursor(cursor: str, key: bytes) -> int:
 
 
 def _queue_score(row: dict[str, Any], settings: Any) -> int:
-    arrival = row["queued_at"] or datetime.now(UTC)
-    arrival_ms = int(arrival.timestamp() * 1000)
-    return queue_score(
-        arrival_ms,
-        row["urgency"],
-        row["age_years"],
-        bool(row["pregnant"]),
-        urgent_bonus_min=settings.urgent_bonus_min,
-        priority_bonus_min=settings.priority_bonus_min,
-        vulnerable_bonus_min=settings.vulnerable_bonus_min,
-        acuity_score=row.get("acuity_score"),
+    return visit_score(row, settings)
+
+
+# Titles for queue rules a valid action can still run into (see QueueRepository).
+_RULE_TITLES = {
+    "DOCTOR_BUSY": "Finish your current patient first",
+    "CLAIMED_BY_ANOTHER_DOCTOR": "Another doctor's patient",
+    "CALL_GRACE_NOT_OVER": "Too early to mark absent",
+}
+
+
+def _rule_problem(exc: QueueRuleError) -> ApiProblemError:
+    retry = exc.extra.get("retry_after_seconds")
+    return ApiProblemError(
+        status=409,
+        code=exc.code,
+        title=_RULE_TITLES.get(exc.code, "Queue action unavailable"),
+        detail=exc.detail,
+        headers={"Retry-After": str(retry)} if retry is not None else None,
+        extra=exc.extra,
     )
 
 
@@ -162,11 +179,12 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         )
     except RedisError:
         position = None
+    # Without Redis, count only those still waiting, as the Redis waiting set does.
     ordered = sorted(
-        rows,
+        (row for row in rows if row["status"] == "queued"),
         key=lambda item: (_queue_score(item, request.app.state.settings), str(item["visit_id"])),
     )
-    if position is None and visit["status"] in {"queued", "called", "in_consult"}:
+    if position is None and visit["status"] == "queued":
         found = next(
             (
                 index + 1
@@ -180,6 +198,8 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         "queued": "waiting",
         "called": "called",
         "in_consult": "in_consult",
+        # Called but not there: the patient should come to the desk to be recalled.
+        "skipped": "skipped",
         "done": "done",
         "no_show": "no_show",
         "cancelled": "cancelled",
@@ -333,6 +353,15 @@ async def staff_queue(
         rows = await repository.queued_visits(hospital_id=hospital_id, department_id=department_id)
         active_department_ids = {row["id"] for row in department_records}
         rows = [row for row in rows if row["department_id"] in active_department_ids]
+        missed = [
+            row
+            for row in await repository.missed_visits(
+                hospital_id=hospital_id, department_id=department_id
+            )
+            if row["department_id"] in active_department_ids
+        ]
+        grace_seconds = await repository.call_grace_seconds(hospital_id)
+    actor_id = UUID(principal["sub"])
     if status is not None:
         rows = [row for row in rows if row["status"] == status]
     groups: dict[UUID, list[dict[str, Any]]] = {}
@@ -363,8 +392,16 @@ async def staff_queue(
                     "queued_at": row["queued_at"].isoformat() if row["queued_at"] else None,
                     "routing": (row.get("case_sheet_data") or {}).get("routing"),
                     "needs_assistance": row.get("needs_assistance") is True,
+                    # Where the patient registered: a kiosk, their own phone, or the desk.
+                    "channel": _CHANNELS.get(str(row.get("checkin_kind")), "desk"),
                     # Staff only: the score and every line that made it up.
                     "triage": row.get("acuity"),
+                    "called_at": row["called_at"].isoformat() if row.get("called_at") else None,
+                    "called_by_name": row.get("called_by_name"),
+                    "called_by_me": row.get("called_by") == actor_id,
+                    "skip_count": int(row.get("skip_count") or 0),
+                    # A danger sign the patient tapped that no nurse has confirmed yet.
+                    "nurse_check": row.get("tile_unconfirmed") is True,
                 }
             )
     offset = (
@@ -386,6 +423,23 @@ async def staff_queue(
             {"id": str(row["id"]), "code": row["code"], "name": row["name_en"]}
             for row in department_records
         ],
+        # Called and not there: shown apart from the line until staff recall them.
+        "missed": [
+            {
+                "visit_id": str(row["visit_id"]),
+                "department_id": str(row["department_id"]),
+                "token": row["token_label"],
+                "urgency": row["urgency"],
+                "age_years": row["age_years"],
+                "sex": row["sex"],
+                "complaint": _complaint(row.get("case_sheet_data")),
+                "skip_count": int(row["skip_count"] or 0),
+                "skipped_at": row["skipped_at"].isoformat() if row["skipped_at"] else None,
+                "queued_at": row["queued_at"].isoformat() if row["queued_at"] else None,
+            }
+            for row in missed
+        ],
+        "call_grace_seconds": grace_seconds,
     }
 
 
@@ -484,6 +538,175 @@ async def staff_patients(
     }
 
 
+class LinkPatientPayload(TransitionPayload):
+    opd_number: str = Field(min_length=6, max_length=24)
+
+
+async def _staff_department(
+    connection: Any, *, hospital_id: UUID, actor_id: UUID, role: str
+) -> UUID | None:
+    """The staff member's department (None for administrators, who act hospital-wide)."""
+    if role == "admin":
+        return None
+    assigned = await connection.scalar(
+        text(
+            "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
+            "AND id = :actor_id AND is_active = true"
+        ),
+        {"hospital_id": hospital_id, "actor_id": actor_id},
+    )
+    if not isinstance(assigned, UUID):
+        raise _problem(403, "FORBIDDEN", "Permission denied", "No staff department is assigned.")
+    return assigned
+
+
+@router.get("/patients/lookup")
+async def lookup_patients(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+    opd_number: Annotated[str | None, Query(max_length=24)] = None,
+    phone: Annotated[str | None, Query(pattern=r"^[6-9][0-9]{9}$")] = None,
+) -> dict[str, Any]:
+    """Find a registered patient by OPD card number or phone, to confirm with them at the desk.
+
+    A phone number can belong to several family members, so it returns every match; staff
+    check age and sex with the patient before linking. Only what verification needs is
+    returned (no clinical details), and every lookup is audited.
+    """
+    if (opd_number is None) == (phone is None):
+        raise _problem(
+            422, "VALIDATION_FAILED", "One search term", "Search by OPD number or by phone."
+        )
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _staff_department(
+            connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+        )
+        repository = PatientRepository(connection, request.app.state.settings)
+        if opd_number is not None:
+            number = normalize_mrn(opd_number)
+            record = (
+                await repository.by_mrn(hospital_id=hospital_id, mrn=number) if number else None
+            )
+            candidates = []
+            if record is not None:
+                summary = await connection.execute(
+                    text(
+                        "SELECT count(*) AS visit_count, max(service_date) AS last_visit "
+                        "FROM visits WHERE hospital_id = :hospital_id "
+                        "AND patient_id = :patient_id AND token_number IS NOT NULL"
+                    ),
+                    {"hospital_id": hospital_id, "patient_id": record["id"]},
+                )
+                candidates = [{**record, **dict(summary.mappings().one())}]
+        else:
+            candidates = await repository.by_phone(hospital_id=hospital_id, phone=phone or "")
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="patient.lookup",
+            resource_type="patient",
+            meta={
+                "by": "opd_number" if opd_number is not None else "phone",
+                "matches": len(candidates),
+            },
+        )
+    this_year = datetime.now(_HOSPITAL_TZ).year
+    return {
+        "items": [
+            {
+                "opd_number": item["mrn"],
+                "age_years": this_year - item["year_of_birth"] if item["year_of_birth"] else None,
+                "sex": item["sex"],
+                "visit_count": int(item["visit_count"] or 0),
+                "last_visit": item["last_visit"].isoformat() if item["last_visit"] else None,
+            }
+            for item in candidates
+        ]
+    }
+
+
+@router.post("/queue/{visit_id}/link-patient")
+async def link_patient(
+    visit_id: UUID,
+    payload: LinkPatientPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("nurse", "admin"))],
+) -> dict[str, Any]:
+    """Join a visit to a registered patient after checking who they are at the desk.
+
+    For patients without their OPD card. The nurse confirms identity in person first; the
+    link is audited, and the doctor's view says it was made by staff.
+    """
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    number = normalize_mrn(payload.opd_number)
+    if number is None:
+        raise _problem(422, "VALIDATION_FAILED", "Not an OPD number", "Check the number.")
+
+    async def operation() -> dict[str, Any]:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            department = await _staff_department(
+                connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+            )
+            visit_department = await connection.scalar(
+                text(
+                    "SELECT department_id FROM visits WHERE hospital_id = :hospital_id "
+                    "AND id = :visit_id AND status IN ('registering', 'awaiting_confirmation', "
+                    "'queued', 'called', 'in_consult', 'skipped')"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id},
+            )
+            if visit_department is None or (
+                department is not None and visit_department != department
+            ):
+                raise _problem(404, "NOT_FOUND", "Visit unavailable", "This visit is unavailable.")
+            repository = PatientRepository(connection, request.app.state.settings)
+            record = await repository.by_mrn(hospital_id=hospital_id, mrn=number)
+            if record is None:
+                raise _problem(404, "PATIENT_NOT_FOUND", "No such OPD number", "Check the number.")
+            try:
+                changed = await repository.link_visit(
+                    hospital_id=hospital_id,
+                    visit_id=visit_id,
+                    patient_id=record["id"],
+                    source="staff",
+                )
+            except ValueError as exc:
+                raise _problem(
+                    409,
+                    "ALREADY_LINKED",
+                    "Already linked",
+                    "This visit already belongs to a patient with other visits.",
+                ) from exc
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user",
+                actor_id=actor_id,
+                action="queue.patient_linked",
+                resource_type="visit",
+                resource_id=visit_id,
+                meta={"source": "staff", "changed": changed},
+            )
+        return {"visit_id": str(visit_id), "opd_number": number, "linked": True}
+
+    return await IdempotencyStore(request.app.state.redis_state).execute(
+        request,
+        hospital_id=hospital_id,
+        actor_id=actor_id,
+        body={"visit_id": str(visit_id), "opd_number": number},
+        operation=operation,
+    )
+
+
 def _complaint(case_sheet: dict[str, Any] | None) -> str:
     complaint = (case_sheet or {}).get("chief_complaint") or {}
     return str(complaint.get("text_en") or complaint.get("text_original") or "")
@@ -512,35 +735,32 @@ async def confirm_routing(
             raise _problem(
                 403, "FORBIDDEN", "Permission denied", "No staff department is assigned."
             )
-        row = (
-            (
-                await connection.execute(
-                    text(
-                        "SELECT c.data, v.department_id FROM case_sheets c JOIN visits v "
-                        "ON v.hospital_id = c.hospital_id AND v.id = c.visit_id "
-                        "WHERE c.hospital_id = :hospital_id AND c.visit_id = :visit_id "
-                        "AND (CAST(:department_id AS uuid) IS NULL OR "
-                        "v.department_id = CAST(:department_id AS uuid)) "
-                        "AND v.status IN ('queued', 'called', 'in_consult') FOR UPDATE OF c"
-                    ),
-                    {
-                        "hospital_id": hospital_id,
-                        "visit_id": visit_id,
-                        "department_id": assigned_department
-                        if principal["role"] != "admin"
-                        else None,
-                    },
-                )
-            )
-            .mappings()
-            .first()
+        live_visit = await connection.scalar(
+            text(
+                "SELECT id FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id "
+                "AND (CAST(:department_id AS uuid) IS NULL OR "
+                "department_id = CAST(:department_id AS uuid)) "
+                "AND status IN ('queued', 'called', 'in_consult') FOR UPDATE"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "department_id": assigned_department if principal["role"] != "admin" else None,
+            },
         )
-        if row is None:
+        # The case sheet column holds ciphertext; only the repository can read or write it.
+        repository = CaseSheetRepository(connection, request.app.state.settings)
+        saved = (
+            await repository.get(hospital_id=hospital_id, visit_id=visit_id, for_update=True)
+            if live_visit is not None
+            else None
+        )
+        if saved is None:
             raise _problem(
                 404, "ROUTE_UNAVAILABLE", "Route unavailable", "This route is unavailable."
             )
-        data = row["data"]
-        routing = data.get("routing", {})
+        data = saved["data"]
+        routing = data.get("routing") if isinstance(data.get("routing"), dict) else {}
         if not routing.get("needs_nurse_confirmation"):
             raise _problem(
                 409,
@@ -549,19 +769,21 @@ async def confirm_routing(
                 "This route no longer needs confirmation.",
             )
         routing["needs_nurse_confirmation"] = False
-        await connection.execute(
-            text(
-                "UPDATE case_sheets SET data = CAST(:data AS jsonb), version = version + 1, "
-                "last_edited_by = :actor_id WHERE hospital_id = :hospital_id "
-                "AND visit_id = :visit_id"
-            ),
-            {
-                "data": json.dumps(data, separators=(",", ":")),
-                "actor_id": actor_id,
-                "hospital_id": hospital_id,
-                "visit_id": visit_id,
-            },
+        data["routing"] = routing
+        version = await repository.replace_if_version(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            expected_version=int(saved["version"]),
+            data=data,
+            editor_id=actor_id,
         )
+        if version is None:
+            raise _problem(
+                409,
+                "CASE_SHEET_CONFLICT",
+                "Case sheet changed",
+                "Reload the queue and confirm the route again.",
+            )
         await audit(
             connection,
             request,
@@ -576,26 +798,121 @@ async def confirm_routing(
     return {"visit_id": str(visit_id), "routing": routing, "confirmed": True}
 
 
+async def _publish_change(
+    request: Request, hospital_id: UUID, visit_id: UUID, changed: dict[str, Any]
+) -> None:
+    """Update the Redis waiting set and the live boards after a committed change."""
+    target = changed["status"]
+    queue = QueueRedis(request.app.state.redis_state, app_env=request.app.state.settings.app_env)
+    item = {
+        "visit_id": str(visit_id),
+        "token": changed["token_label"],
+        "urgency": changed["urgency"],
+        "status": target,
+    }
+    try:
+        if target == "queued":
+            # Recalled or put back: the original arrival time gives the patient their place.
+            await queue.enqueue(
+                hospital_id=hospital_id,
+                department_id=changed["department_id"],
+                visit_id=visit_id,
+                score=_queue_score(changed, request.app.state.settings),
+                item=item,
+            )
+        else:
+            removed, _ = await queue.remove(
+                hospital_id=hospital_id,
+                department_id=changed["department_id"],
+                visit_id=visit_id,
+            )
+            if not removed:
+                op = (
+                    {"op": "upsert", "item": item}
+                    if target in {"called", "in_consult"}
+                    else {"op": "remove", "visit_id": str(visit_id)}
+                )
+                await queue.publish_delta(
+                    hospital_id=hospital_id,
+                    department_id=changed["department_id"],
+                    ops=[op],
+                )
+        await queue.publish_status(
+            hospital_id=hospital_id, visit_id=visit_id, payload={"changed": True}
+        )
+    except RedisError:
+        # The worker owns retries for the committed outbox event.
+        pass
+
+
 @router.post("/queue/call-next")
 async def call_next(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
     department_id: Annotated[UUID, Query()],
 ) -> dict[str, Any]:
+    """Call the next patient in calling order (urgent first, then queue score).
+
+    Calls in a department are serialised, so two doctors pressing this together get two
+    different patients. A doctor who already has a patient called or in consultation is
+    asked to finish with them first.
+    """
     hospital_id = UUID(principal["hospital_id"])
-    async with request.app.state.engine.begin() as connection:
-        await set_hospital_scope(connection, hospital_id)
-        rows = await QueueRepository(connection, request.app.state.settings).queued_visits(
-            hospital_id=hospital_id, department_id=department_id
-        )
-    waiting = [row for row in rows if row["status"] == "queued"]
-    if not waiting:
-        raise _problem(409, "QUEUE_EMPTY", "No patient waiting", "There is no patient to call.")
-    next_row = min(
-        waiting,
-        key=lambda item: (_queue_score(item, request.app.state.settings), str(item["visit_id"])),
+    actor_id = UUID(principal["sub"])
+
+    async def operation() -> dict[str, Any]:
+        try:
+            async with request.app.state.engine.begin() as connection:
+                await set_hospital_scope(connection, hospital_id)
+                department = await _staff_department(
+                    connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+                )
+                if department is not None and department != department_id:
+                    raise _problem(
+                        403,
+                        "FORBIDDEN",
+                        "Permission denied",
+                        "You can only call patients in your own department.",
+                    )
+                repository = QueueRepository(connection, request.app.state.settings)
+                await repository.lock_calls(hospital_id=hospital_id, department_id=department_id)
+                changed = await repository.call_next(
+                    hospital_id=hospital_id,
+                    department_id=department_id,
+                    actor_id=actor_id,
+                    actor_role=principal["role"],
+                )
+                if changed is None:
+                    raise _problem(
+                        409, "QUEUE_EMPTY", "No patient waiting", "There is no patient to call."
+                    )
+                await audit(
+                    connection,
+                    request,
+                    hospital_id=hospital_id,
+                    actor_type="user",
+                    actor_id=actor_id,
+                    action="queue.called",
+                    resource_type="visit",
+                    resource_id=changed["visit_id"],
+                    meta={"from": "queued", "via": "call_next"},
+                )
+        except QueueRuleError as exc:
+            raise _rule_problem(exc) from exc
+        await _publish_change(request, hospital_id, changed["visit_id"], changed)
+        return {
+            "visit_id": str(changed["visit_id"]),
+            "status": "called",
+            "token": changed["token_label"],
+        }
+
+    return await IdempotencyStore(request.app.state.redis_state).execute(
+        request,
+        hospital_id=hospital_id,
+        actor_id=actor_id,
+        body={"call_next": str(department_id)},
+        operation=operation,
     )
-    return await _change_status(request, next_row["visit_id"], principal, "called")
 
 
 async def _perform_status_change(
@@ -603,15 +920,38 @@ async def _perform_status_change(
     visit_id: UUID,
     principal: dict[str, Any],
     target: str,
+    *,
+    expected: str | None = None,
+    action: str | None = None,
 ) -> dict[str, Any]:
     hospital_id = UUID(principal["hospital_id"])
     actor_id = UUID(principal["sub"])
     try:
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
+            department = await _staff_department(
+                connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+            )
             repo = QueueRepository(connection, request.app.state.settings)
+            if target == "called":
+                # Every call in a department takes the same lock as call-next, first.
+                visit_department = await connection.scalar(
+                    text(
+                        "SELECT department_id FROM visits WHERE hospital_id = :hospital_id "
+                        "AND id = :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+                if isinstance(visit_department, UUID):
+                    await repo.lock_calls(hospital_id=hospital_id, department_id=visit_department)
             changed = await repo.transition_visit(
-                hospital_id=hospital_id, visit_id=visit_id, target=target, actor_id=actor_id
+                hospital_id=hospital_id,
+                visit_id=visit_id,
+                target=target,
+                actor_id=actor_id,
+                actor_role=principal["role"],
+                department_id=department,
+                expected=expected,
             )
             await audit(
                 connection,
@@ -619,47 +959,19 @@ async def _perform_status_change(
                 hospital_id=hospital_id,
                 actor_type="user",
                 actor_id=actor_id,
-                action=f"queue.{target}",
+                action=action or f"queue.{target}",
                 resource_type="visit",
                 resource_id=visit_id,
+                meta={"from": changed["previous_status"]},
             )
     except LookupError as exc:
         raise _problem(404, "NOT_FOUND", "Visit unavailable", "This visit is unavailable.") from exc
+    except QueueRuleError as exc:
+        raise _rule_problem(exc) from exc
     except ValueError as exc:
         raise _problem(409, "INVALID_TRANSITION", "Queue action unavailable", str(exc)) from exc
-    queue = QueueRedis(request.app.state.redis_state, app_env=request.app.state.settings.app_env)
-    try:
-        removed, _ = await queue.remove(
-            hospital_id=hospital_id,
-            department_id=changed["department_id"],
-            visit_id=visit_id,
-        )
-        if not removed:
-            op = (
-                {
-                    "op": "upsert",
-                    "item": {
-                        "visit_id": str(visit_id),
-                        "token": changed["token_label"],
-                        "urgency": changed["urgency"],
-                        "status": target,
-                    },
-                }
-                if target == "in_consult"
-                else {"op": "remove", "visit_id": str(visit_id)}
-            )
-            await queue.publish_delta(
-                hospital_id=hospital_id,
-                department_id=changed["department_id"],
-                ops=[op],
-            )
-        await queue.publish_status(
-            hospital_id=hospital_id, visit_id=visit_id, payload={"changed": True}
-        )
-    except RedisError:
-        # The worker owns retries for the committed outbox event.
-        pass
-    return {"visit_id": str(visit_id), "status": target}
+    await _publish_change(request, hospital_id, visit_id, changed)
+    return {"visit_id": str(visit_id), "status": target, "token": changed["token_label"]}
 
 
 async def _change_status(
@@ -667,18 +979,23 @@ async def _change_status(
     visit_id: UUID,
     principal: dict[str, Any],
     target: str,
+    *,
+    expected: str | None = None,
+    action: str | None = None,
 ) -> dict[str, Any]:
     hospital_id = UUID(principal["hospital_id"])
     actor_id = UUID(principal["sub"])
 
     async def operation() -> dict[str, Any]:
-        return await _perform_status_change(request, visit_id, principal, target)
+        return await _perform_status_change(
+            request, visit_id, principal, target, expected=expected, action=action
+        )
 
     return await IdempotencyStore(request.app.state.redis_state).execute(
         request,
         hospital_id=hospital_id,
         actor_id=actor_id,
-        body={"visit_id": str(visit_id), "target": target},
+        body={"visit_id": str(visit_id), "target": target, "from": expected},
         operation=operation,
     )
 
@@ -710,13 +1027,94 @@ async def complete_visit(
     return await _change_status(request, visit_id, principal, "done")
 
 
+@router.post("/queue/{visit_id}/skip")
+async def skip_visit(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+) -> dict[str, Any]:
+    """Mark a called patient absent once the call grace period has passed.
+
+    They keep their token, urgency and arrival time, so a recall puts them back where they were.
+    """
+    return await _change_status(request, visit_id, principal, "skipped")
+
+
+@router.post("/queue/{visit_id}/recall")
+async def recall_visit(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+) -> dict[str, Any]:
+    """Put a skipped patient back in the queue on their original arrival time."""
+    return await _change_status(
+        request, visit_id, principal, "queued", expected="skipped", action="queue.recalled"
+    )
+
+
+@router.post("/queue/{visit_id}/return")
+async def return_visit(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+) -> dict[str, Any]:
+    """Put a called patient back in the queue unchanged, e.g. after a call made by mistake."""
+    return await _change_status(
+        request, visit_id, principal, "queued", expected="called", action="queue.returned"
+    )
+
+
 @router.post("/queue/{visit_id}/no-show")
 async def no_show_visit(
     visit_id: UUID,
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
 ) -> dict[str, Any]:
+    """Close a skipped visit as a no-show (the patient has left). Only skipped visits qualify."""
     return await _change_status(request, visit_id, principal, "no_show")
+
+
+@router.get("/visits/{visit_id}/queue-events")
+async def visit_queue_events(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role(*STAFF_ROLES))],
+) -> dict[str, Any]:
+    """The visit's queue timeline (token, calls, missed calls, recalls) for its department."""
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        department = await _staff_department(
+            connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+        )
+        visit_department = await connection.scalar(
+            text(
+                "SELECT department_id FROM visits WHERE hospital_id = :hospital_id "
+                "AND id = :visit_id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        if visit_department is None or (department is not None and visit_department != department):
+            raise _problem(404, "NOT_FOUND", "Visit unavailable", "This visit is unavailable.")
+        events = await QueueRepository(connection, request.app.state.settings).visit_events(
+            hospital_id=hospital_id, visit_id=visit_id
+        )
+    return {
+        "visit_id": str(visit_id),
+        "events": [
+            {
+                "from": event["from_status"],
+                "to": event["to_status"],
+                "actor_type": event["actor_type"],
+                "actor_name": event["actor_name"],
+                "actor_role": event["actor_role"],
+                "reason": event["reason"],
+                "at": event["created_at"].isoformat(),
+            }
+            for event in events
+        ],
+    }
 
 
 @router.post("/queue/{visit_id}/cancel")
@@ -771,9 +1169,10 @@ async def open_alerts(
                 "(:acknowledged = false AND e.acknowledged_at IS NULL)) "
                 # Open alerts only matter while the patient is still in the building. An
                 # urgent one stays until staff acknowledge it, even if the kiosk session
-                # ended (a patient with a danger sign may have walked away from the screen).
+                # ended (a patient with a danger sign may have walked away from the screen)
+                # or the patient missed their call.
                 "AND (:acknowledged = true OR v.status IN ('registering', "
-                "'awaiting_confirmation', 'queued', 'called', 'in_consult') "
+                "'awaiting_confirmation', 'queued', 'called', 'in_consult', 'skipped') "
                 "OR (v.status = 'cancelled' AND v.token_label IS NULL AND e.level = 'urgent' "
                 "AND e.created_at > now() - interval '2 hours')) "
                 "AND (CAST(:department_id AS uuid) IS NULL OR "
@@ -887,6 +1286,18 @@ async def _perform_override_visit(
     actor_id = UUID(principal["sub"])
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
+        department = await _staff_department(
+            connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+        )
+        visit_department = await connection.scalar(
+            text(
+                "SELECT department_id FROM visits WHERE hospital_id = :hospital_id "
+                "AND id = :visit_id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        if visit_department is None or (department is not None and visit_department != department):
+            raise _problem(404, "NOT_FOUND", "Visit unavailable", "This visit is unavailable.")
         row = (
             (
                 await connection.execute(
@@ -949,16 +1360,7 @@ async def _perform_override_visit(
                 ),
             },
         )
-    score = queue_score(
-        int(row["queued_at"].timestamp() * 1000),
-        row["urgency"],
-        row["age_years"],
-        bool(row["pregnant"]),
-        urgent_bonus_min=request.app.state.settings.urgent_bonus_min,
-        priority_bonus_min=request.app.state.settings.priority_bonus_min,
-        vulnerable_bonus_min=request.app.state.settings.vulnerable_bonus_min,
-        acuity_score=row["acuity_score"],
-    )
+    score = _queue_score(dict(row), request.app.state.settings)
     try:
         await QueueRedis(
             request.app.state.redis_state, app_env=request.app.state.settings.app_env
@@ -1119,7 +1521,7 @@ async def staff_queue_socket(
                                 # finished or cancelled visits (even past days) came back
                                 # each minute and filled the board with stale alerts.
                                 "AND (v.status IN ('registering', 'awaiting_confirmation', "
-                                "'queued', 'called', 'in_consult') "
+                                "'queued', 'called', 'in_consult', 'skipped') "
                                 "OR (v.status = 'cancelled' AND v.token_label IS NULL "
                                 "AND e.level = 'urgent' "
                                 "AND e.created_at > now() - interval '2 hours')) "

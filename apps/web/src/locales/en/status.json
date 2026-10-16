@@ -15,6 +15,8 @@
   "calledTitle": "It is your turn!",
   "calledBody": "Please go to {{department}} now.",
   "calledBodyDesk": "Please go to the staff desk now.",
+  "skippedTitle": "We missed you",
+  "skippedBody": "Please go to the registration desk now. Staff will put you back in the queue with the same token.",
   "keepOpen": "Keep this page open. It updates by itself.",
   "live": "Live",
   "lastUpdated": "Updated {{time}}",
@@ -29,6 +31,7 @@
     "waiting": "Please wait for your turn.",
     "called": "Please go to the staff desk.",
     "in_consult": "You are with the doctor now.",
+    "skipped": "We called you but could not find you.",
     "done": "Your visit is complete. Thank you!",
     "no_show": "Please ask staff for help.",
     "cancelled": "Please ask staff for help."

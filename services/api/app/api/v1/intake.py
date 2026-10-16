@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
@@ -26,15 +26,18 @@ from app.core.auth import require_kiosk, require_patient, require_role
 from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.ids import uuid7
+from app.core.ratelimit import check_rate_limit
 from app.core.security import issue_access_token
 from app.db.repositories import (
     CaseSheetRepository,
     IntakeRepository,
     InterviewTurnRepository,
     KioskUnavailableError,
+    PatientRepository,
     QueueRepository,
 )
-from app.db.session import set_hospital_scope
+from app.db.session import set_hospital_scope, set_secret_lookup_scope
+from app.domain.checkin import checkin_code_digest, is_checkin_code
 from app.domain.interview.bank import QUESTIONS, Language, Question
 from app.domain.interview.consent import DANGER_TILES, get_consent_copy
 from app.domain.interview.engine import (
@@ -57,6 +60,7 @@ from app.domain.interview.engine import (
     visible_question,
     with_language,
 )
+from app.domain.patients import card_pin, demographics_consistent, normalize_mrn, pin_matches
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
 from app.domain.queue.tokens import create_status_token, status_token_digest
@@ -360,11 +364,12 @@ async def _evaluate_visit(
         if flag.id in existing:
             continue
         event_id = uuid7()
-        await connection.execute(
+        inserted = await connection.scalar(
             text(
                 "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, "
                 "evidence) VALUES (:id, :hospital_id, :visit_id, :source, :rule_id, :level, "
-                ":evidence)"
+                ":evidence) ON CONFLICT (hospital_id, visit_id, rule_id) "
+                "WHERE rule_id IS NOT NULL DO NOTHING RETURNING id"
             ),
             {
                 "id": event_id,
@@ -376,6 +381,8 @@ async def _evaluate_visit(
                 "evidence": flag.evidence,
             },
         )
+        if inserted is None:
+            continue  # A simultaneous request for this visit recorded (and alerted) it first.
         if flag.level == "urgent":
             alerts.append(
                 {
@@ -988,6 +995,193 @@ async def create_assisted_session(
     }
 
 
+class CheckinSessionPayload(StrictPayload):
+    language: Language
+
+
+_CHECKIN_WINDOW_SECONDS = 600
+# Check-ins one phone (client address) may start per check-in point in ten minutes: enough for
+# a family registering several members, low enough to stop a script flooding the queue.
+_CHECKIN_SESSIONS_PER_CLIENT = 6
+# All phones together, per check-in point, in ten minutes.
+_CHECKIN_SESSIONS_PER_POINT = 150
+
+
+async def _rate_limit(
+    request: Request, *, key: str, limit: int, window_seconds: int, detail: str
+) -> None:
+    result = await check_rate_limit(
+        request.app.state.redis_state,
+        request.app.state.memory_limiter,
+        key=key,
+        limit=limit,
+        window_seconds=window_seconds,
+        fail_closed=False,
+    )
+    if result is not None and not result.allowed:
+        raise ApiProblemError(
+            status=429,
+            code="RATE_LIMITED",
+            title="Too many requests",
+            detail=detail,
+            headers={"Retry-After": str(result.retry_after)},
+        )
+
+
+def _client_address(request: Request) -> str:
+    # Behind the web container's /api proxy this is the phone's address (X-Forwarded-For).
+    return request.client.host if request.client else "unknown"
+
+
+async def _checkin_point(request: Request, code: str) -> dict[str, Any]:
+    """The active phone check-in point behind a QR code, with its hospital's name."""
+    unavailable = _error(
+        404,
+        "CHECKIN_UNAVAILABLE",
+        "Check-in link not valid",
+        "This check-in QR is not valid. Please use the kiosk or ask at the registration desk.",
+    )
+    if not is_checkin_code(code):
+        raise unavailable
+    digest = checkin_code_digest(code)
+    async with request.app.state.engine.begin() as connection:
+        await set_secret_lookup_scope(
+            connection, setting="app.kiosk_checkin_hash", secret_hash=digest
+        )
+        point = await IntakeRepository(
+            connection, request.app.state.settings
+        ).checkin_point_by_code(digest)
+        if point is None:
+            raise unavailable
+        await set_hospital_scope(connection, point["hospital_id"])
+        hospital_name = await connection.scalar(
+            text("SELECT name FROM hospitals WHERE id = :hospital_id"),
+            {"hospital_id": point["hospital_id"]},
+        )
+    if not point["is_active"]:
+        raise _error(
+            409,
+            "CHECKIN_TURNED_OFF",
+            "Phone check-in paused",
+            "Phone check-in is paused. Please use the kiosk or ask at the registration desk.",
+        )
+    return {**point, "hospital_name": hospital_name}
+
+
+@router.get("/checkin/{code}")
+async def checkin_details(code: str, request: Request) -> dict[str, Any]:
+    """What a phone shows before starting: the hospital's name, or why it cannot start."""
+    settings = request.app.state.settings
+    await _rate_limit(
+        request,
+        key=f"osa:{settings.app_env}:rl:checkin-lookup:{_client_address(request)}",
+        limit=60,
+        window_seconds=60,
+        detail="Please wait a moment and try again.",
+    )
+    point = await _checkin_point(request, code)
+    return {"hospital_name": point["hospital_name"], "languages": ["hi", "mr", "en"]}
+
+
+@router.post("/checkin/{code}/sessions", status_code=status.HTTP_201_CREATED)
+async def create_checkin_session(
+    code: str, payload: CheckinSessionPayload, request: Request
+) -> dict[str, Any]:
+    """Start the interview on a patient's own phone from the hospital's check-in QR.
+
+    The phone gets the same patient session a kiosk would, so consent, the interview, the
+    safety rules and the token are exactly the kiosk's. Starting is limited per phone and
+    per check-in point; a session only reaches the queue once the patient confirms it.
+    """
+    settings = request.app.state.settings
+    point = await _checkin_point(request, code)
+    hospital_id, point_id = point["hospital_id"], point["id"]
+    await _rate_limit(
+        request,
+        key=f"osa:{settings.app_env}:rl:checkin-start:{point_id}:{_client_address(request)}",
+        limit=_CHECKIN_SESSIONS_PER_CLIENT,
+        window_seconds=_CHECKIN_WINDOW_SECONDS,
+        detail="Too many check-ins from this phone. Please ask at the registration desk.",
+    )
+    await _rate_limit(
+        request,
+        key=f"osa:{settings.app_env}:rl:checkin-point:{point_id}",
+        limit=_CHECKIN_SESSIONS_PER_POINT,
+        window_seconds=_CHECKIN_WINDOW_SECONDS,
+        detail="Phone check-in is very busy. Please use the kiosk or ask at the desk.",
+    )
+    try:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            visit_id, patient_id = await IntakeRepository(
+                connection, settings
+            ).create_mobile_session(
+                hospital_id=hospital_id, point_id=point_id, language=payload.language
+            )
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="kiosk",
+                actor_id=point_id,
+                action="intake.mobile_started",
+                resource_type="visit",
+                resource_id=visit_id,
+                meta={"channel": "mobile", "language": payload.language},
+            )
+    except KioskUnavailableError as exc:
+        raise _error(
+            409,
+            "CHECKIN_TURNED_OFF",
+            "Phone check-in paused",
+            "Phone check-in is paused. Please use the kiosk or ask at the registration desk.",
+        ) from exc
+    except LookupError as exc:
+        raise _error(
+            409, "CHECKIN_NOT_READY", "Check-in unavailable", "Please ask at the registration desk."
+        ) from exc
+    state_data = {
+        "visit_id": str(visit_id),
+        "patient_id": str(patient_id),
+        "kiosk_id": str(point_id),
+        "channel": "mobile",
+        "language": payload.language,
+        "phase": "consent",
+        "danger_ids": [],
+        "corrections": 0,
+    }
+    try:
+        await request.app.state.redis_state.set(
+            _session_key(hospital_id, visit_id),
+            json.dumps(state_data, separators=(",", ":")),
+            ex=settings.patient_session_hours * _SESSION_TTL_FACTOR,
+        )
+    except Exception as exc:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            await IntakeRepository(connection, settings).set_visit_status(
+                hospital_id=hospital_id, visit_id=visit_id, status="cancelled"
+            )
+        raise _error(
+            503, "DEPENDENCY_UNAVAILABLE", "Check-in unavailable", "Please try again in a moment."
+        ) from exc
+    patient_token = issue_access_token(
+        subject=visit_id,
+        role="patient",
+        hospital_id=hospital_id,
+        settings=settings,
+        lifetime=timedelta(hours=settings.patient_session_hours),
+    )
+    return {
+        "visit_id": str(visit_id),
+        "patient_access_token": patient_token,
+        "expires_in": settings.patient_session_hours * _SESSION_TTL_FACTOR,
+        "consent": get_consent_copy(payload.language),
+        "channel": "mobile",
+        "hospital_name": point["hospital_name"],
+    }
+
+
 class LanguagePayload(StrictPayload):
     language: Language
 
@@ -1064,7 +1258,13 @@ async def record_consent(
             version=copy["version"],
             text_sha256=copy["sha256"],
             granted=payload.granted,
-            channel="nurse" if assisted else "kiosk",
+            channel=(
+                "nurse"
+                if assisted
+                else "mobile"
+                if state.get("channel") == "mobile"
+                else "kiosk"
+            ),
         )
         if not payload.granted:
             await repository.set_visit_status(
@@ -1120,28 +1320,21 @@ async def save_identity(
         raise _error(
             409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
         )
-    try:
-        async with request.app.state.engine.begin() as connection:
-            await set_hospital_scope(connection, hospital_id)
-            await IntakeRepository(connection, request.app.state.settings).update_identity(
-                hospital_id=hospital_id,
-                visit_id=visit_id,
-                patient_id=context["patient_id"],
-                age=payload.age,
-                sex=payload.sex,
-                phone=payload.phone,
-                sms_opt_in=payload.sms_opt_in,
-                name=payload.name if state.get("assisted") is True else None,
-            )
-    except Exception as exc:
-        if "uq_patients_hospital_phone_hmac" in str(exc):
-            raise _error(
-                409,
-                "PHONE_ALREADY_REGISTERED",
-                "Contact already registered",
-                "Ask staff to help complete this intake.",
-            ) from exc
-        raise
+    # Phone numbers are not unique: families share one phone and returning patients give
+    # theirs again. A number is a contact detail, never an identity.
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await IntakeRepository(connection, request.app.state.settings).update_identity(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            patient_id=context["patient_id"],
+            age=payload.age,
+            sex=payload.sex,
+            phone=payload.phone,
+            sms_opt_in=payload.sms_opt_in,
+            name=payload.name if state.get("assisted") is True else None,
+            linked=context.get("patient_link") is not None,
+        )
     state["phase"] = "danger_signs"
     await request.app.state.redis_state.set(
         key,
@@ -1149,6 +1342,213 @@ async def save_identity(
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
     return {"next": "danger_signs"}
+
+
+class OpdCardPayload(StrictPayload):
+    number: str = Field(min_length=6, max_length=24)
+    pin: str = Field(min_length=4, max_length=12)
+
+
+class FollowUpPayload(StrictPayload):
+    previous_visit_id: UUID | None = None
+
+
+@router.post("/sessions/{visit_id}/opd-card")
+async def link_opd_card(
+    visit_id: UUID,
+    payload: OpdCardPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, Any]:
+    """A returning patient joins today's visit to their record with their OPD card.
+
+    Nothing from the earlier record is shown here (a kiosk screen is shared); the doctor sees
+    it. The card links only when today's age and sex fit the record, attempts are limited per
+    visit and per card, and every attempt is audited.
+    """
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=True
+    )
+    settings = request.app.state.settings
+    if context["status"] != "registering":
+        raise _error(
+            409, "SESSION_COMPLETE", "Too late to change", "Please ask at the registration desk."
+        )
+    if context.get("age_years") is None:
+        raise _error(
+            409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Enter your age first."
+        )
+    too_many = "Too many attempts. Please ask at the registration desk."
+    await _rate_limit(
+        request,
+        key=f"osa:{settings.app_env}:rl:opd-card:visit:{visit_id}",
+        limit=5,
+        window_seconds=900,
+        detail=too_many,
+    )
+    number = normalize_mrn(payload.number)
+    if number is not None:
+        await _rate_limit(
+            request,
+            key=f"osa:{settings.app_env}:rl:opd-card:number:{hospital_id}:{number}",
+            limit=10,
+            window_seconds=3600,
+            detail=too_many,
+        )
+    outcome = "linked"
+    response: dict[str, Any] = {}
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        patients = PatientRepository(connection, settings)
+        record = await patients.by_mrn(hospital_id=hospital_id, mrn=number) if number else None
+        # Derive a PIN even for an unknown number, so both answers take the same time.
+        expected = card_pin(
+            key=settings.app_hmac_key_bytes,
+            hospital_id=hospital_id,
+            patient_id=record["id"] if record else visit_id,
+            version=int(record["card_version"]) if record else 1,
+        )
+        if record is None or not pin_matches(payload.pin, expected):
+            outcome = "not_recognised"
+        elif not demographics_consistent(
+            stored_birth_year=record["year_of_birth"],
+            stored_sex=record["sex"],
+            age=context.get("age_years"),
+            sex=context.get("sex"),
+            current_year=datetime.now(UTC).year,
+        ):
+            outcome = "identity_mismatch"
+        else:
+            try:
+                await patients.link_visit(
+                    hospital_id=hospital_id,
+                    visit_id=visit_id,
+                    patient_id=record["id"],
+                    source="card",
+                )
+            except ValueError:
+                outcome = "already_linked"
+            if outcome == "linked":
+                earlier = await patients.visit_history(
+                    hospital_id=hospital_id,
+                    patient_id=record["id"],
+                    exclude_visit_id=visit_id,
+                    limit=1,
+                )
+                visit_count = await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM visits WHERE hospital_id = :hospital_id "
+                        "AND patient_id = :patient_id AND id <> :visit_id "
+                        "AND token_number IS NOT NULL"
+                    ),
+                    {
+                        "hospital_id": hospital_id,
+                        "patient_id": record["id"],
+                        "visit_id": visit_id,
+                    },
+                )
+                response = {
+                    "linked": True,
+                    "opd_number": record["mrn"],
+                    "visit_count": int(visit_count or 0),
+                    # Only the date: the kiosk never shows what an earlier visit was about.
+                    "previous_visit": (
+                        {
+                            "id": str(earlier[0]["visit_id"]),
+                            "date": earlier[0]["service_date"].isoformat(),
+                        }
+                        if earlier
+                        else None
+                    ),
+                }
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="patient",
+            actor_id=visit_id,
+            action="intake.opd_card.linked" if outcome == "linked" else "intake.opd_card.refused",
+            resource_type="visit",
+            resource_id=visit_id,
+            meta={"outcome": outcome},
+        )
+    if outcome == "identity_mismatch":
+        raise _error(
+            409,
+            "CARD_IDENTITY_MISMATCH",
+            "Details do not match",
+            "These details do not match the card. Please ask at the registration desk.",
+        )
+    if outcome == "already_linked":
+        raise _error(
+            409,
+            "ALREADY_LINKED",
+            "Already linked",
+            "This visit is already linked to a record. Please ask at the registration desk.",
+        )
+    if outcome != "linked":
+        raise _error(
+            422,
+            "CARD_NOT_RECOGNISED",
+            "Card not recognised",
+            "We could not match this OPD card. Check the number and PIN, "
+            "or ask at the registration desk.",
+        )
+    return response
+
+
+@router.post("/sessions/{visit_id}/follow-up")
+async def mark_follow_up(
+    visit_id: UUID,
+    payload: FollowUpPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, Any]:
+    """Say whether today's visit continues an earlier one; the earlier visit is not changed."""
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=True
+    )
+    if context["status"] != "registering":
+        raise _error(
+            409, "SESSION_COMPLETE", "Too late to change", "Please ask at the registration desk."
+        )
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        if payload.previous_visit_id is not None:
+            earlier = await connection.scalar(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM visits WHERE hospital_id = :hospital_id "
+                    "AND id = :previous_id AND patient_id = :patient_id AND id <> :visit_id "
+                    "AND token_number IS NOT NULL)"
+                ),
+                {
+                    "hospital_id": hospital_id,
+                    "previous_id": payload.previous_visit_id,
+                    "patient_id": context["patient_id"],
+                    "visit_id": visit_id,
+                },
+            )
+            if not earlier:
+                raise _error(
+                    422,
+                    "VALIDATION_FAILED",
+                    "Earlier visit not found",
+                    "Choose one of your own earlier visits.",
+                )
+        await connection.execute(
+            text(
+                "UPDATE visits SET previous_visit_id = :previous_id "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {
+                "previous_id": payload.previous_visit_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+            },
+        )
+    return {
+        "previous_visit_id": str(payload.previous_visit_id) if payload.previous_visit_id else None
+    }
 
 
 @router.post("/sessions/{visit_id}/danger-signs")
@@ -1966,6 +2366,17 @@ async def request_staff_help(
 ) -> dict[str, bool]:
     """The patient pressed "Call staff": raise an acknowledgeable alert on the staff board."""
     hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=False)
+    try:
+        raw_state = await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
+        channel = json.loads(raw_state).get("channel") if raw_state else None
+    except (RedisError, ValueError, AttributeError):
+        channel = None
+    # Staff need to know where to look: at the kiosk, or for someone holding a phone.
+    evidence = (
+        "Patient asked for help from their own phone."
+        if channel == "mobile"
+        else "Patient pressed Call staff on the kiosk."
+    )
     event_id = uuid7()
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
@@ -1988,12 +2399,17 @@ async def request_staff_help(
             text(
                 "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, "
                 "evidence) VALUES (:id, :hospital_id, :visit_id, 'tile', 'PATIENT_HELP', "
-                "'priority', 'Patient pressed Call staff on the kiosk.') "
+                "'priority', :evidence) "
                 "ON CONFLICT (hospital_id, visit_id, rule_id) WHERE rule_id IS NOT NULL "
-                "DO UPDATE SET acknowledged_at = NULL, acknowledged_by = NULL, created_at = now() "
-                "RETURNING id"
+                "DO UPDATE SET acknowledged_at = NULL, acknowledged_by = NULL, created_at = now(), "
+                "evidence = EXCLUDED.evidence RETURNING id"
             ),
-            {"id": event_id, "hospital_id": hospital_id, "visit_id": visit_id},
+            {
+                "id": event_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "evidence": evidence,
+            },
         )
         await connection.execute(
             text(
@@ -2023,8 +2439,8 @@ async def request_staff_help(
                 "visit_id": str(visit_id),
                 "rule_id": "PATIENT_HELP",
                 "level": "priority",
-                "reason_en": "Patient asked for help at the kiosk",
-                "evidence": "Patient pressed Call staff on the kiosk.",
+                "reason_en": "Patient asked for help",
+                "evidence": evidence,
                 "token_label": visit["token_label"],
                 "department_id": str(visit["department_id"]),
             }
@@ -2072,20 +2488,212 @@ async def flag_patient_needs_assistance(
     return {"needs_assistance": True}
 
 
+class _AlreadyConfirmedError(Exception):
+    """Another request confirmed this visit while this one was running."""
+
+
+async def _queue_receipt(
+    request: Request,
+    *,
+    hospital_id: UUID,
+    visit_id: UUID,
+    state: dict[str, Any],
+    token_label: str,
+    department_id: UUID,
+    visit_status: str,
+    status_token: str,
+    opd_card: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """The patient's token receipt, also kept in the session so a repeat request gets it."""
+    settings = request.app.state.settings
+    position: int | None = None
+    if visit_status == "queued":
+        try:
+            position = await QueueRedis(
+                request.app.state.redis_state, app_env=settings.app_env
+            ).position(hospital_id=hospital_id, department_id=department_id, visit_id=visit_id)
+        except RedisError:
+            position = None
+        if position is None:
+            async with request.app.state.engine.begin() as connection:
+                await set_hospital_scope(connection, hospital_id)
+                rows = await QueueRepository(connection, settings).queued_visits(
+                    hospital_id=hospital_id, department_id=department_id
+                )
+            now = datetime.now(UTC)
+            rows.sort(
+                key=lambda item: (
+                    queue_score(
+                        int((item["queued_at"] or now).timestamp() * 1000),
+                        item["urgency"],
+                        item["age_years"],
+                        bool(item["pregnant"]),
+                        urgent_bonus_min=settings.urgent_bonus_min,
+                        priority_bonus_min=settings.priority_bonus_min,
+                        vulnerable_bonus_min=settings.vulnerable_bonus_min,
+                        acuity_score=item.get("acuity_score"),
+                    ),
+                    str(item["visit_id"]),
+                )
+            )
+            position = next(
+                (index + 1 for index, item in enumerate(rows) if item["visit_id"] == visit_id),
+                None,
+            )
+    language = str(state.get("language", "en"))
+    department_name = None
+    try:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            department = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT code, name_en, name_hi, name_mr FROM departments "
+                            "WHERE hospital_id = :hospital_id AND id = :department_id"
+                        ),
+                        {"hospital_id": hospital_id, "department_id": department_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+        if department is not None:
+            department_name = department.get(f"name_{language}") or department["name_en"]
+    except Exception:
+        department_name = None
+    consult_minutes = settings.default_consult_min
+    public_web_url = settings.public_web_url.strip().rstrip("/")
+    receipt = {
+        "confirmed": True,
+        "status": visit_status,
+        "token": token_label,
+        "status_token": status_token,
+        "status_url": f"/s/{status_token}",
+        # The QR code needs an address a patient's phone can open (not localhost).
+        "public_status_url": f"{public_web_url}/s/{status_token}" if public_web_url else None,
+        "position": position,
+        "department_name": department_name,
+        "wait_minutes": round(max(position - 1, 0) * consult_minutes) if position else None,
+        # The OPD card (registration number and PIN) to bring to the next visit.
+        "opd_card": opd_card,
+    }
+    state["phase"] = "confirmed"
+    state["queue"] = receipt
+    try:
+        await request.app.state.redis_state.set(
+            _session_key(hospital_id, visit_id),
+            json.dumps(state, separators=(",", ":")),
+            ex=settings.patient_session_hours * _SESSION_TTL_FACTOR,
+        )
+    except RedisError:
+        pass  # The database holds the confirmation; a repeat request rebuilds this receipt.
+    return receipt
+
+
+async def _confirmed_receipt(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, state: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The receipt of a visit that already has a token, rebuilt from the database."""
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT v.status, v.token_label, v.status_token_hash, v.department_id, "
+                        "v.patient_id, p.mrn, p.card_version FROM visits v JOIN patients p "
+                        "ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id "
+                        "AND v.token_number IS NOT NULL AND v.status_token_hash IS NOT NULL"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+    if row is None:
+        return None
+    status_token = create_status_token(
+        key=request.app.state.settings.app_hmac_key_bytes,
+        hospital_id=hospital_id,
+        visit_id=visit_id,
+    )
+    if status_token_digest(status_token) != row["status_token_hash"]:
+        return None  # Issued under another key, so the link cannot be rebuilt.
+    return await _queue_receipt(
+        request,
+        hospital_id=hospital_id,
+        visit_id=visit_id,
+        state=state,
+        token_label=str(row["token_label"]),
+        department_id=row["department_id"],
+        visit_status=str(row["status"]),
+        status_token=status_token,
+        opd_card=(
+            _opd_card(request, hospital_id, row["patient_id"], str(row["mrn"]), row["card_version"])
+            if row["mrn"]
+            else None
+        ),
+    )
+
+
+def _opd_card(
+    request: Request, hospital_id: UUID, patient_id: UUID, number: str, version: int
+) -> dict[str, str]:
+    return {
+        "number": number,
+        "pin": card_pin(
+            key=request.app.state.settings.app_hmac_key_bytes,
+            hospital_id=hospital_id,
+            patient_id=patient_id,
+            version=int(version),
+        ),
+    }
+
+
 @router.post("/sessions/{visit_id}/confirm")
 async def confirm_summary(
     visit_id: UUID,
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_patient())],
 ) -> dict[str, Any]:
+    """Issue the visit's token once; repeated or simultaneous requests get that same token."""
     hospital_id, _ = await _authorized_visit(request, visit_id, principal, consent_required=True)
     state = _read_state(
         await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
     )
     if state.get("phase") == "confirmed" and isinstance(state.get("queue"), dict):
         return cast(dict[str, Any], state["queue"])
+    # The database, not the session, records a confirmation: when an earlier attempt
+    # committed but its session update was lost, answer with the token it issued.
+    existing = await _confirmed_receipt(
+        request, hospital_id=hospital_id, visit_id=visit_id, state=state
+    )
+    if existing is not None:
+        return existing
     if state.get("phase") != "summary":
         raise _error(409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first.")
+    try:
+        return await _confirm_new_summary(
+            request, hospital_id=hospital_id, visit_id=visit_id, state=state
+        )
+    except _AlreadyConfirmedError:
+        # A simultaneous request issued the token first and this one was rolled back.
+        existing = await _confirmed_receipt(
+            request, hospital_id=hospital_id, visit_id=visit_id, state=state
+        )
+        if existing is None:
+            raise _error(
+                409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first."
+            ) from None
+        return existing
+
+
+async def _confirm_new_summary(
+    request: Request, *, hospital_id: UUID, visit_id: UUID, state: dict[str, Any]
+) -> dict[str, Any]:
     status_token = create_status_token(
         key=request.app.state.settings.app_hmac_key_bytes,
         hospital_id=hospital_id,
@@ -2162,15 +2770,30 @@ async def confirm_summary(
         await repository.save(hospital_id=hospital_id, visit_id=visit_id, data=case_data)
         confirmed = await repository.confirm(hospital_id=hospital_id, visit_id=visit_id)
         if not confirmed:
-            raise _error(
-                409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first."
-            )
+            # Leaving the block rolls back this request's writes; the caller answers with
+            # the token the first request issued.
+            raise _AlreadyConfirmedError
         queue_record = await QueueRepository(connection, request.app.state.settings).confirm_visit(
             redis=request.app.state.redis_state,
             hospital_id=hospital_id,
             visit_id=visit_id,
             status_hash=status_token_digest(status_token),
         )
+        # A first visit becomes a registered patient with an OPD card; a returning patient
+        # (joined by card or by staff) keeps their number. The visit's current patient is
+        # read here because a card link moves the visit off its placeholder.
+        patient_id = await connection.scalar(
+            text("SELECT patient_id FROM visits WHERE hospital_id = :hospital_id AND id = :id"),
+            {"hospital_id": hospital_id, "id": visit_id},
+        )
+        mrn, card_version = await PatientRepository(
+            connection, request.app.state.settings
+        ).assign_mrn(
+            hospital_id=hospital_id,
+            patient_id=patient_id,
+            year=queue_record["service_date"].year,
+        )
+        opd_card = _opd_card(request, hospital_id, patient_id, mrn, card_version)
         details = (
             (
                 await connection.execute(
@@ -2229,86 +2852,16 @@ async def confirm_summary(
     except RedisError:
         # The committed outbox row is retried by the relay.
         pass
-    position: int | None
-    try:
-        position = await QueueRedis(
-            request.app.state.redis_state, app_env=request.app.state.settings.app_env
-        ).position(
-            hospital_id=hospital_id,
-            department_id=queue_record["department_id"],
-            visit_id=visit_id,
-        )
-    except RedisError:
-        position = None
-    if position is None:
-        async with request.app.state.engine.begin() as connection:
-            await set_hospital_scope(connection, hospital_id)
-            rows = await QueueRepository(connection, request.app.state.settings).queued_visits(
-                hospital_id=hospital_id, department_id=queue_record["department_id"]
-            )
-        rows.sort(
-            key=lambda item: (
-                queue_score(
-                    int((item["queued_at"] or details["queued_at"]).timestamp() * 1000),
-                    item["urgency"],
-                    item["age_years"],
-                    bool(item["pregnant"]),
-                    urgent_bonus_min=request.app.state.settings.urgent_bonus_min,
-                    priority_bonus_min=request.app.state.settings.priority_bonus_min,
-                    vulnerable_bonus_min=request.app.state.settings.vulnerable_bonus_min,
-                    acuity_score=item.get("acuity_score"),
-                ),
-                str(item["visit_id"]),
-            )
-        )
-        position = next(
-            (index + 1 for index, item in enumerate(rows) if item["visit_id"] == visit_id), None
-        )
-    language = str(state.get("language", "en"))
-    department_name = None
-    try:
-        async with request.app.state.engine.begin() as connection:
-            await set_hospital_scope(connection, hospital_id)
-            department = (
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT code, name_en, name_hi, name_mr FROM departments "
-                            "WHERE hospital_id = :hospital_id AND id = :department_id"
-                        ),
-                        {
-                            "hospital_id": hospital_id,
-                            "department_id": queue_record["department_id"],
-                        },
-                    )
-                )
-                .mappings()
-                .first()
-            )
-        if department is not None:
-            department_name = department.get(f"name_{language}") or department["name_en"]
-    except Exception:
-        department_name = None
-    consult_minutes = request.app.state.settings.default_consult_min
-    public_web_url = request.app.state.settings.public_web_url.strip().rstrip("/")
-    queue_response = {
-        "confirmed": True,
-        "status": "queued",
-        "token": queue_record["token_label"],
-        "status_token": status_token,
-        "status_url": f"/s/{status_token}",
-        # The QR code needs an address a patient's phone can open (not localhost).
-        "public_status_url": f"{public_web_url}/s/{status_token}" if public_web_url else None,
-        "position": position,
-        "department_name": department_name,
-        "wait_minutes": round(max(position - 1, 0) * consult_minutes) if position else None,
-    }
-    state["phase"] = "confirmed"
-    state["queue"] = queue_response
-    await request.app.state.redis_state.set(
-        _session_key(hospital_id, visit_id),
-        json.dumps(state, separators=(",", ":")),
-        ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
+    queue_response = await _queue_receipt(
+        request,
+        hospital_id=hospital_id,
+        visit_id=visit_id,
+        state=state,
+        token_label=queue_record["token_label"],
+        department_id=queue_record["department_id"],
+        visit_status="queued",
+        status_token=status_token,
+        opd_card=opd_card,
     )
     if getattr(request.app.state.llm_provider, "name", "mock") == "gemini" and (
         await _hospital_llm_enabled(request, hospital_id)

@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -7,6 +7,7 @@ import {
   Camera,
   Check,
   ChevronLeft,
+  IdCard,
   Keyboard,
   Languages,
   Loader2,
@@ -23,6 +24,7 @@ import {
   type ConsentCopy,
   type DangerTile as DangerOption,
   type IntakeResponse,
+  type OpdCard,
   type Question,
   useKioskHospitalName,
 } from "../lib/intake";
@@ -34,6 +36,7 @@ import {
   listenInBrowser,
   listenWithServer,
   recordingAvailable,
+  secureVoiceAvailable,
   speak,
   stopSpeaking,
   type Listener,
@@ -44,6 +47,7 @@ import "./intake.css";
 type Stage =
   | "consent"
   | "identity"
+  | "returning"
   | "danger"
   | "interview"
   | "summary"
@@ -60,11 +64,12 @@ type QueueTicket = {
   position: number | null;
   departmentName: string | null;
   waitMinutes: number | null;
+  opdCard: OpdCard | null;
 };
 
 const STEPS: { stage: Stage[]; key: string }[] = [
   { stage: ["consent"], key: "stepConsent" },
-  { stage: ["identity"], key: "stepDetails" },
+  { stage: ["identity", "returning"], key: "stepDetails" },
   { stage: ["danger"], key: "stepSafety" },
   { stage: ["interview"], key: "stepQuestions" },
   { stage: ["summary"], key: "stepReview" },
@@ -540,6 +545,10 @@ function AnswerPanel({
 export function KioskIntake() {
   const { t } = useTranslation(["intake", "kiosk"]);
   const navigate = useNavigate();
+  // On a patient's own phone (/m/<code>/intake) the start page is the check-in link.
+  const { code: checkinCode } = useParams<{ code?: string }>();
+  const mobile = Boolean(checkinCode);
+  const home = mobile ? `/m/${checkinCode}` : "/kiosk";
   const setLanguage = useLanguageStore((state) => state.setLanguage);
   const hospitalName = useKioskHospitalName();
   const session = useMemo(() => intake.session(), []);
@@ -555,7 +564,13 @@ export function KioskIntake() {
   const [sex, setSex] = useState<"female" | "male" | "other" | "">("");
   const [phone, setPhone] = useState("");
   const [smsOptIn, setSmsOptIn] = useState(false);
-  const [phoneConflict, setPhoneConflict] = useState(false);
+  // "Have you visited before?": ask, then the OPD card (number and PIN), then whether
+  // today is about the same problem as the earlier visit.
+  const [returningStep, setReturningStep] = useState<"ask" | "card" | "followup">("ask");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardPin, setCardPin] = useState("");
+  const [cardError, setCardError] = useState("");
+  const [earlierVisit, setEarlierVisit] = useState<{ id: string; date: string } | null>(null);
 
   const [tiles, setTiles] = useState<DangerOption[]>([]);
   const [selectedTiles, setSelectedTiles] = useState<string[]>([]);
@@ -586,7 +601,11 @@ export function KioskIntake() {
 
   const reportError = useCallback(
     (cause: unknown) => {
-      if (cause instanceof IntakeRequestError && cause.status === 410) {
+      // 410: the session ended; 401: the patient session expired (two hours).
+      if (
+        cause instanceof IntakeRequestError &&
+        (cause.status === 410 || cause.status === 401)
+      ) {
         setError(t("sessionLost"));
         return;
       }
@@ -616,7 +635,7 @@ export function KioskIntake() {
 
   useEffect(() => {
     if (!session || !consent) {
-      navigate("/kiosk", { replace: true });
+      navigate(home, { replace: true });
       return;
     }
     setLanguage(consent.language);
@@ -639,7 +658,9 @@ export function KioskIntake() {
   }, []);
 
   useEffect(() => {
-    if (stage !== "summary" || nurseComing) return;
+    // A kiosk patient idle on the review screen gets a nurse; a phone user could be anywhere
+    // (and may simply have switched apps), so phones use the Help button instead.
+    if (stage !== "summary" || nurseComing || mobile) return;
     let timer = 0;
     const arm = () => {
       window.clearTimeout(timer);
@@ -656,10 +677,11 @@ export function KioskIntake() {
       window.removeEventListener("pointerdown", arm);
       window.removeEventListener("keydown", arm);
     };
-  }, [stage, nurseComing]);
+  }, [stage, nurseComing, mobile]);
 
   useEffect(() => {
-    if (stage !== "done") return;
+    // The shared kiosk frees itself for the next patient; a phone keeps showing the token.
+    if (stage !== "done" || mobile) return;
     const timer = window.setInterval(() => {
       setSecondsLeft((value) => {
         if (value <= 1) {
@@ -671,7 +693,7 @@ export function KioskIntake() {
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [stage, navigate]);
+  }, [stage, navigate, mobile]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -679,30 +701,54 @@ export function KioskIntake() {
     try {
       await action();
     } catch (cause) {
-      if (cause instanceof IntakeRequestError && cause.code === "PHONE_ALREADY_REGISTERED") {
-        setPhoneConflict(true);
-        setError(t("phoneAlreadyRegistered", { ns: "kiosk" }));
-      } else reportError(cause);
+      reportError(cause);
     } finally {
       setBusy(false);
     }
   }
 
-  async function submitIdentity(includePhone: boolean) {
+  async function toSafetyScreen() {
+    setTiles((await intake.dangerTiles()).tiles);
+    move("danger");
+  }
+
+  /** Save the details, then ask a patient at a kiosk or phone whether they came before. */
+  async function submitIdentity() {
     await intake.identity(
       Number(age),
       sex || "unknown",
-      includePhone ? phone || undefined : undefined,
+      phone || undefined,
       session?.assisted ? name.trim() : undefined,
-      includePhone && smsOptIn,
+      smsOptIn,
     );
-    if (!includePhone) {
-      setPhone("");
-      setSmsOptIn(false);
+    // At the desk the nurse finds an earlier record from the consultation screen.
+    if (session?.assisted) {
+      await toSafetyScreen();
+      return;
     }
-    setPhoneConflict(false);
-    setTiles((await intake.dangerTiles()).tiles);
-    move("danger");
+    setReturningStep("ask");
+    move("returning");
+  }
+
+  /** Join today's visit to the earlier record; the kiosk never shows that record. */
+  async function linkCard() {
+    setCardError("");
+    try {
+      const link = await intake.linkOpdCard(cardNumber.trim(), cardPin.trim());
+      if (link.previous_visit) {
+        setEarlierVisit(link.previous_visit);
+        setReturningStep("followup");
+        return;
+      }
+    } catch (cause) {
+      // The patient can fix the card details or carry on as a new visit.
+      if (cause instanceof IntakeRequestError && cause.status < 500) {
+        setCardError(cause.message);
+        return;
+      }
+      throw cause;
+    }
+    await toSafetyScreen();
   }
 
   /** End the visit without a token: it is cancelled and kept off the staff patient list. */
@@ -711,7 +757,7 @@ export function KioskIntake() {
     stopSpeaking();
     setBusy(true);
     await intake.cancel();
-    navigate(session?.assisted ? "/staff/queue" : "/kiosk", { replace: true });
+    navigate(session?.assisted ? "/staff/queue" : home, { replace: true });
   }
 
   /** Back inside the interview: undo the last answer, or return to the safety screen. */
@@ -799,7 +845,13 @@ export function KioskIntake() {
             <AlertTriangle aria-hidden="true" size={22} />
             <span>{error}</span>
             {error === t("sessionLost") && (
-              <button type="button" onClick={() => navigate("/kiosk", { replace: true })}>
+              <button
+                type="button"
+                onClick={() => {
+                  intake.finish();
+                  navigate(home, { replace: true });
+                }}
+              >
                 {t("startAgain")}
               </button>
             )}
@@ -919,7 +971,6 @@ export function KioskIntake() {
                   const digits = event.target.value.replace(/\D/g, "");
                   setPhone(digits);
                   setSmsOptIn(digits.length === 10);
-                  setPhoneConflict(false);
                   setError("");
                 }}
               />
@@ -948,16 +999,6 @@ export function KioskIntake() {
                 {t("back")}
               </button>
               <span className="intake-actions-spacer" />
-              {phoneConflict && (
-                <button
-                  type="button"
-                  className="intake-btn intake-btn--secondary"
-                  disabled={busy}
-                  onClick={() => void run(() => submitIdentity(false))}
-                >
-                  {t("continueWithoutPhone", { ns: "kiosk" })}
-                </button>
-              )}
               <button
                 type="button"
                 className="intake-btn intake-btn--primary"
@@ -968,9 +1009,156 @@ export function KioskIntake() {
                   !phoneValid ||
                   (session.assisted === true && !name.trim())
                 }
-                onClick={() => void run(() => submitIdentity(true))}
+                onClick={() => void run(submitIdentity)}
               >
                 {t("next")}
+              </button>
+            </div>
+          </>
+        )}
+
+        {stage === "returning" && returningStep === "ask" && (
+          <>
+            <h1 className="intake-title">{t("returningTitle")}</h1>
+            <p className="intake-lead">{t("returningLead")}</p>
+            <div className="intake-actions intake-actions--stack">
+              <button
+                type="button"
+                className="intake-btn intake-btn--primary intake-btn--large"
+                disabled={busy}
+                onClick={() => setReturningStep("card")}
+              >
+                <IdCard aria-hidden="true" size={24} />
+                {t("returningYes")}
+              </button>
+              <button
+                type="button"
+                className="intake-btn intake-btn--secondary intake-btn--large"
+                disabled={busy}
+                onClick={() => void run(toSafetyScreen)}
+              >
+                {t("returningNo")}
+              </button>
+              <button
+                type="button"
+                className="intake-btn intake-btn--ghost"
+                disabled={busy}
+                onClick={() => move("identity")}
+              >
+                <ChevronLeft aria-hidden="true" size={22} />
+                {t("back")}
+              </button>
+            </div>
+          </>
+        )}
+
+        {stage === "returning" && returningStep === "card" && (
+          <>
+            <h1 className="intake-title">{t("opdCardTitle")}</h1>
+            <div className="intake-opd-card-fields">
+              <label className="intake-field">
+                <span>{t("opdCardNumber")}</span>
+                <input
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={14}
+                  value={cardNumber}
+                  onChange={(event) => {
+                    setCardNumber(event.target.value.replace(/[^\d -]/g, ""));
+                    setCardError("");
+                  }}
+                />
+              </label>
+              <label className="intake-field">
+                <span>{t("opdCardPin")}</span>
+                <input
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={6}
+                  value={cardPin}
+                  onChange={(event) => {
+                    setCardPin(event.target.value.replace(/\D/g, ""));
+                    setCardError("");
+                  }}
+                />
+              </label>
+            </div>
+            <p className="intake-hint">{t("opdCardHint")}</p>
+            {cardError && (
+              <p className="intake-staff-note" role="alert">
+                {cardError}
+              </p>
+            )}
+            <div className="intake-actions">
+              <button
+                type="button"
+                className="intake-btn intake-btn--ghost"
+                disabled={busy}
+                onClick={() => setReturningStep("ask")}
+              >
+                <ChevronLeft aria-hidden="true" size={22} />
+                {t("back")}
+              </button>
+              <span className="intake-actions-spacer" />
+              {cardError && (
+                <button
+                  type="button"
+                  className="intake-btn intake-btn--secondary"
+                  disabled={busy}
+                  onClick={() => void run(toSafetyScreen)}
+                >
+                  {t("continueWithoutCard")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="intake-btn intake-btn--primary"
+                disabled={busy || cardNumber.trim().length < 8 || cardPin.length !== 6}
+                onClick={() => void run(linkCard)}
+              >
+                {t("next")}
+              </button>
+            </div>
+          </>
+        )}
+
+        {stage === "returning" && returningStep === "followup" && earlierVisit && (
+          <>
+            <h1 className="intake-title">
+              {t("followUpTitle", {
+                date: new Date(`${earlierVisit.date}T00:00:00`).toLocaleDateString(
+                  language === "en" ? "en-IN" : `${language}-IN`,
+                  { day: "numeric", month: "long" },
+                ),
+              })}
+            </h1>
+            <p className="intake-lead">{t("followUpLead")}</p>
+            <div className="intake-actions intake-actions--stack">
+              <button
+                type="button"
+                className="intake-btn intake-btn--primary intake-btn--large"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await intake.markFollowUp(earlierVisit.id);
+                    await toSafetyScreen();
+                  })
+                }
+              >
+                {t("followUpSame")}
+              </button>
+              <button
+                type="button"
+                className="intake-btn intake-btn--secondary intake-btn--large"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await intake.markFollowUp(null);
+                    await toSafetyScreen();
+                  })
+                }
+              >
+                {t("followUpNew")}
               </button>
             </div>
           </>
@@ -1076,6 +1264,9 @@ export function KioskIntake() {
 
         {stage === "interview" && currentQuestion && (
           <>
+            {mobile && !secureVoiceAvailable() && progress?.current === 1 && (
+              <p className="mobile-note">{t("mobileVoiceNote", { ns: "kiosk" })}</p>
+            )}
             {progress && !editing && (
               <div className="intake-progress">
                 <span>{t("questionOf", progress)}</span>
@@ -1205,7 +1396,17 @@ export function KioskIntake() {
                       position: result.position,
                       departmentName: result.department_name ?? null,
                       waitMinutes: result.wait_minutes ?? null,
+                      opdCard: result.opd_card ?? null,
                     });
+                    if (mobile)
+                      intake.rememberTicket({
+                        token: result.token,
+                        statusUrl: result.status_url,
+                        departmentName: result.department_name ?? null,
+                        hospitalName,
+                        issuedAt: new Date().toISOString(),
+                        opdCard: result.opd_card ?? null,
+                      });
                     intake.finish();
                     setSecondsLeft(RESTART_SECONDS);
                     move("done");
@@ -1243,22 +1444,37 @@ export function KioskIntake() {
                   </p>
                 )}
               </div>
-              {/* Not a link: tapping it would take the shared kiosk away from the next patient. */}
-              <div className="intake-ticket-qr">
-                <QRCodeSVG
-                  value={
-                    ticket.publicStatusUrl ??
-                    new URL(ticket.statusUrl, window.location.origin).toString()
-                  }
-                  size={184}
-                  level="M"
-                  marginSize={2}
-                  title={t("scanQr")}
-                />
-                <span>{t("scanQr")}</span>
-              </div>
+              {/* Not a link: tapping it would take the shared kiosk away from the next patient.
+                  A phone is already in the patient's hand, so it needs no QR. */}
+              {!mobile && (
+                <div className="intake-ticket-qr">
+                  <QRCodeSVG
+                    value={
+                      ticket.publicStatusUrl ??
+                      new URL(ticket.statusUrl, window.location.origin).toString()
+                    }
+                    size={184}
+                    level="M"
+                    marginSize={2}
+                    title={t("scanQr")}
+                  />
+                  <span>{t("scanQr")}</span>
+                </div>
+              )}
             </div>
+            {ticket.opdCard && (
+              <div className="intake-opd-slip">
+                <span>
+                  <IdCard aria-hidden="true" size={18} /> {t("yourOpdCard")}
+                </span>
+                <strong>
+                  {t("opdCardLine", { number: ticket.opdCard.number, pin: ticket.opdCard.pin })}
+                </strong>
+                <small>{t("opdCardKeep")}</small>
+              </div>
+            )}
             <p className="intake-lead">{t("waitHint")}</p>
+            {mobile && <p className="mobile-note">{t("mobileKeepPage", { ns: "kiosk" })}</p>}
             <p className="intake-ticket-meta print-only">
               {hospitalName ? `${hospitalName} · ` : ""}
               {ticket.issuedAt.toLocaleString(language === "en" ? "en-IN" : `${language}-IN`, {
@@ -1266,31 +1482,55 @@ export function KioskIntake() {
                 timeStyle: "short",
               })}
             </p>
-            <div className="intake-actions no-print">
-              <button
-                type="button"
-                className="intake-btn intake-btn--secondary"
-                onClick={() => window.print()}
-              >
-                {t("print")}
-              </button>
-              <span className="intake-actions-spacer" />
-              <button
-                type="button"
-                className="intake-btn intake-btn--primary"
-                onClick={() => navigate("/kiosk", { replace: true })}
-              >
-                {t("newPatient")}
-              </button>
-            </div>
-            <p className="intake-restart no-print">{t("autoRestart", { seconds: secondsLeft })}</p>
+            {mobile ? (
+              <div className="intake-actions intake-actions--stack no-print">
+                <button
+                  type="button"
+                  className="intake-btn intake-btn--primary intake-btn--large"
+                  onClick={() => navigate(ticket.statusUrl, { replace: true })}
+                >
+                  {t("mobileViewStatus", { ns: "kiosk" })}
+                </button>
+                <button
+                  type="button"
+                  className="intake-btn intake-btn--ghost"
+                  onClick={() => navigate(home, { replace: true })}
+                >
+                  {t("mobileSomeoneElse", { ns: "kiosk" })}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="intake-actions no-print">
+                  <button
+                    type="button"
+                    className="intake-btn intake-btn--secondary"
+                    onClick={() => window.print()}
+                  >
+                    {t("print")}
+                  </button>
+                  <span className="intake-actions-spacer" />
+                  <button
+                    type="button"
+                    className="intake-btn intake-btn--primary"
+                    onClick={() => navigate("/kiosk", { replace: true })}
+                  >
+                    {t("newPatient")}
+                  </button>
+                </div>
+                <p className="intake-restart no-print">
+                  {t("autoRestart", { seconds: secondsLeft })}
+                </p>
+              </>
+            )}
           </div>
         )}
 
         {stage === "emergency" && emergency && (
           <EmergencyNotice
             state={emergency}
-            onDone={() => navigate("/kiosk", { replace: true })}
+            mobile={mobile}
+            onDone={() => navigate(home, { replace: true })}
           />
         )}
 
@@ -1301,7 +1541,7 @@ export function KioskIntake() {
               <button
                 type="button"
                 className="intake-btn intake-btn--primary"
-                onClick={() => navigate("/kiosk", { replace: true })}
+                onClick={() => navigate(home, { replace: true })}
               >
                 {t("startAgain")}
               </button>

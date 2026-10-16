@@ -17,6 +17,8 @@ from app.core.idempotency import IdempotencyStore
 from app.core.security import create_opaque_secret, digest_secret, hash_password
 from app.db.repositories import AdminRepository
 from app.db.session import set_hospital_scope
+from app.domain.checkin import checkin_code
+from app.domain.queue.state import DEFAULT_CALL_GRACE_SECONDS
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _admin_principal = require_role("admin")
@@ -58,6 +60,9 @@ class UserCreate(Payload):
 
 class KioskCreate(Payload):
     label: str = Field(min_length=1, max_length=100)
+    # "device": a kiosk screen paired with a one-time activation code.
+    # "mobile": a phone check-in QR that patients scan to answer on their own phone.
+    kind: Literal["device", "mobile"] = "device"
 
 
 class DepartmentPatch(Payload):
@@ -112,6 +117,11 @@ class KioskPatch(Payload):
 
 class AISettingsPatch(Payload):
     llm_enabled: bool
+
+
+class QueueSettingsPatch(Payload):
+    # Seconds after a call before staff may mark the patient absent (0 to 15 minutes).
+    call_grace_seconds: int = Field(ge=0, le=900)
 
 
 def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
@@ -205,6 +215,88 @@ async def patch_ai_settings(
     return {"llm_enabled": payload.llm_enabled}
 
 
+async def _queue_settings(connection: Any, hospital_id: UUID) -> dict[str, Any]:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT s.call_grace_seconds, s.updated_at, u.name AS updated_by_name "
+                    "FROM hospital_queue_settings s LEFT JOIN users u "
+                    "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
+                    "WHERE s.hospital_id = :hospital_id"
+                ),
+                {"hospital_id": hospital_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        return {
+            "call_grace_seconds": DEFAULT_CALL_GRACE_SECONDS,
+            "is_default": True,
+            "updated_at": None,
+            "updated_by_name": None,
+        }
+    return {
+        "call_grace_seconds": int(row["call_grace_seconds"]),
+        "is_default": False,
+        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+        "updated_by_name": row["updated_by_name"],
+    }
+
+
+@router.get("/queue-settings")
+async def get_queue_settings(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """How long staff wait after calling a patient before they may mark them absent."""
+    hospital_id, _ = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        return await _queue_settings(connection, hospital_id)
+
+
+@router.patch("/queue-settings")
+async def patch_queue_settings(
+    payload: QueueSettingsPatch,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    hospital_id, actor_id = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        before = await _queue_settings(connection, hospital_id)
+        await connection.execute(
+            text(
+                "INSERT INTO hospital_queue_settings (hospital_id, call_grace_seconds, "
+                "updated_by) VALUES (:hospital_id, :grace, :actor_id) "
+                "ON CONFLICT (hospital_id) DO UPDATE SET "
+                "call_grace_seconds = EXCLUDED.call_grace_seconds, "
+                "updated_by = EXCLUDED.updated_by, updated_at = now()"
+            ),
+            {"hospital_id": hospital_id, "grace": payload.call_grace_seconds, "actor_id": actor_id},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.queue_settings.updated",
+            resource_type="hospital_queue_settings",
+            resource_id=hospital_id,
+            meta={
+                "call_grace_seconds": {
+                    "before": before["call_grace_seconds"],
+                    "after": payload.call_grace_seconds,
+                }
+            },
+        )
+        return await _queue_settings(connection, hospital_id)
+
+
 @router.get("/{resource}")
 async def list_resource(
     resource: AdminResource,
@@ -241,10 +333,11 @@ async def _create(
     hospital_id, actor_id = _identity(principal)
     settings: Settings = request.app.state.settings
     idempotency_body = dict(payload)
-    activation_code = create_opaque_secret() if resource == "kiosks" else None
+    device_kiosk = resource == "kiosks" and payload.get("kind", "device") == "device"
+    activation_code = create_opaque_secret() if device_kiosk else None
     if resource == "users":
         payload = {**payload, "password_hash": hash_password(payload.pop("password"))}
-    if resource == "kiosks":
+    if device_kiosk:
         payload = {
             **payload,
             "activation_code_hash": digest_secret(activation_code or ""),
@@ -435,14 +528,20 @@ async def issue_kiosk_activation_code(
                 expires_at=expires_at,
             )
             if kiosk is None:
-                exists = await connection.scalar(
+                kind = await connection.scalar(
                     text(
-                        "SELECT EXISTS (SELECT 1 FROM kiosks WHERE hospital_id = :hospital_id "
-                        "AND id = :id AND deleted_at IS NULL)"
+                        "SELECT kind FROM kiosks WHERE hospital_id = :hospital_id "
+                        "AND id = :id AND deleted_at IS NULL"
                     ),
                     {"hospital_id": hospital_id, "id": resource_id},
                 )
-                if exists:
+                if kind == "mobile":
+                    raise _conflict(
+                        "NOT_A_DEVICE_KIOSK",
+                        "Phone check-in QR",
+                        "A phone check-in QR has no device to set up. Show or replace its QR.",
+                    )
+                if kind is not None:
                     raise _conflict(
                         "KIOSK_INACTIVE",
                         "Kiosk is turned off",
@@ -473,6 +572,109 @@ async def issue_kiosk_activation_code(
         body={},
         operation=operation,
         response_fields_once=frozenset({"activation_code"}),
+    )
+
+
+def _checkin_link(
+    settings: Settings, *, hospital_id: UUID, point: dict[str, Any], version: int
+) -> dict[str, Any]:
+    code = checkin_code(
+        key=settings.app_hmac_key_bytes,
+        hospital_id=hospital_id,
+        point_id=point["id"],
+        version=version,
+    )
+    path = f"/m/{code}"
+    public_web_url = settings.public_web_url.strip().rstrip("/")
+    return {
+        "id": str(point["id"]),
+        "label": point["label"],
+        "is_active": point["is_active"],
+        "version": version,
+        "path": path,
+        # Phones need the PC's Wi-Fi address; empty when start-demo.ps1 found no network.
+        "url": f"{public_web_url}{path}" if public_web_url else None,
+    }
+
+
+@router.get("/kiosks/{resource_id}/checkin-link")
+async def get_checkin_link(
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """The phone check-in QR link for a check-in point; it can be shown again any time."""
+    hospital_id, actor_id = _identity(principal)
+    settings: Settings = request.app.state.settings
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        point = await AdminRepository(connection, settings).checkin_point(
+            hospital_id=hospital_id, point_id=resource_id
+        )
+        if point is None:
+            raise _not_found()
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.kiosks.checkin_link_viewed",
+            resource_type="kiosk",
+            resource_id=resource_id,
+        )
+    return _checkin_link(
+        settings, hospital_id=hospital_id, point=point, version=int(point["checkin_code_version"])
+    )
+
+
+@router.post("/kiosks/{resource_id}/checkin-link")
+async def replace_checkin_link(
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Replace a check-in point's QR: posters with the previous code stop working at once."""
+    hospital_id, actor_id = _identity(principal)
+    settings: Settings = request.app.state.settings
+
+    async def operation() -> dict[str, Any]:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            repository = AdminRepository(connection, settings)
+            point = await repository.checkin_point(hospital_id=hospital_id, point_id=resource_id)
+            if point is None:
+                raise _not_found()
+            version = await repository.rotate_checkin_code(
+                hospital_id=hospital_id,
+                point_id=resource_id,
+                current_version=int(point["checkin_code_version"]),
+            )
+            if version is None:
+                raise _conflict(
+                    "CHECKIN_CODE_CHANGED",
+                    "QR changed",
+                    "Someone replaced this QR just now. Reload to see the new one.",
+                )
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user",
+                actor_id=actor_id,
+                action="admin.kiosks.checkin_code_replaced",
+                resource_type="kiosk",
+                resource_id=resource_id,
+                meta={"version": version},
+            )
+            return _checkin_link(settings, hospital_id=hospital_id, point=point, version=version)
+
+    return await IdempotencyStore(request.app.state.redis_state).execute(
+        request,
+        hospital_id=hospital_id,
+        actor_id=actor_id,
+        body={},
+        operation=operation,
     )
 
 

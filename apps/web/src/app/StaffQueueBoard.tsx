@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import "../locales/staff";
 import {
   AlertTriangle,
   Bell,
@@ -14,24 +15,36 @@ import {
   MoreHorizontal,
   PhoneCall,
   RefreshCw,
+  RotateCcw,
   Search,
+  ShieldAlert,
+  Smartphone,
   Stethoscope,
+  Undo2,
   UserRound,
+  UserX,
   Users,
 } from "lucide-react";
 import { ConnectionIndicator, Popover, UrgencyBadge } from "../components/ui";
 import { TriageWhy } from "./TriageWhy";
 import { apiSocketUrl } from "../lib/api";
 import { staffAuth } from "../lib/auth";
+import { newRequestId } from "../lib/ids";
 import {
   applyQueueOperations,
+  formatCountdown,
+  graceLeft,
   sequenceAction,
   sortQueue,
   waitMinutes,
+  type MissedItem,
   type QueueItem,
   type QueueOperation,
   type QueueStatus,
 } from "./queueBoardModel";
+import { queueProblem } from "./queueProblem";
+
+type QueueAction = "call" | "start" | "complete" | "skip" | "recall" | "return" | "no-show";
 
 type QueueDepartment = { id: string; code: string; name: string };
 type QueueMessage = {
@@ -55,10 +68,13 @@ type ConnectionState = "live" | "reconnecting" | "offline";
 
 const PAGE_SIZE = 50;
 const SOUND_PREFERENCE_KEY = "opd-staff-alert-sound";
+const DEFAULT_GRACE_SECONDS = 180;
 type QueueSnapshot = {
   items: QueueItem[];
   departments: QueueDepartment[];
   nextCursor: string | null;
+  missed: MissedItem[];
+  graceSeconds: number;
   expiresAt: number;
 };
 const queueSnapshots = new Map<string, QueueSnapshot>();
@@ -131,7 +147,7 @@ function formatWait(minutes: number | null) {
 }
 
 export function StaffQueueBoard() {
-  const { t } = useTranslation("staff");
+  const { t, i18n } = useTranslation("staff");
   const hospitalId = staffAuth.user?.hospital_id ?? "";
   const userScope = `${hospitalId}:${staffAuth.user?.id ?? ""}`;
   const [departmentId, setDepartmentId] = useState(
@@ -148,8 +164,15 @@ export function StaffQueueBoard() {
   const [nextCursor, setNextCursor] = useState<string | null>(
     initialSnapshot?.nextCursor ?? null,
   );
+  const [missed, setMissed] = useState<MissedItem[]>(initialSnapshot?.missed ?? []);
+  const [graceSeconds, setGraceSeconds] = useState(
+    initialSnapshot?.graceSeconds ?? DEFAULT_GRACE_SECONDS,
+  );
   const [alerts, setAlerts] = useState<StaffAlert[]>([]);
   const [error, setError] = useState("");
+  // A refused action (doctor busy, too early to mark absent) never locks the board.
+  const [actionError, setActionError] = useState("");
+  const [notice, setNotice] = useState("");
   const [working, setWorking] = useState<string>();
   const [soundEnabled, setSoundEnabled] = useState(initialSoundPreference);
   const [connection, setConnection] = useState<ConnectionState>("reconnecting");
@@ -212,6 +235,8 @@ export function StaffQueueBoard() {
         items: QueueItem[];
         next_cursor: string | null;
         departments?: QueueDepartment[];
+        missed?: MissedItem[];
+        call_grace_seconds?: number;
       };
       if (requestScopeRef.current !== requestScope) return;
       if (body.departments) {
@@ -232,6 +257,10 @@ export function StaffQueueBoard() {
       }
       setItems((current) => (append ? [...current, ...pageItems] : body.items));
       setNextCursor(body.next_cursor);
+      if (!append) {
+        setMissed(body.missed ?? []);
+        setGraceSeconds(body.call_grace_seconds ?? DEFAULT_GRACE_SECONDS);
+      }
       setQueueLoaded(true);
       setError("");
       if (!append && hospitalId && departmentId) {
@@ -241,6 +270,8 @@ export function StaffQueueBoard() {
             items: body.items,
             departments: body.departments ?? [],
             nextCursor: body.next_cursor,
+            missed: body.missed ?? [],
+            graceSeconds: body.call_grace_seconds ?? DEFAULT_GRACE_SECONDS,
             expiresAt: Date.now() + 30_000,
           },
         );
@@ -287,6 +318,8 @@ export function StaffQueueBoard() {
         setItems(cached.items);
         setDepartments(cached.departments);
         setNextCursor(cached.nextCursor);
+        setMissed(cached.missed);
+        setGraceSeconds(cached.graceSeconds);
         setQueueLoaded(true);
         loadedIdsRef.current = new Set(
           cached.items.map((item) => item.visit_id),
@@ -294,6 +327,7 @@ export function StaffQueueBoard() {
       } else {
         setItems([]);
         setNextCursor(null);
+        setMissed([]);
         setQueueLoaded(false);
       }
     }
@@ -464,10 +498,20 @@ export function StaffQueueBoard() {
     return () => window.clearInterval(timer);
   }, []);
 
+  // While a called patient is inside the grace period, count down to "Mark absent".
+  const graceRunning = items.some(
+    (item) => item.status === "called" && graceLeft(item.called_at, graceSeconds, now) > 0,
+  );
+  useEffect(() => {
+    if (!graceRunning) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [graceRunning]);
+
   async function acknowledge(alertId: string) {
     const response = await staffAuth.request(`/alerts/${alertId}/ack`, {
       method: "POST",
-      headers: { "Idempotency-Key": crypto.randomUUID() },
+      headers: { "Idempotency-Key": newRequestId() },
     });
     if (!response.ok) {
       setError("Could not acknowledge this alert. Refresh and try again.");
@@ -476,25 +520,50 @@ export function StaffQueueBoard() {
     setAlerts((current) => current.filter((alert) => alert.id !== alertId));
   }
 
-  async function action(
-    visitId: string,
-    name: "call" | "start" | "complete" | "no-show",
-  ) {
+  async function action(visitId: string, name: QueueAction) {
     setWorking(visitId);
-    setError("");
+    setActionError("");
+    setNotice("");
     try {
       const response = await staffAuth.request(`/queue/${visitId}/${name}`, {
         method: "POST",
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+        headers: { "Idempotency-Key": newRequestId() },
       });
       if (!response.ok)
-        throw new Error("That queue action is no longer available.");
-      await refresh();
+        throw new Error(
+          (await queueProblem(response, t)) ?? "That queue action is no longer available.",
+        );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Queue action failed.");
+      setActionError(cause instanceof Error ? cause.message : "Queue action failed.");
     } finally {
       setWorking(undefined);
     }
+    // Refused or not, the board shows the queue as it is now.
+    await refresh().catch(() => setConnection("offline"));
+  }
+
+  async function callNext() {
+    if (!departmentId) return;
+    setWorking("call-next");
+    setActionError("");
+    setNotice("");
+    try {
+      const response = await staffAuth.request(
+        `/queue/call-next?department_id=${encodeURIComponent(departmentId)}`,
+        { method: "POST", headers: { "Idempotency-Key": newRequestId() } },
+      );
+      if (!response.ok)
+        throw new Error(
+          (await queueProblem(response, t)) ?? "Could not call the next patient.",
+        );
+      const body = (await response.json()) as { token?: string };
+      if (body.token) setNotice(t("calledToken", { token: body.token }));
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "Could not call the next patient.");
+    } finally {
+      setWorking(undefined);
+    }
+    await refresh().catch(() => setConnection("offline"));
   }
 
   async function override(visitId: string) {
@@ -507,7 +576,7 @@ export function StaffQueueBoard() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Idempotency-Key": crypto.randomUUID(),
+          "Idempotency-Key": newRequestId(),
         },
         body: JSON.stringify({
           urgency: value.urgency,
@@ -541,7 +610,7 @@ export function StaffQueueBoard() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Idempotency-Key": crypto.randomUUID(),
+            "Idempotency-Key": newRequestId(),
           },
           body: JSON.stringify({ reason }),
         },
@@ -577,6 +646,8 @@ export function StaffQueueBoard() {
     staffAuth.user?.role === "nurse" || staffAuth.user?.role === "admin";
   const canOpenCase =
     staffAuth.user?.role === "doctor" || staffAuth.user?.role === "admin";
+  // Starting and completing a consultation is for doctors (and administrators).
+  const canConsult = canOpenCase;
   const [search, setSearch] = useState("");
   const [attentionOnly, setAttentionOnly] = useState(false);
   const sortedItems = useMemo(() => sortQueue(items), [items]);
@@ -620,10 +691,34 @@ export function StaffQueueBoard() {
   ] as const;
 
   function primaryAction(item: QueueItem) {
-    if (item.status === "queued") return { name: "call" as const, label: "Call patient", Icon: PhoneCall };
-    if (item.status === "called") return { name: "start" as const, label: "Start consult", Icon: Stethoscope };
-    return { name: "complete" as const, label: "Complete", Icon: CheckCircle2 };
+    if (item.status === "queued")
+      return { name: "call" as const, label: t("callPatient"), Icon: PhoneCall, wait: 0 };
+    if (item.status === "called") {
+      if (canConsult)
+        return { name: "start" as const, label: "Start consult", Icon: Stethoscope, wait: 0 };
+      // At the desk, the next step for a called patient who has not come is a missed call.
+      const wait = graceLeft(item.called_at, graceSeconds, now);
+      return {
+        name: "skip" as const,
+        label: wait > 0 ? t("markAbsentIn", { time: formatCountdown(wait) }) : t("markAbsent"),
+        Icon: UserX,
+        wait,
+      };
+    }
+    if (!canConsult) return null;
+    return { name: "complete" as const, label: "Complete", Icon: CheckCircle2, wait: 0 };
   }
+
+  // Built once per language: the board re-renders on every live update of a long queue.
+  const missedTime = useMemo(
+    () =>
+      new Intl.DateTimeFormat(i18n.language, {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "Asia/Kolkata",
+      }),
+    [i18n.language],
+  );
 
   function clearFilters() {
     setSearch("");
@@ -794,6 +889,73 @@ export function StaffQueueBoard() {
       )}
 
       {error && <p className="qb-error" role="alert">{error}</p>}
+      {actionError && <p className="qb-error" role="alert">{actionError}</p>}
+      {notice && <p className="qb-notice" role="status">{notice}</p>}
+
+      {missed.length > 0 && (
+        <section className="qb-missed" aria-label={t("missedTitle")}>
+          <header className="qb-missed-head">
+            <h3>
+              <UserX aria-hidden="true" size={18} /> {t("missedTitle")}
+              <span className="qb-count">{missed.length}</span>
+            </h3>
+            <p>{t("missedLead")}</p>
+          </header>
+          <ul className="qb-missed-list">
+            {missed.map((patient) => (
+              <li key={patient.visit_id} className={`qb-missed-item qb-missed-item--${patient.urgency}`}>
+                <strong className="qb-missed-token">{patient.token}</strong>
+                <span className="qb-missed-text">
+                  <span>
+                    {patient.age_years === null ? "Age —" : `${patient.age_years} y`} · {sexLabel(patient.sex)}
+                    {patient.complaint ? ` · ${sentenceCase(patient.complaint)}` : ""}
+                  </span>
+                  <small>
+                    {patient.skipped_at
+                      ? t("missedAt", { time: missedTime.format(new Date(patient.skipped_at)) })
+                      : null}
+                    {" · "}
+                    {t("missedCount", { count: patient.skip_count })}
+                  </small>
+                </span>
+                <UrgencyBadge level={patient.urgency} />
+                <span className="qb-missed-actions">
+                  <button
+                    type="button"
+                    className="qb-btn qb-btn--primary"
+                    disabled={working === patient.visit_id}
+                    title={t("recallHint")}
+                    onClick={() => void action(patient.visit_id, "recall")}
+                  >
+                    <RotateCcw aria-hidden="true" size={16} /> {t("recall")}
+                  </button>
+                  <Popover
+                    align="end"
+                    triggerClassName="qb-more"
+                    panelClassName="qb-menu"
+                    ariaLabel={`More actions for ${patient.token}`}
+                    label={<MoreHorizontal aria-hidden="true" size={18} />}
+                  >
+                    {(closeMenu) => (
+                      <button
+                        type="button"
+                        className="qb-btn"
+                        disabled={working === patient.visit_id}
+                        onClick={() => {
+                          closeMenu();
+                          void action(patient.visit_id, "no-show");
+                        }}
+                      >
+                        {t("markNoShow")}
+                      </button>
+                    )}
+                  </Popover>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="qb-list" aria-label="Patients in queue">
         <header className="qb-list-head">
@@ -843,6 +1005,8 @@ export function StaffQueueBoard() {
                   const item = orderedItems[virtualRow.index];
                   const busy = working === item.visit_id || Boolean(error);
                   const next = primaryAction(item);
+                  const absentWait =
+                    item.status === "called" ? graceLeft(item.called_at, graceSeconds, now) : 0;
                   const caseLink = `/staff/consultations?visit_id=${item.visit_id}&status=${item.status}`;
                   return (
                     <article
@@ -873,6 +1037,22 @@ export function StaffQueueBoard() {
                                 <Hand aria-hidden="true" size={13} /> {t("patientNeedsAssistance")}
                               </span>
                             )}
+                            {item.channel === "phone" && (
+                              <span className="qb-flag qb-flag--phone" title={t("channelPhoneHint")}>
+                                <Smartphone aria-hidden="true" size={13} /> {t("channelPhone")}
+                              </span>
+                            )}
+                            {item.nurse_check && (
+                              <span className="qb-flag qb-flag--check" title={t("nurseCheck")}>
+                                <ShieldAlert aria-hidden="true" size={13} /> {t("nurseCheckShort")}
+                              </span>
+                            )}
+                            {(item.skip_count ?? 0) > 0 && (
+                              <span className="qb-flag qb-flag--missed">
+                                <RotateCcw aria-hidden="true" size={13} />{" "}
+                                {t("missedCount", { count: item.skip_count })}
+                              </span>
+                            )}
                           </div>
                           <div className="qb-urgency">
                             <UrgencyBadge level={item.urgency} />
@@ -884,6 +1064,13 @@ export function StaffQueueBoard() {
                           </div>
                           <div className="qb-status-cell">
                             <span className={`qb-status qb-status--${item.status}`}>{statusLabel(item.status)}</span>
+                            {item.status !== "queued" && (item.called_by_me || item.called_by_name) && (
+                              <small className="qb-called-by">
+                                {item.called_by_me
+                                  ? t("calledByYou")
+                                  : t("calledBy", { name: item.called_by_name })}
+                              </small>
+                            )}
                           </div>
                           <div className="qb-col-actions qb-actions">
                             {canOpenCase && (
@@ -892,16 +1079,19 @@ export function StaffQueueBoard() {
                                 <span className="qb-btn-label">{t("openCaseSheet")}</span>
                               </Link>
                             )}
-                            <button
-                              type="button"
-                              className="qb-btn qb-btn--primary"
-                              disabled={busy}
-                              onClick={() => void action(item.visit_id, next.name)}
-                            >
-                              <next.Icon aria-hidden="true" size={16} />
-                              {next.label}
-                            </button>
-                            {(item.status !== "in_consult" || canOverride) && (
+                            {next && (
+                              <button
+                                type="button"
+                                className="qb-btn qb-btn--primary"
+                                disabled={busy || next.wait > 0}
+                                title={next.wait > 0 ? t("markAbsentHint") : undefined}
+                                onClick={() => void action(item.visit_id, next.name)}
+                              >
+                                <next.Icon aria-hidden="true" size={16} />
+                                {next.label}
+                              </button>
+                            )}
+                            {(item.status === "called" || (item.status === "queued" && canOverride)) && (
                               <Popover
                                 align="end"
                                 triggerClassName="qb-more"
@@ -911,18 +1101,37 @@ export function StaffQueueBoard() {
                               >
                                 {(closeMenu) => (
                                   <>
-                                    {(item.status === "queued" || item.status === "called") && (
-                                      <button
-                                        type="button"
-                                        className="qb-btn"
-                                        disabled={busy}
-                                        onClick={() => {
-                                          closeMenu();
-                                          void action(item.visit_id, "no-show");
-                                        }}
-                                      >
-                                        Mark no show
-                                      </button>
+                                    {item.status === "called" && (
+                                      <>
+                                        {canConsult && (
+                                          <button
+                                            type="button"
+                                            className="qb-btn"
+                                            disabled={busy || absentWait > 0}
+                                            title={absentWait > 0 ? t("markAbsentHint") : undefined}
+                                            onClick={() => {
+                                              closeMenu();
+                                              void action(item.visit_id, "skip");
+                                            }}
+                                          >
+                                            <UserX aria-hidden="true" size={15} />
+                                            {absentWait > 0
+                                              ? t("markAbsentIn", { time: formatCountdown(absentWait) })
+                                              : t("markAbsent")}
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          className="qb-btn"
+                                          disabled={busy}
+                                          onClick={() => {
+                                            closeMenu();
+                                            void action(item.visit_id, "return");
+                                          }}
+                                        >
+                                          <Undo2 aria-hidden="true" size={15} /> {t("putBack")}
+                                        </button>
+                                      </>
                                     )}
                                     {canOverride && item.status === "queued" && (
                                       <div className="qb-override">
@@ -1048,13 +1257,14 @@ export function StaffQueueBoard() {
             </span>
           </div>
           <UrgencyBadge level={nextPatient.urgency} />
+          {/* The server picks the patient, so two doctors pressing at once get different ones. */}
           <button
             type="button"
             className="qb-btn qb-btn--primary qb-btn--large"
-            disabled={working === nextPatient.visit_id || Boolean(error)}
-            onClick={() => void action(nextPatient.visit_id, "call")}
+            disabled={working === "call-next" || Boolean(error)}
+            onClick={() => void callNext()}
           >
-            <PhoneCall aria-hidden="true" size={18} /> Call {nextPatient.token}
+            <PhoneCall aria-hidden="true" size={18} /> {t("callNext")}
           </button>
         </section>
       )}

@@ -2333,27 +2333,6 @@
       "duration_seconds": 0.12
     },
     {
-      "id": "ui.kiosk.continueWithoutPhone",
-      "lang": "en",
-      "text_sha256": "a785cc4a45057dcf824d29b185332b33f38b7547045982212d0202c7dcc00dfd",
-      "file": "en/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.continueWithoutPhone",
-      "lang": "hi",
-      "text_sha256": "22dc95635a659a31266b69df6f9ffdd65529860660e2c8c836570c207c1c5f46",
-      "file": "hi/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.continueWithoutPhone",
-      "lang": "mr",
-      "text_sha256": "def974ca8079ee0a470a5da5bfa93f3990d75a657c909dbbe7133854b44f114b",
-      "file": "mr/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
       "id": "ui.kiosk.correct",
       "lang": "en",
       "text_sha256": "aca01a1a3a27d35c264a8104b0f2817aa31a8a29f8eec1e6cceddc6ac208c723",
@@ -2753,6 +2732,27 @@
       "duration_seconds": 0.12
     },
     {
+      "id": "ui.kiosk.emergencySentBodyMobile",
+      "lang": "en",
+      "text_sha256": "6931f2b4a637097d8029dc793d3523daecfed6318a3df6845b00720c842c40bc",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.emergencySentBodyMobile",
+      "lang": "hi",
+      "text_sha256": "6fd29f5ebeee20c024e7e7771db6ce891f34a134ebdc539530c5af7eec028af3",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.emergencySentBodyMobile",
+      "lang": "mr",
+      "text_sha256": "b5912ee367728fae987eff6cb3e1783cf722a88e20cfabf3ae185ff4a8355500",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
       "id": "ui.kiosk.emergencySentTitle",
       "lang": "en",
       "text_sha256": "1af5a50611e8ff74b1350ca81701d5fa270577e5e3e8e70c58bd970e5ed0c3fc",
@@ -3085,6 +3085,384 @@
       "id": "ui.kiosk.male",
       "lang": "mr",
       "text_sha256": "47ed3ea23da532cde79c027d8ae64d8b67ba991ca0632a20c0f17cfd1c3cf7d4",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileChecking",
+      "lang": "en",
+      "text_sha256": "8ef9b6e6be7ddb47b104c73d4a19d43191fdb4535e6ffc8b0209aa438c082c98",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileChecking",
+      "lang": "hi",
+      "text_sha256": "119227cc26771d79fba7716e305bf3ae0da55f97189b13f042b7caabce97a5b1",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileChecking",
+      "lang": "mr",
+      "text_sha256": "448dfb08fb4b2c05f95add1d848ed3c2e6d5175409879af122ef41c7b6512420",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileHaveToken",
+      "lang": "en",
+      "text_sha256": "cb22148636b988eb5e5a6d13b2c39857e31d5f0bc0b27dfd44fdd3b2841a67c3",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileHaveToken",
+      "lang": "hi",
+      "text_sha256": "8537d9843b413365fdbc0d9292d90c2bb178f44db1161c5a7ae735ef1655d331",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileHaveToken",
+      "lang": "mr",
+      "text_sha256": "c6d83257db25b19eb7192438989e9aa54f6a6261f53b8edb7f97ad275c6c20e6",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileHaveTokenLead",
+      "lang": "en",
+      "text_sha256": "7ec598e3c4f42dc53cad9ef9d55d6e12f430012ce2f4e9420ae821d86a7b980d",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileHaveTokenLead",
+      "lang": "hi",
+      "text_sha256": "95d1ca5a2d7e3c708f3619571286f36a61174461f67e3ed2d416820302541c60",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileHaveTokenLead",
+      "lang": "mr",
+      "text_sha256": "8d74cf7627a6d112ce2f1b4462ecaed2606c41b6b4bbf75dc69f3da18f47634a",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileInvalid",
+      "lang": "en",
+      "text_sha256": "925f506527a5db58c74d1641efa02de3b9dafbab1cecd0eb868f172bfa26ac82",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileInvalid",
+      "lang": "hi",
+      "text_sha256": "4eb9c43b840e873487ce0ec7354641dbe4826049dff2d9bf2ef9b658100c457b",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileInvalid",
+      "lang": "mr",
+      "text_sha256": "1496ad4b78413279e636cbdcdc9a54788d9404af526d3ebd771e9bd6d55d552a",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileKeepPage",
+      "lang": "en",
+      "text_sha256": "319865e2a4573e7601add5e9fa381bbd29a52717d20cad8b5b8a51c75639889e",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileKeepPage",
+      "lang": "hi",
+      "text_sha256": "046d15d5e203d550bad5934bdd182cc3d33e5d580cdf85c3a357a4cb4bd5aeee",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileKeepPage",
+      "lang": "mr",
+      "text_sha256": "69485afb1bf33a023f8d9198a922c5d779986edf449059d91c536a4f9c7a1899",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileOffline",
+      "lang": "en",
+      "text_sha256": "5e117a02f9b0b470ecab6246848d83904e307d294608938e7f0e8dbcc836d5a6",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileOffline",
+      "lang": "hi",
+      "text_sha256": "a7a2ce77f923ca374ff3992bd1a91ac4023421d450877d291bb5b30c3119d840",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileOffline",
+      "lang": "mr",
+      "text_sha256": "cf5098662d01af5472449973bbf44c6cb43742ab6abf9c630801e2966ad44c8c",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobilePaused",
+      "lang": "en",
+      "text_sha256": "fbfc8dcc39bb12ca18881d360b949908c949cfff569e54a3d0a8db2f3e5a8e2a",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobilePaused",
+      "lang": "hi",
+      "text_sha256": "eda8197422dd83c1b350587bc3e4daf6455cde1c69c3351fae1ff5eba230e3bc",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobilePaused",
+      "lang": "mr",
+      "text_sha256": "045c96ff8a7dda02c6e233ff6335ed7f752e1ed6a14f22b0307c376ec005a45b",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileResume",
+      "lang": "en",
+      "text_sha256": "cf441e106ac0b25f43abfe2aeb66476c62d50b7af2116e94828de47d243d9003",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileResume",
+      "lang": "hi",
+      "text_sha256": "b5bbaa0f20d69ec1fa8db2a98148b0db157bd0b0dcadf8f6bca1babfa9232716",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileResume",
+      "lang": "mr",
+      "text_sha256": "5d68cd368a63da5be826051b1a6182e17ddef31774abc30b9e1dcc21fc3a2bea",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileResumeTitle",
+      "lang": "en",
+      "text_sha256": "d4fd81b580c9e7b09444e3b2413bcbfe240ddd3ba83b4a344a259d19b003f4ae",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileResumeTitle",
+      "lang": "hi",
+      "text_sha256": "ede003bfefd073b41c84de6a11508353f83d8e9124931b770bcd87f9e7e62ae9",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileResumeTitle",
+      "lang": "mr",
+      "text_sha256": "6f9e5045d4d79b8520cb9e4cc7626c1ae3725b0ee07db83ddffca8ac0082d1cc",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileRetry",
+      "lang": "en",
+      "text_sha256": "d8b8392e2c542950ca64867168e4ef87d4ad606882d5898f826b51c6d553988f",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileRetry",
+      "lang": "hi",
+      "text_sha256": "aff6c22200f40aa46111f7f59515ce433da7e5ab629b036c505676c0fa97913e",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileRetry",
+      "lang": "mr",
+      "text_sha256": "d75c58eb9d1916defc0673c820660a8253c06d9e6c1b76229f4027fd77aa0138",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileSomeoneElse",
+      "lang": "en",
+      "text_sha256": "abdbbfe2d237ec7d7f2b53c8952580566c8cbef5a06d17d4d9f7742310838129",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileSomeoneElse",
+      "lang": "hi",
+      "text_sha256": "0caa677f5e6caed180fb9a195bdef75ab28a319435c0585b84aeb2693432dcc5",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileSomeoneElse",
+      "lang": "mr",
+      "text_sha256": "6b9576560f50849c7eacc139925332a6c9ad2c57cbb1119cbabe394cbb424037",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileStart",
+      "lang": "en",
+      "text_sha256": "6ab5f7c1d4662f20d523c8f551a78b439fb8e33125431007450daaf2ce495bb0",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileStart",
+      "lang": "hi",
+      "text_sha256": "3635801235facd836f619b377af43b36f0e602b1e25ad7f043157dd68db53d07",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileStart",
+      "lang": "mr",
+      "text_sha256": "8fe9a278d79eb3efddd25d69b5ca5397e98d9962767f686bab3a4bc393966301",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileStartOver",
+      "lang": "en",
+      "text_sha256": "962e64b761961fe056e96cdc9641daaf786022d8c32cec531c6da20c71218c24",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileStartOver",
+      "lang": "hi",
+      "text_sha256": "ef7ab2c666bea6e8823e6b8774baf269d324ffd774317b96b3b3668043fea7a5",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileStartOver",
+      "lang": "mr",
+      "text_sha256": "c5e15ee73b16c1604b2604c808cc438c2151d89063d3618766d78045d0b947a4",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileTooMany",
+      "lang": "en",
+      "text_sha256": "5dddbf8bc0e554d7f922c27bcb819dc5172d2b2a3cdd73bf4861844d76b73dca",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileTooMany",
+      "lang": "hi",
+      "text_sha256": "874ae9c60b067fe2fd298e8a570ac02904f1d9f973837fa5d0a1df7de42e6f45",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileTooMany",
+      "lang": "mr",
+      "text_sha256": "e6d69bae0f66c8dd473e15bf69d969c341bae7b14920879ef84b468d71143e8d",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileViewStatus",
+      "lang": "en",
+      "text_sha256": "27a11cab99750e38924fd37daafda598701093da55e6bd6fa80a3103c49f5654",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileViewStatus",
+      "lang": "hi",
+      "text_sha256": "0cbf33500c98ba9b35bfc4d4b0be7a521df0e3b0e8c9b0c720fa7b29bc6edf67",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileViewStatus",
+      "lang": "mr",
+      "text_sha256": "33d022c3bc1a553e7a9ddaba34b4d252bf0bfedb13a68841145078f3b2fead83",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileVoiceNote",
+      "lang": "en",
+      "text_sha256": "1c9ecaed1097a7dec59af9f8826aa9d70e01fe594059f1618fa6a8d28b754277",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileVoiceNote",
+      "lang": "hi",
+      "text_sha256": "2a5f7d2577324a9b507bc72f8ad1578b3d308c47591d88c640e1933aa76ec9ee",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileVoiceNote",
+      "lang": "mr",
+      "text_sha256": "be86e4b1c7b12022dadaadad7c08070fab88214fcc924de7468d0b9894b5fe86",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileWelcomeLead",
+      "lang": "en",
+      "text_sha256": "f0723fa29f78435bfaa08a6851f2645d98d527b18e1be772e18b6ddbc051c70c",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileWelcomeLead",
+      "lang": "hi",
+      "text_sha256": "d00d9fb49983eba23569b30d47ecfa86863299dbe477ab01e6448c4b61ef9acb",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileWelcomeLead",
+      "lang": "mr",
+      "text_sha256": "eccd834d4dc51661546e51cfd6e0e05a65b65cc8d975a40f687cf81a8fa42d33",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileWelcomeTitle",
+      "lang": "en",
+      "text_sha256": "1115f6d6ffe761d76a6770b6723b9030451e9a612111a6fc3fb594e88b2e24ff",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileWelcomeTitle",
+      "lang": "hi",
+      "text_sha256": "e598c968a3ea8c95ab91b32434fab09c73821b295a160319b83a007447c7a8ea",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.mobileWelcomeTitle",
+      "lang": "mr",
+      "text_sha256": "3afed2082f770d410a279a75e0a0756a22234003168ab5e53b481eb7169259a2",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },
@@ -3841,27 +4219,6 @@
       "id": "ui.kiosk.patientNameLabel",
       "lang": "mr",
       "text_sha256": "9e417cfeb55c1238ea21ee3f1da12081a640875ce9ce830a4fdbf87ea8eb3d2d",
-      "file": "mr/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.phoneAlreadyRegistered",
-      "lang": "en",
-      "text_sha256": "31f7bab5efb285373967c976be99b60a3946f4f75e232cd85f055962a0205f36",
-      "file": "en/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.phoneAlreadyRegistered",
-      "lang": "hi",
-      "text_sha256": "623ed5e9785e521683f78457cd76bc6ae9b53ca9b25db549151c32052568675c",
-      "file": "hi/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.phoneAlreadyRegistered",
-      "lang": "mr",
-      "text_sha256": "9c2052b746084c750406fb5a1b3ed2c1056f412466f17c168953891a24dd348f",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },

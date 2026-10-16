@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
-import { BellRing, Check, Clock3, MapPin, Users } from "lucide-react";
+import { BellRing, Check, Clock3, MapPin, UserRoundSearch, Users } from "lucide-react";
 import type { Language } from "../i18n";
 import { useLanguageStore } from "../languageStore";
 import { apiOrigin } from "../lib/api";
 
 type Status = {
-  state: "waiting" | "called" | "in_consult" | "done" | "no_show" | "cancelled";
+  /** "skipped": called but not there; the patient goes to the desk to be recalled. */
+  state: "waiting" | "called" | "in_consult" | "skipped" | "done" | "no_show" | "cancelled";
   token: string;
   position: number | null;
   eta_min: number;
@@ -177,6 +178,13 @@ export function PatientStatus() {
                     : t("calledBodyDesk", { ns: "status" })}
                 </p>
               </section>
+            ) : status.state === "skipped" ? (
+              <section className="status-called status-missed" role="alert">
+                <UserRoundSearch aria-hidden="true" size={34} />
+                <strong>{t("skippedTitle", { ns: "status" })}</strong>
+                <p>{t("state.skipped", { ns: "status" })}</p>
+                <p>{t("skippedBody", { ns: "status" })}</p>
+              </section>
             ) : status.state === "waiting" && status.position !== null ? (
               <section className="status-figures">
                 <div className="status-figure">
@@ -233,7 +241,9 @@ export function PatientStatus() {
                 ? t("reconnecting", { ns: "status" })
                 : `${t("live", { ns: "status" })} · ${t("lastUpdated", { ns: "status", time })}`}
             </p>
-            {(status.state === "waiting" || status.state === "called") && (
+            {(status.state === "waiting" ||
+              status.state === "called" ||
+              status.state === "skipped") && (
               <p className="status-tip">{t("keepOpen", { ns: "status" })}</p>
             )}
           </>

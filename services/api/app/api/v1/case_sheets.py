@@ -1,9 +1,10 @@
 """Audited case sheet reads and optimistic-concurrency doctor edits."""
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, Depends, Header, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,7 +14,7 @@ from starlette.responses import Response as StarletteResponse
 from app.core.audit import audit
 from app.core.auth import require_role
 from app.core.errors import ApiProblemError
-from app.db.repositories import CaseSheetRepository, InterviewTurnRepository
+from app.db.repositories import CaseSheetRepository, InterviewTurnRepository, PatientRepository
 from app.db.session import set_hospital_scope
 from app.domain.case_sheet import CaseSheet
 from app.domain.case_sheet_patch import CaseSheetPatchError, apply_case_sheet_patch
@@ -384,6 +385,196 @@ async def patch_case_sheet(
         case_sheet=_with_flag_reasons(updated),
         confirmed_by_patient=saved.get("confirmed_by_patient") is True,
         confirmed_at=saved.get("confirmed_at"),
+    )
+
+
+class PreviousVisit(BaseModel):
+    """One earlier registered visit, as recorded then. Never edited from here."""
+
+    visit_id: UUID
+    service_date: date
+    department: str
+    status: str
+    token: str | None = None
+    urgency: str
+    chief_complaint: str | None = None
+    # The language model's draft brief for that visit (labelled AI in the interface).
+    ai_brief: str | None = None
+    # A doctor or nurse edited that visit's case sheet.
+    staff_edited: bool = False
+    red_flags: list[str] = Field(default_factory=list)
+    conditions: list[str] = Field(default_factory=list)
+    medications: list[str] = Field(default_factory=list)
+    allergies: list[str] = Field(default_factory=list)
+    no_known_allergies: bool = False
+
+
+class KnownItem(BaseModel):
+    """Something the patient reported at one or more earlier visits (patient-reported)."""
+
+    text: str
+    last_reported: date
+    visits: int
+
+
+class PatientHistoryResponse(BaseModel):
+    visit_id: UUID
+    opd_number: str | None = None
+    # How today's visit was joined to the record: "card" (patient's OPD card) or "staff".
+    linked_by: Literal["card", "staff"] | None = None
+    follow_up_of: UUID | None = None
+    previous_visits: list[PreviousVisit] = Field(default_factory=list)
+    known_allergies: list[KnownItem] = Field(default_factory=list)
+    known_medications: list[KnownItem] = Field(default_factory=list)
+    known_conditions: list[KnownItem] = Field(default_factory=list)
+    # Date of the most recent visit at which the patient said they have no known allergy.
+    no_known_allergies_reported: date | None = None
+
+
+def _texts(items: Any, *keys: str) -> list[str]:
+    values: list[str] = []
+    for item in items if isinstance(items, list) else []:
+        if isinstance(item, str) and item.strip():
+            values.append(item.strip())
+        elif isinstance(item, dict):
+            for key in keys:
+                text_value = item.get(key)
+                if isinstance(text_value, str) and text_value.strip():
+                    values.append(text_value.strip())
+                    break
+    return values
+
+
+def _previous_visit(row: dict[str, Any]) -> PreviousVisit:
+    sheet = row.get("case_sheet_data") or {}
+    complaint = sheet.get("chief_complaint") or {}
+    medications = [
+        f"{item['name']} {item['dose']}".strip() if item.get("dose") else str(item["name"])
+        for item in sheet.get("medications") or []
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    ]
+    negatives = _texts((sheet.get("hpi") or {}).get("pertinent_negatives"), "text_en")
+    flags = [
+        str(flag.get("reason_en") or _RULE_REASONS.get(str(flag.get("id"))) or flag.get("id"))
+        for flag in sheet.get("red_flags") or []
+        if isinstance(flag, dict)
+    ]
+    summary = sheet.get("ai_summary") or {}
+    return PreviousVisit(
+        visit_id=row["visit_id"],
+        service_date=row["service_date"],
+        department=row["department"],
+        status=row["status"],
+        token=row.get("token_label"),
+        urgency=row["urgency"],
+        chief_complaint=complaint.get("text_en") or complaint.get("text_original"),
+        ai_brief=summary.get("brief_en") if isinstance(summary, dict) else None,
+        staff_edited=bool(row.get("staff_edited")),
+        red_flags=flags[:10],
+        conditions=_texts((sheet.get("past_history") or {}).get("conditions"))[:15],
+        medications=medications[:15],
+        allergies=_texts(sheet.get("allergies"), "text_en", "text_original")[:15],
+        no_known_allergies=any(
+            denial.startswith("No known drug or food allergy") for denial in negatives
+        ),
+    )
+
+
+def _known(visits: list[PreviousVisit], field: str) -> list[KnownItem]:
+    """Merge what earlier visits recorded, newest first, without guessing synonyms."""
+    merged: dict[str, KnownItem] = {}
+    for visit in visits:  # newest first
+        for text_value in getattr(visit, field):
+            key = text_value.casefold()
+            if key in merged:
+                merged[key].visits += 1
+            else:
+                merged[key] = KnownItem(
+                    text=text_value, last_reported=visit.service_date, visits=1
+                )
+    return list(merged.values())[:20]
+
+
+@router.get("/visits/{visit_id}/history", response_model=PatientHistoryResponse)
+async def get_patient_history(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse", "admin"))],
+) -> PatientHistoryResponse:
+    """Earlier visits of today's patient, for the clinician looking after today's visit.
+
+    Allowed to staff of the department treating the visit while it is open or still today's
+    (and to administrators), so a doctor sees a patient's earlier visits in other departments
+    only while caring for them. Every read is audited. A first visit has no earlier visits.
+    """
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _check_visit_department(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            actor_id=actor_id,
+            role=principal.get("role"),
+        )
+        visit = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT v.patient_id, v.patient_link, v.previous_visit_id, p.mrn, "
+                        "(v.status IN ('registering', 'awaiting_confirmation', 'queued', "
+                        "'called', 'in_consult', 'skipped') OR v.service_date = :today) "
+                        "AS in_care "
+                        "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
+                        "AND p.id = v.patient_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                    ),
+                    {
+                        "hospital_id": hospital_id,
+                        "visit_id": visit_id,
+                        "today": datetime.now(ZoneInfo("Asia/Kolkata")).date(),
+                    },
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if not visit["in_care"] and principal.get("role") != "admin":
+            raise _problem(
+                403,
+                "HISTORY_CLOSED",
+                "Earlier visits unavailable",
+                "Earlier visits are shown only while the patient is under your care today.",
+            )
+        rows = await PatientRepository(connection, request.app.state.settings).visit_history(
+            hospital_id=hospital_id,
+            patient_id=visit["patient_id"],
+            exclude_visit_id=visit_id,
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="patient_history.read",
+            resource_type="visit",
+            resource_id=visit_id,
+            meta={"previous_visits": len(rows)},
+        )
+    previous = [_previous_visit(row) for row in rows]
+    denial = next((visit_.service_date for visit_ in previous if visit_.no_known_allergies), None)
+    return PatientHistoryResponse(
+        visit_id=visit_id,
+        opd_number=visit["mrn"],
+        linked_by=visit["patient_link"],
+        follow_up_of=visit["previous_visit_id"],
+        previous_visits=previous,
+        known_allergies=_known(previous, "allergies"),
+        known_medications=_known(previous, "medications"),
+        known_conditions=_known(previous, "conditions"),
+        no_known_allergies_reported=denial,
     )
 
 

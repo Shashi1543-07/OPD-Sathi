@@ -2749,6 +2749,11 @@
     animation: none;
   }
 }
+/* A missed call needs attention but is not "your turn": steady amber, no pulse. */
+.status-called.status-missed {
+  animation: none;
+  background: var(--priority-ink);
+}
 .status-message {
   margin: 0;
   padding: var(--space-3) var(--space-3-5);
@@ -4049,6 +4054,81 @@
   margin: 0;
   padding: 0.6rem 0.9rem;
 }
+.qb-notice {
+  background: var(--primary-tint);
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  font-weight: 600;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+}
+
+/* Missed calls: called but not here, waiting for staff to recall them */
+.qb-missed {
+  background: var(--priority-tint);
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem;
+}
+.qb-missed-head h3 {
+  align-items: center;
+  color: var(--priority-ink);
+  display: flex;
+  font-size: 1rem;
+  gap: 0.45rem;
+  margin: 0;
+}
+.qb-missed-head p {
+  color: var(--priority-ink);
+  font-size: var(--font-size-sm);
+  margin: 0.2rem 0 0;
+}
+.qb-missed-list {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.qb-missed-item {
+  align-items: center;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 0.5rem 0.9rem;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  padding: 0.55rem 0.75rem;
+}
+.qb-missed-token {
+  font-size: 1.05rem;
+}
+.qb-missed-text {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.qb-missed-text span {
+  overflow-wrap: anywhere;
+}
+.qb-missed-text small {
+  color: var(--text-muted);
+}
+.qb-missed-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+@media (max-width: 640px) {
+  .qb-missed-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .qb-missed-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}
 
 /* Patients in queue */
 .qb-list {
@@ -4229,6 +4309,21 @@
   font-size: var(--font-size-xs);
   font-weight: 600;
   gap: 0.25rem;
+}
+.qb-flag--phone {
+  color: var(--primary);
+}
+.qb-flag--check {
+  color: var(--urgent-ink);
+}
+.qb-flag--missed {
+  color: var(--priority-ink);
+}
+.qb-called-by {
+  color: var(--text-muted);
+  display: block;
+  font-size: var(--font-size-xs);
+  margin-top: 0.2rem;
 }
 .qb-urgency {
   display: grid;
@@ -4816,6 +4911,19 @@
 .cx-rail-item--priority {
   border-left-color: var(--priority);
 }
+.cx-rail-item--missed {
+  border-left-color: var(--priority-ink);
+  border-left-style: dashed;
+}
+.cx-rail-subhead {
+  align-items: center;
+  color: var(--priority-ink);
+  display: flex;
+  font-size: var(--font-size-sm);
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.6rem 0.95rem 0.2rem;
+}
 .cx-rail-item.is-active {
   background: var(--primary-tint);
   border-color: #99f6e4;
@@ -4910,6 +5018,10 @@
 .cx-pill--called {
   background: var(--priority-tint);
   color: var(--priority-ink);
+}
+.cx-pill--skipped {
+  background: var(--priority-ink);
+  color: #fff;
 }
 .cx-pill--in_consult {
   background: var(--primary-tint);
@@ -5218,6 +5330,9 @@
 .cx-tabs {
   border-bottom: 1px solid var(--border);
   display: flex;
+  /* Five sections: on narrower screens (and with longer Hindi/Marathi labels) the last
+     ones move to a second row instead of pushing the page sideways. */
+  flex-wrap: wrap;
   gap: var(--space-1);
 }
 .cx-tab {
@@ -5333,6 +5448,45 @@
   gap: var(--space-2);
   margin-top: 0.75rem;
   padding-top: 0.75rem;
+}
+/* Queue timeline: token, calls, missed calls, recalls, with who did each. */
+.cx-timeline {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+}
+.cx-timeline h5 {
+  align-items: center;
+  color: var(--text-muted);
+  display: flex;
+  font-size: var(--font-size-sm);
+  gap: 0.35rem;
+  margin: 0 0 0.35rem;
+}
+.cx-timeline ol {
+  display: grid;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cx-timeline-item {
+  display: grid;
+  font-size: var(--font-size-sm);
+  gap: 0.6rem;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+}
+.cx-timeline-item time {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cx-timeline-item small {
+  color: var(--text-muted);
+}
+.cx-timeline-item--skipped span,
+.cx-timeline-item--no_show span {
+  color: var(--priority-ink);
+  font-weight: 600;
 }
 .cx-card--danger {
   background: #fff5f5;
@@ -6639,6 +6793,14 @@
   font-size: var(--font-size-xs);
   font-weight: 400;
 }
+.adm-inline-field {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+.adm-form .adm-inline-field input {
+  max-width: 7rem;
+}
 .adm-row2 {
   display: grid;
   gap: 0.9rem;
@@ -6747,6 +6909,37 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+.adm-checkin-qr-code {
+  background: white;
+  border-radius: var(--radius-md);
+  justify-self: center;
+  line-height: 0;
+  padding: 0.5rem;
+}
+.adm-checkin-qr-code svg {
+  height: auto;
+  max-width: 100%;
+}
+/* "Print" on the QR panel prints only the poster: the QR, its label and the link. */
+@media print {
+  body:has(.adm-checkin-qr) * {
+    visibility: hidden;
+  }
+  .adm-checkin-qr,
+  .adm-checkin-qr * {
+    visibility: visible;
+  }
+  .adm-checkin-qr {
+    background: white;
+    border: 0;
+    inset: 0;
+    position: absolute;
+    text-align: center;
+  }
+  .adm-checkin-qr .no-print {
+    display: none;
+  }
 }
 .adm-actions {
   align-items: center;
@@ -7861,4 +8054,198 @@
 }
 .adm-conn--off::before {
   background: currentColor;
+}
+
+/* ============================================================
+   Consultation: earlier visits of today's patient
+   ============================================================ */
+.pv {
+  display: grid;
+  gap: var(--space-4);
+}
+.pv-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.pv-head h3 {
+  align-items: center;
+  display: inline-flex;
+  font-size: var(--font-size-lg);
+  gap: var(--space-2);
+  margin: 0;
+}
+.pv-chip {
+  align-items: center;
+  background: var(--primary-tint);
+  border-radius: var(--radius-chip);
+  color: var(--primary);
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  gap: var(--space-1);
+  padding: 2px 10px;
+}
+.pv-chip--muted {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+.pv-followup {
+  background: var(--surface-subtle);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-md);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+}
+.pv-known-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.pv-known h5 {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.05em;
+  margin: 0 0 var(--space-2);
+  text-transform: uppercase;
+}
+.pv-known-list {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pv-known-list li {
+  display: grid;
+}
+.pv-known-list small {
+  color: var(--text-muted);
+}
+.pv-visits {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pv-visit-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.pv-token {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+}
+.pv-complaint {
+  font-weight: 600;
+  margin: var(--space-2) 0 0;
+}
+.pv-flags {
+  align-items: flex-start;
+  color: var(--urgent-ink);
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+}
+.pv-brief {
+  color: var(--text-muted);
+  margin: var(--space-2) 0 0;
+}
+.pv-hint {
+  color: var(--text-muted);
+  margin: 0;
+}
+.pv-link-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pv-link-form input {
+  flex: 1 1 10rem;
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+}
+.pv-candidates {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+.pv-candidates li {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-3);
+}
+
+/* ============================================================
+   Phone check-in (/m/<code>): the patient's own phone
+   ============================================================ */
+.kiosk-app[data-layout="mobile"] .kiosk-header {
+  height: auto;
+  min-height: 3.5rem;
+  padding-block: var(--space-2);
+}
+.kiosk-app[data-layout="mobile"] .kiosk-main {
+  justify-content: flex-start;
+  padding: var(--space-4);
+}
+.mobile-checkin .welcome-card {
+  padding: clamp(var(--space-5), 5vw, var(--space-8));
+}
+.mobile-checkin-icon {
+  color: var(--primary);
+  margin-bottom: var(--space-3);
+}
+.mobile-ticket {
+  align-items: flex-start;
+  background: var(--primary-tint);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  border-radius: var(--radius-lg);
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+}
+.mobile-ticket svg {
+  color: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.mobile-ticket strong {
+  display: block;
+  font-size: var(--font-size-lg);
+}
+.mobile-ticket p {
+  color: var(--text-muted);
+  margin: var(--space-1) 0 var(--space-3);
+}
+.mobile-ticket .ui-button {
+  width: 100%;
+}
+.mobile-resume h1 {
+  font-size: clamp(1.5rem, 6vw, 2rem);
+}
+.mobile-note {
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+}
+.mobile-error {
+  color: var(--urgent-ink);
+  font-weight: 600;
+  margin-top: var(--space-3);
 }

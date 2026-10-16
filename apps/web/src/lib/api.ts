@@ -1,12 +1,9 @@
 /**
- * Where the API lives. In development it is http://localhost:8000; in the Docker build
- * it is "/api" on the same address as the web app, so phones on the clinic Wi-Fi (the
- * token QR code) reach it through the one port they can see.
+ * Where the API lives: "/api" on the same address as the web app, in the Docker build
+ * (nginx) and in development (the Vite proxy alike), so phones on the clinic Wi-Fi reach it
+ * through the one port they can see. VITE_API_URL can point elsewhere.
  */
-export const apiOrigin = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(
-  /\/$/,
-  "",
-);
+export const apiOrigin = (import.meta.env.VITE_API_URL ?? "/api").replace(/\/$/, "");
 
 /** A WebSocket URL for an API path such as "/ws/staff/queue", relative base or not. */
 export function apiSocketUrl(path: string): URL {

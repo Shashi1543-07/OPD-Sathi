@@ -154,6 +154,7 @@ for (const language of ["en", "hi", "mr"] as const) {
     await page.getByLabel(intake.ageQuestion).fill("34");
     await page.getByRole("radio", { name: intake.sexFemale }).click();
     await page.getByRole("button", { name: intake.next, exact: true }).click();
+    await page.getByRole("button", { name: intake.returningNo }).click();
 
     await page.getByRole("heading", { name: intake.dangerTitle }).waitFor();
     await page.getByRole("button", { name: "Chest pain / छाती" }).click();

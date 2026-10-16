@@ -45,7 +45,14 @@ function recognitionConstructor(): RecognitionConstructor | undefined {
 }
 
 export function browserRecognitionAvailable() {
-  return Boolean(recognitionConstructor());
+  // Chrome defines the recogniser on any page but only lets a secure page (HTTPS or
+  // localhost) use the microphone, so a phone on http://<LAN address> must tap or type.
+  return window.isSecureContext !== false && Boolean(recognitionConstructor());
+}
+
+/** False on a plain-HTTP page (a phone on the hospital Wi-Fi): no microphone there. */
+export function secureVoiceAvailable() {
+  return window.isSecureContext !== false;
 }
 
 export function recordingAvailable() {

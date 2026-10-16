@@ -38,6 +38,8 @@ const { intakeMock, voiceMock, IntakeRequestErrorMock, captured } = vi.hoisted((
       answer: vi.fn(),
       correct: vi.fn(),
       identity: vi.fn(),
+      linkOpdCard: vi.fn(),
+      markFollowUp: vi.fn(),
       dangerTiles: vi.fn(),
       capabilities: vi.fn(),
       transcribe: vi.fn(),
@@ -65,6 +67,7 @@ vi.mock("../lib/intake", () => ({
 vi.mock("../lib/voice", () => ({
   browserRecognitionAvailable: () => false,
   recordingAvailable: () => true,
+  secureVoiceAvailable: () => true,
   listenWithServer: voiceMock.listenWithServer,
   listenInBrowser: voiceMock.listenInBrowser,
   speak: vi.fn(async () => undefined),
@@ -118,33 +121,81 @@ afterEach(() => {
 });
 
 describe("kiosk intake", () => {
-  it("lets a patient continue without an already-registered phone number", async () => {
+  it("links a returning patient's OPD card and asks whether it is the same problem", async () => {
     const user = userEvent.setup();
-    intakeMock.identity
-      .mockRejectedValueOnce(
-        new IntakeRequestErrorMock("PHONE_ALREADY_REGISTERED", "Ask staff for help.", 409),
-      )
-      .mockResolvedValueOnce({ next: "danger_signs" });
+    intakeMock.identity.mockResolvedValue({ next: "danger_signs" });
+    intakeMock.linkOpdCard.mockResolvedValue({
+      linked: true,
+      opd_number: "26-000123",
+      visit_count: 2,
+      previous_visit: { id: "visit-earlier", date: "2026-10-03" },
+    });
+    intakeMock.markFollowUp.mockResolvedValue({ previous_visit_id: "visit-earlier" });
     intakeMock.dangerTiles.mockResolvedValue({ tiles: [] });
     renderIntake("identity");
 
     await user.type(screen.getByLabelText("How old are you?"), "75");
     await user.click(screen.getByRole("radio", { name: "Female" }));
-    await user.type(screen.getByLabelText(/Mobile number/), "7985911313");
     await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(
+      await screen.findByRole("heading", { name: "Have you visited this hospital before?" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Yes, I have my OPD card" }));
+    await user.type(screen.getByLabelText(/OPD number/), "26-000123");
+    const next = screen.getByRole("button", { name: "Next" });
+    await user.type(screen.getByLabelText(/PIN/), "1234");
+    expect(next).toBeDisabled(); // A PIN has six digits.
+    await user.type(screen.getByLabelText(/PIN/), "56");
+    await user.click(next);
 
-    expect(await screen.findByText(/already linked to a visit/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Continue without phone" }));
+    expect(intakeMock.linkOpdCard).toHaveBeenCalledWith("26-000123", "123456");
+    expect(await screen.findByRole("heading", { name: /same problem/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Yes, the same problem" }));
+    expect(intakeMock.markFollowUp).toHaveBeenCalledWith("visit-earlier");
     expect(
       await screen.findByRole("heading", { name: "Do you have any of these right now?" }),
     ).toBeInTheDocument();
-    expect(intakeMock.identity).toHaveBeenLastCalledWith(
-      75,
-      "female",
-      undefined,
-      undefined,
-      false,
+  });
+
+  it("explains a card that does not match and lets the patient go on without it", async () => {
+    const user = userEvent.setup();
+    intakeMock.identity.mockResolvedValue({ next: "danger_signs" });
+    intakeMock.linkOpdCard.mockRejectedValue(
+      new IntakeRequestErrorMock("CARD_NOT_RECOGNISED", "We could not match this OPD card.", 422),
     );
+    intakeMock.dangerTiles.mockResolvedValue({ tiles: [] });
+    renderIntake("identity");
+
+    await user.type(screen.getByLabelText("How old are you?"), "40");
+    await user.click(screen.getByRole("radio", { name: "Male" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(await screen.findByRole("button", { name: "Yes, I have my OPD card" }));
+    await user.type(screen.getByLabelText(/OPD number/), "26-000999");
+    await user.type(screen.getByLabelText(/PIN/), "000000");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("We could not match this OPD card.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue without the card" }));
+    expect(
+      await screen.findByRole("heading", { name: "Do you have any of these right now?" }),
+    ).toBeInTheDocument();
+    expect(intakeMock.markFollowUp).not.toHaveBeenCalled();
+  });
+
+  it("takes a first-time patient straight on to the safety questions", async () => {
+    const user = userEvent.setup();
+    intakeMock.identity.mockResolvedValue({ next: "danger_signs" });
+    intakeMock.dangerTiles.mockResolvedValue({ tiles: [] });
+    renderIntake("identity");
+
+    await user.type(screen.getByLabelText("How old are you?"), "29");
+    await user.click(screen.getByRole("radio", { name: "Female" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(await screen.findByRole("button", { name: "No, or I don't have my card" }));
+    expect(
+      await screen.findByRole("heading", { name: "Do you have any of these right now?" }),
+    ).toBeInTheDocument();
+    expect(intakeMock.linkOpdCard).not.toHaveBeenCalled();
   });
 
   it("builds the answer from tapped options", async () => {

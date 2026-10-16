@@ -120,12 +120,24 @@ async def test_staff_queue_filters_sorts_and_paginates_department_rows(monkeypat
     async def scope(*_args: object, **_kwargs: object) -> None:
         return None
 
+    missed = {
+        **row(uuid4(), department_id),
+        "skip_count": 1,
+        "skipped_at": datetime.now(UTC),
+    }
+
     class Repository:
         def __init__(self, *_args: object) -> None:
             pass
 
         async def queued_visits(self, **_kwargs: object) -> list[dict[str, object]]:
             return visits
+
+        async def missed_visits(self, **_kwargs: object) -> list[dict[str, object]]:
+            return [missed]
+
+        async def call_grace_seconds(self, _hospital_id: object) -> int:
+            return 120
 
     monkeypatch.setattr(queue, "set_hospital_scope", scope)
     monkeypatch.setattr(queue, "QueueRepository", Repository)
@@ -146,6 +158,10 @@ async def test_staff_queue_filters_sorts_and_paginates_department_rows(monkeypat
     assert first_page["items"][0]["urgency"] == "urgent"
     assert first_page["items"][0]["complaint"] == "Synthetic complaint"
     assert first_page["next_cursor"]
+    # Missed patients wait apart from the line, with the grace period for the countdown.
+    assert [item["skip_count"] for item in first_page["missed"]] == [1]
+    assert first_page["missed"][0]["visit_id"] == str(missed["visit_id"])
+    assert first_page["call_grace_seconds"] == 120
 
     second_page = await queue.staff_queue(
         request,
@@ -269,15 +285,40 @@ async def test_patient_status_validates_token_uses_cache_then_falls_back_to_queu
 
 
 @pytest.mark.asyncio
-async def test_confirm_routing_audits_acceptance_and_handles_unavailable_routes(
+async def test_confirm_routing_goes_through_the_encrypting_repository_and_audits(
     monkeypatch,
 ) -> None:
     hospital_id, actor_id, visit_id, department_id = (uuid4() for _ in range(4))
-    case_data = {"routing": {"needs_nurse_confirmation": True, "department_code": "GENMED"}}
-    connection = Connection(
-        [{"data": case_data, "department_id": department_id}], assigned=department_id
-    )
+    # The stored column is ciphertext; the repository is the only way to read or write it.
+    stored: dict[str, object] = {
+        "data": {
+            "schema_version": "1.0",
+            "routing": {"needs_nurse_confirmation": True, "department_code": "GENMED"},
+        },
+        "version": 3,
+    }
+    replaced: list[dict[str, object]] = []
+    connection = Connection([], assigned=department_id)
     audits: list[dict[str, object]] = []
+
+    class Repository:
+        conflict = False
+
+        def __init__(self, *_args: object) -> None:
+            pass
+
+        async def get(self, **_kwargs: object) -> dict[str, object]:
+            return {
+                "id": uuid4(),
+                "data": json.loads(json.dumps(stored["data"])),
+                "version": stored["version"],
+            }
+
+        async def replace_if_version(self, **kwargs: object) -> int | None:
+            if self.conflict:
+                return None
+            replaced.append(kwargs)
+            return int(kwargs["expected_version"]) + 1  # type: ignore[call-overload]
 
     async def scope(*_args: object, **_kwargs: object) -> None:
         return None
@@ -287,15 +328,20 @@ async def test_confirm_routing_audits_acceptance_and_handles_unavailable_routes(
 
     monkeypatch.setattr(queue, "set_hospital_scope", scope)
     monkeypatch.setattr(queue, "audit", audit)
+    monkeypatch.setattr(queue, "CaseSheetRepository", Repository)
     request = make_request(connection)
     nurse = {"role": "nurse", "hospital_id": str(hospital_id), "sub": str(actor_id)}
     result = await queue.confirm_routing(
         visit_id, queue.RouteConfirmPayload(reason="nurse reviewed"), request, nurse
     )
     assert result["confirmed"] is True
-    assert case_data["routing"]["needs_nurse_confirmation"] is False
+    assert result["routing"]["needs_nurse_confirmation"] is False
+    assert replaced[0]["expected_version"] == 3
+    assert replaced[0]["editor_id"] == actor_id
+    assert replaced[0]["data"]["routing"]["needs_nurse_confirmation"] is False  # type: ignore[index]
     assert audits[0]["action"] == "routing.confirmed"
-    assert "UPDATE case_sheets" in str(connection.executed[-1][0])
+    # Never a raw UPDATE of the encrypted column outside the repository.
+    assert not any("UPDATE case_sheets" in str(sql) for sql, _ in connection.executed)
 
     connection.assigned = None
     with pytest.raises(ApiProblemError) as unassigned:
@@ -304,25 +350,30 @@ async def test_confirm_routing_audits_acceptance_and_handles_unavailable_routes(
         )
     assert unassigned.value.status == 403
 
+    # An administrator needs no department, but the visit must still be live.
     admin = {**nurse, "role": "admin"}
-    connection.departments = []
     with pytest.raises(ApiProblemError) as missing:
         await queue.confirm_routing(
             visit_id, queue.RouteConfirmPayload(reason="reviewed"), request, admin
         )
     assert missing.value.status == 404
 
-    connection.departments = [
-        {
-            "data": {"routing": {"needs_nurse_confirmation": False}},
-            "department_id": department_id,
-        }
-    ]
+    connection.assigned = department_id
+    stored["data"] = {"schema_version": "1.0", "routing": {"needs_nurse_confirmation": False}}
     with pytest.raises(ApiProblemError) as confirmed:
         await queue.confirm_routing(
             visit_id, queue.RouteConfirmPayload(reason="reviewed"), request, admin
         )
     assert confirmed.value.status == 409
+    assert confirmed.value.code == "ROUTE_ALREADY_CONFIRMED"
+
+    stored["data"] = {"schema_version": "1.0", "routing": {"needs_nurse_confirmation": True}}
+    Repository.conflict = True
+    with pytest.raises(ApiProblemError) as changed:
+        await queue.confirm_routing(
+            visit_id, queue.RouteConfirmPayload(reason="reviewed"), request, admin
+        )
+    assert changed.value.code == "CASE_SHEET_CONFLICT"
 
 
 @pytest.mark.asyncio
@@ -346,6 +397,8 @@ async def test_status_change_commits_then_publishes_and_maps_repo_errors(monkeyp
                 "department_id": department_id,
                 "token_label": "GM-042",
                 "urgency": "urgent",
+                "status": kwargs["target"],
+                "previous_status": "called",
             }
 
     class PubSubQueue:
@@ -375,13 +428,17 @@ async def test_status_change_commits_then_publishes_and_maps_repo_errors(monkeyp
     monkeypatch.setattr(queue, "audit", audit)
     monkeypatch.setattr(queue, "QueueRepository", Repository)
     monkeypatch.setattr(queue, "QueueRedis", PubSubQueue)
-    request = make_request(Connection([]))
+    request = make_request(Connection([], assigned=department_id))
     principal = {"hospital_id": str(hospital_id), "sub": str(actor_id), "role": "doctor"}
 
     assert await queue._perform_status_change(request, visit_id, principal, "in_consult") == {
         "visit_id": str(visit_id),
         "status": "in_consult",
+        "token": "GM-042",
     }
+    # The change is confined to the doctor's department and carries their role.
+    assert changes[0]["department_id"] == department_id
+    assert changes[0]["actor_role"] == "doctor"
     assert changes[-2]["ops"][0]["op"] == "upsert"
     assert changes[-1]["payload"] == {"changed": True}
 

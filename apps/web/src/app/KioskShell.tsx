@@ -19,7 +19,14 @@ import "./screens.css";
 const IDLE_MS = 60_000;
 const WARNING_MS = 15_000;
 
-export function KioskShell() {
+/**
+ * The frame around patient screens. "kiosk" is a shared screen: it reports itself online and
+ * clears an unattended session. "mobile" is the patient's own phone (from a check-in QR): no
+ * device heartbeat, and no idle reset, because the patient may switch apps or look up a
+ * medicine name and must come back to the same visit.
+ */
+export function KioskShell({ mode = "kiosk" }: { mode?: "kiosk" | "mobile" }) {
+  const shared = mode === "kiosk";
   const { t } = useTranslation("common");
   const language = useLanguageStore((state) => state.language);
   const setLanguage = useLanguageStore((state) => state.setLanguage);
@@ -56,6 +63,7 @@ export function KioskShell() {
 
   // A small ping each minute while the kiosk is on screen, so staff can see it is online.
   useEffect(() => {
+    if (!shared) return;
     const beat = () => {
       if (document.visibilityState === "visible") void intake.heartbeat();
     };
@@ -66,7 +74,7 @@ export function KioskShell() {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", beat);
     };
-  }, []);
+  }, [shared]);
 
   useEffect(() => {
     let disposed = false;
@@ -103,6 +111,7 @@ export function KioskShell() {
   }, []);
 
   useEffect(() => {
+    if (!shared) return;
     const handleActivity = () => {
       const now = Date.now();
       if (now - lastActivity.current < 1000) return;
@@ -124,21 +133,22 @@ export function KioskShell() {
       events.forEach((event) =>
         window.removeEventListener(event, handleActivity),
       );
-  }, [warning]);
+  }, [warning, shared]);
 
   useEffect(() => {
+    if (!shared) return;
     if (warning) {
       const timer = window.setTimeout(resetSession, WARNING_MS);
       return () => window.clearTimeout(timer);
     }
     const timer = window.setTimeout(() => setWarning(true), IDLE_MS);
     return () => window.clearTimeout(timer);
-  }, [warning, idleKey, resetSession]);
+  }, [warning, idleKey, resetSession, shared]);
 
   return (
     <div
       className={`kiosk-app ${highContrast ? "is-high-contrast" : ""}`}
-      data-layout="kiosk"
+      data-layout={mode}
     >
       <header className="kiosk-header">
         <div className="kiosk-brand">
@@ -228,11 +238,13 @@ export function KioskShell() {
         <span>{t("historyOnly")}</span>
         {judgeMode && <span>{t("demoNotice")}</span>}
       </footer>
-      <IdleWarningDialog
-        open={warning}
-        onContinue={restart}
-        onEnd={resetSession}
-      />
+      {shared && (
+        <IdleWarningDialog
+          open={warning}
+          onContinue={restart}
+          onEnd={resetSession}
+        />
+      )}
       <ConfirmDialog
         open={helpOpen}
         title={

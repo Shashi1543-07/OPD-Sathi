@@ -63,7 +63,7 @@ test("staff case sheet shows source, confidence and AI assistance accessibly", a
     }),
   );
   await page.route(
-    (url) => new URL(url).pathname === "/queue",
+    (url) => /^(?:\/api)?\/queue$/.test(new URL(url).pathname),
     (route) =>
       route.fulfill({ json: { items: [], departments: [], next_cursor: null, limit: 50 } }),
   );

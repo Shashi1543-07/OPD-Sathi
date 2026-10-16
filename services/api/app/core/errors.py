@@ -19,6 +19,7 @@ class ApiProblemError(Exception):
         title: str,
         detail: str,
         headers: dict[str, str] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(detail)
         self.status = status
@@ -26,6 +27,8 @@ class ApiProblemError(Exception):
         self.title = title
         self.detail = detail
         self.headers = headers or {}
+        # Machine-readable details a client needs to act, e.g. which patient is in the way.
+        self.extra = extra or {}
 
 
 def problem(
@@ -37,8 +40,10 @@ def problem(
     detail: str,
     errors: Any | None = None,
     headers: dict[str, str] | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> JSONResponse:
     body: dict[str, Any] = {
+        **(extra or {}),
         "type": "about:blank",
         "title": title,
         "status": status,
@@ -64,6 +69,7 @@ async def api_problem_exception_handler(request: Request, exc: ApiProblemError) 
         title=exc.title,
         detail=exc.detail,
         headers=exc.headers,
+        extra=exc.extra,
     )
 
 

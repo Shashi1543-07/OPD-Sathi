@@ -9,9 +9,12 @@ import { BellRing, TriangleAlert } from "lucide-react";
 export function EmergencyNotice({
   state,
   onDone,
+  mobile = false,
 }: {
   state: "sending" | "sent" | "failed";
   onDone: () => void;
+  /** On the patient's own phone staff cannot see where they are, so send them to staff. */
+  mobile?: boolean;
 }) {
   const { t } = useTranslation("kiosk");
   return (
@@ -22,7 +25,9 @@ export function EmergencyNotice({
         <BellRing aria-hidden="true" size={48} />
       )}
       <h1>{state === "failed" ? t("emergencyFailed") : t("emergencySentTitle")}</h1>
-      {state !== "failed" && <p>{t("emergencySentBody")}</p>}
+      {state !== "failed" && (
+        <p>{mobile ? t("emergencySentBodyMobile") : t("emergencySentBody")}</p>
+      )}
       <p className="emergency-casualty">{t("emergencyCasualty")}</p>
       <button
         type="button"

@@ -19,6 +19,7 @@ from app.core.ids import stable_uuid7, uuid7
 from app.core.security import create_opaque_secret, digest_secret, hash_password
 from app.db.repositories import CaseSheetRepository
 from app.db.session import set_hospital_scope
+from app.domain.checkin import checkin_code, checkin_code_digest
 
 
 async def _create_admin(
@@ -200,7 +201,7 @@ async def _create_kiosk(*, hospital_id: UUID, label: str, reuse: bool = False) -
                 await connection.scalar(
                     text(
                         "SELECT id FROM kiosks WHERE hospital_id = :hospital_id "
-                        "AND label = :label AND deleted_at IS NULL "
+                        "AND label = :label AND kind = 'device' AND deleted_at IS NULL "
                         "ORDER BY created_at, id LIMIT 1"
                     ),
                     {"hospital_id": hospital_id, "label": label},
@@ -259,6 +260,84 @@ async def _create_kiosk(*, hospital_id: UUID, label: str, reuse: bool = False) -
     finally:
         await engine.dispose()
     return code
+
+
+async def _demo_checkin(*, hospital_id: UUID, label: str) -> str:
+    """The phone check-in code for the demo hospital's QR poster, creating the point once.
+
+    Running the demo again keeps the same point and the same QR (the code is derived, not
+    stored), so a poster printed for one rehearsal still works at the next.
+    """
+    settings = get_settings()
+    engine = create_async_engine(settings.migrations_database_url)
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            if await connection.scalar(
+                text("SELECT id FROM hospitals WHERE id = :hospital_id"),
+                {"hospital_id": hospital_id},
+            ) is None:
+                raise SystemExit("Hospital does not exist; run seed-demo first.")
+            point = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT id, checkin_code_version FROM kiosks "
+                            "WHERE hospital_id = :hospital_id AND label = :label "
+                            "AND kind = 'mobile' AND deleted_at IS NULL "
+                            "ORDER BY created_at, id LIMIT 1"
+                        ),
+                        {"hospital_id": hospital_id, "label": label},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if point is not None:
+                point_id, version = point["id"], int(point["checkin_code_version"])
+                await connection.execute(
+                    text(
+                        "UPDATE kiosks SET is_active = true "
+                        "WHERE hospital_id = :hospital_id AND id = :id"
+                    ),
+                    {"hospital_id": hospital_id, "id": point_id},
+                )
+            else:
+                point_id, version = uuid7(), 1
+                code = checkin_code(
+                    key=settings.app_hmac_key_bytes,
+                    hospital_id=hospital_id,
+                    point_id=point_id,
+                    version=version,
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO kiosks (id, hospital_id, label, kind, checkin_code_hash, "
+                        "checkin_code_version) VALUES (:id, :hospital_id, :label, 'mobile', "
+                        ":checkin_code_hash, 1)"
+                    ),
+                    {
+                        "id": point_id,
+                        "hospital_id": hospital_id,
+                        "label": label,
+                        "checkin_code_hash": checkin_code_digest(code),
+                    },
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO audit_log "
+                        "(id, hospital_id, actor_type, action, resource_type, resource_id, "
+                        "request_id, meta) VALUES (:id, :hospital_id, 'system', "
+                        "'kiosk.checkin_point_created', 'kiosk', :kiosk_id, 'operator-cli', "
+                        "'{}'::jsonb)"
+                    ),
+                    {"id": uuid7(), "hospital_id": hospital_id, "kiosk_id": point_id},
+                )
+    finally:
+        await engine.dispose()
+    return checkin_code(
+        key=settings.app_hmac_key_bytes, hospital_id=hospital_id, point_id=point_id, version=version
+    )
 
 
 _DEMO_DEPARTMENTS = (
@@ -925,6 +1004,15 @@ def main() -> None:
         "demo-kiosk", help="Create a kiosk for the demo hospital and print its activation link"
     )
     demo_kiosk.add_argument("--web-url", default=os.getenv("WEB_ORIGIN", "http://localhost:5173"))
+    demo_checkin = commands.add_parser(
+        "demo-checkin",
+        help="Create the demo hospital's phone check-in QR and print the link phones open",
+    )
+    demo_checkin.add_argument(
+        "--web-url",
+        default=os.getenv("PUBLIC_WEB_URL") or os.getenv("WEB_ORIGIN", "http://localhost:5173"),
+        help="The address phones use: this PC's Wi-Fi address and the web port",
+    )
     bulk = commands.add_parser("seed-bulk", help="Insert deterministic synthetic visits")
     bulk.add_argument("--visits", type=int, default=100_000)
     history = commands.add_parser(
@@ -969,6 +1057,15 @@ def main() -> None:
         base = str(args.web_url).split(",")[0].rstrip("/")
         print("Open this link once on the kiosk device to activate it:")
         print(f"  {base}/kiosk?activate={code}")
+        return
+    if args.command == "demo-checkin":
+        demo_hospital = stable_uuid7("opd-saathi:demo-nagpur-government")
+        code = asyncio.run(
+            _demo_checkin(hospital_id=demo_hospital, label="Waiting hall phone QR")
+        )
+        base = str(args.web_url).split(",")[0].rstrip("/")
+        print("Phones on the hospital Wi-Fi check in at:")
+        print(f"  {base}/m/{code}")
         return
     if args.command == "seed-demo-data":
         asyncio.run(_seed_demo_workflow())

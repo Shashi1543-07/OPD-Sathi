@@ -32,6 +32,14 @@ If something else is already using port 5173, the script switches to **8080** an
 - Use **Chrome or Edge**; voice doesn't work properly in other browsers.
 - Keep two windows side by side: the kiosk (press **F11** for full screen) and the staff workspace logged in as **doctor01**.
 
+## Patients' own phones
+
+- The script prints a **phone check-in link** (`http://<this PC's address>:5173/m/...`). Patients scan its QR (Staff → Settings → Kiosks → Show QR) and answer on their own phone. The phone must be on the **same Wi-Fi** as this PC.
+- **After a reboot or a network change, run the script again.** Phones use this PC's current address; with an old one, QR codes open nothing.
+- To check everything, run `.\scripts\lan-check.ps1`. On a phone, `http://<this PC's address>:5173/api/readyz` should show `"ready"`.
+- On campus or guest Wi-Fi, devices are often isolated from each other. Bring a router or use a phone hotspot that the PC and the phones all join.
+- Full guide: [docs/MOBILE_LAN.md](docs/MOBILE_LAN.md).
+
 ## To stop it
 
 ```powershell

@@ -25,6 +25,8 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/kiosks/token"),
         ("GET", "/status/{token}"),
         ("GET", "/status/{token}/stream"),
+        ("GET", "/intake/checkin/{code}"),
+        ("POST", "/intake/checkin/{code}/sessions"),
         ("GET", "/openapi.json"),
         ("HEAD", "/openapi.json"),
         ("GET", "/docs"),
@@ -68,16 +70,26 @@ def current_principal(request: Request) -> dict[str, Any]:
     return _request_token(request)
 
 
+# Public routes that carry an opaque 256-bit code in the path (method, exact path shape).
+PUBLIC_CODE_ROUTES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("GET", re.compile(r"/status/[A-Za-z0-9_-]{43}(?:/stream)?")),
+    # A hospital's phone check-in QR: look it up, then start a patient session from it.
+    ("GET", re.compile(r"/intake/checkin/[A-Za-z0-9_-]{43}")),
+    ("POST", re.compile(r"/intake/checkin/[A-Za-z0-9_-]{43}/sessions")),
+)
+
+
 async def authentication_gate(request: Request) -> None:
     """Reject anonymous access to every route outside the public allow-list."""
     if request.scope.get("type") == "websocket":
         return
     path = request.url.path
+    method = request.method.upper()
     if path == "/metrics" and getattr(request.app.state.settings, "metrics_enabled", False):
         return
-    if (request.method.upper(), path) in PUBLIC_ROUTES or (
-        request.method.upper() == "GET"
-        and re.fullmatch(r"/status/[A-Za-z0-9_-]{43}(?:/stream)?", path) is not None
+    if (method, path) in PUBLIC_ROUTES or any(
+        method == allowed and pattern.fullmatch(path) is not None
+        for allowed, pattern in PUBLIC_CODE_ROUTES
     ):
         return
     _request_token(request)

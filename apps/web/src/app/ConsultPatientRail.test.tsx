@@ -73,6 +73,43 @@ describe("consultation patient rail", () => {
     );
   });
 
+  it("lists missed calls apart from the line, ready to open and recall", async () => {
+    vi.spyOn(staffAuth, "request").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [item({})],
+          missed: [
+            {
+              visit_id: "visit-9",
+              department_id: "dept-1",
+              token: "GEN-009",
+              urgency: "routine",
+              age_years: 30,
+              sex: "female",
+              complaint: "back pain",
+              skip_count: 2,
+              skipped_at: new Date().toISOString(),
+              queued_at: new Date().toISOString(),
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter>
+          <ConsultPatientRail activeVisitId={null} />
+        </MemoryRouter>
+      </I18nextProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Missed calls" })).toBeInTheDocument();
+    const missed = screen.getByRole("link", { name: /GEN-009/ });
+    expect(missed).toHaveAttribute("href", "/staff/consultations?visit_id=visit-9&status=skipped");
+    expect(missed).toHaveTextContent("Missed 2 calls");
+  });
+
   it("explains when the list cannot load", async () => {
     vi.spyOn(staffAuth, "request").mockResolvedValue(new Response("", { status: 500 }));
     render(

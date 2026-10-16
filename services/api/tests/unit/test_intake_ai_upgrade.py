@@ -216,19 +216,24 @@ class _CloseOutConnection:
     def __init__(self) -> None:
         self.statements: list[tuple[str, dict[str, Any]]] = []
 
-    async def execute(self, statement: Any, params: dict[str, Any]) -> Any:
+    async def scalar(self, statement: Any, params: dict[str, Any]) -> Any:
         self.statements.append((str(statement), params))
-        return SimpleNamespace(rowcount=2)
+        return 2
 
 
 @pytest.mark.asyncio
 async def test_previous_days_are_closed_so_todays_queue_starts_empty() -> None:
     connection = _CloseOutConnection()
-    assert await close_previous_days(connection) == 6  # type: ignore[arg-type]
-    targets = {params["target"]: params["statuses"] for _, params in connection.statements}
-    assert targets == {
-        "no_show": ["queued", "called"],
-        "done": ["in_consult"],
-        "cancelled": ["registering", "awaiting_confirmation"],
+    assert await close_previous_days(connection) == 12  # type: ignore[arg-type]
+    changes = {params["source"]: params["target"] for _, params in connection.statements}
+    assert changes == {
+        # A patient still waiting when the OPD closed was not absent.
+        "queued": "cancelled",
+        "called": "no_show",
+        "skipped": "no_show",
+        "in_consult": "done",
+        "registering": "cancelled",
+        "awaiting_confirmation": "cancelled",
     }
     assert all("service_date <" in sql for sql, _ in connection.statements)
+    assert all("'day_closed'" in sql for sql, _ in connection.statements)
