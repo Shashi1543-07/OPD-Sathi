@@ -1,4 +1,4 @@
-"""Tenant AI settings are isolated and fail closed when storage is unavailable."""
+"""Tenant AI settings and the patient's AI consent are isolated and fail closed."""
 
 from types import SimpleNamespace
 from uuid import uuid4
@@ -7,19 +7,20 @@ import pytest
 from starlette.requests import Request
 
 from app.ai.providers.llm.gemini import MAX_OUTPUT_TOKENS, GeminiProvider
-from app.api.v1.intake import _hospital_llm_enabled
+from app.api.v1.ai_gate import ai_consented, llm_allowed
+from app.api.v1.ai_gate import hospital_llm_enabled as _hospital_llm_enabled
 from app.config import Settings
 
 
 class FakeConnection:
-    def __init__(self, enabled: bool | None) -> None:
+    def __init__(self, enabled: bool | str | None) -> None:
         self.enabled = enabled
         self.calls = 0
 
     async def execute(self, *_args: object, **_kwargs: object) -> None:
         self.calls += 1
 
-    async def scalar(self, *_args: object, **_kwargs: object) -> bool | None:
+    async def scalar(self, *_args: object, **_kwargs: object) -> bool | str | None:
         self.calls += 1
         return self.enabled
 
@@ -36,7 +37,7 @@ class FakeContext:
 
 
 def _request(
-    enabled: bool | None, *, global_enabled: bool = True
+    enabled: bool | str | None, *, global_enabled: bool = True
 ) -> tuple[Request, FakeConnection]:
     connection = FakeConnection(enabled)
     app = SimpleNamespace(
@@ -99,6 +100,47 @@ async def test_unreadable_setting_store_fails_closed() -> None:
 
     connection.scalar = broken  # type: ignore[method-assign]
     assert not await _hospital_llm_enabled(request, uuid4())
+
+
+@pytest.mark.asyncio
+async def test_only_a_standing_yes_lets_ai_work_on_a_visit() -> None:
+    for choice, allowed in (
+        ("granted", True),
+        ("declined", False),
+        ("withdrawn", False),
+        (None, False),  # Never asked: the visit runs on the server alone.
+    ):
+        request, _ = _request(choice)
+        assert await ai_consented(request, uuid4(), uuid4()) is allowed, choice
+
+    # The answer is read once per request and for that visit only.
+    request, connection = _request("granted")
+    visit = uuid4()
+    assert await ai_consented(request, uuid4(), visit)
+    calls = connection.calls
+    assert await ai_consented(request, uuid4(), visit)
+    assert connection.calls == calls
+
+    broken_request, broken_connection = _request("granted")
+
+    async def broken(*_args: object, **_kwargs: object) -> str:
+        raise RuntimeError("store unavailable")
+
+    broken_connection.scalar = broken  # type: ignore[method-assign]
+    assert not await ai_consented(broken_request, uuid4(), uuid4())
+
+
+@pytest.mark.asyncio
+async def test_the_model_needs_both_the_hospital_switch_and_the_patients_yes() -> None:
+    request, _ = _request("granted", global_enabled=False)
+    assert not await llm_allowed(request, uuid4(), uuid4())
+    hospital, visit = uuid4(), uuid4()
+    request, _ = _request(None)
+    request.state.llm_enablement = (hospital, True)
+    request.state.ai_consent = (visit, False)
+    assert not await llm_allowed(request, hospital, visit)
+    request.state.ai_consent = (visit, True)
+    assert await llm_allowed(request, hospital, visit)
 
 
 def test_token_limit_is_configurable_but_hard_capped() -> None:

@@ -47,6 +47,8 @@ import { staffAuth } from "../lib/auth";
 import { ConfidenceChip, Popover } from "../components/ui";
 import { ConsultPatientRailView } from "./ConsultPatientRail";
 import { PreviousVisits, type PatientHistory } from "./PreviousVisits";
+import { DocumentsPanel } from "./DocumentsPanel";
+import { useVisitDocuments } from "./visitDocuments";
 import { AyurvedaPanel } from "./AyurvedaPanel";
 import { useConsultQueue } from "./consultQueue";
 import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
@@ -88,6 +90,8 @@ type PatientContext = {
   department_name?: string | null;
   triage?: Triage | null;
   queued_at?: string | null;
+  /** The patient's choice about online AI help for this visit. */
+  ai_help?: "on" | "off" | "withdrawn" | null;
 };
 type TranscriptTurn = {
   turn_index: number;
@@ -105,7 +109,7 @@ type CaseSheetResult = {
   patient?: PatientContext | null;
 };
 type Draft = { path: string; value: string; initial: string; label: string };
-type Tab = "overview" | "history" | "previous" | "ayurveda" | "transcript" | "notes";
+type Tab = "overview" | "history" | "previous" | "papers" | "ayurveda" | "transcript" | "notes";
 type StepState = "done" | "active" | "next" | "upcoming";
 
 const emptyText = "—";
@@ -114,6 +118,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "history", label: "tabHistory" },
   // Earlier visits stay apart from today's history so the two are never confused.
   { id: "previous", label: "tabPrevious" },
+  // Photos of old papers the patient brought, with what AI read from them.
+  { id: "papers", label: "tabPapers" },
   // Only on sheets with an Ayurveda section (hospitals that ask the Ayurveda history).
   { id: "ayurveda", label: "tabAyurveda" },
   { id: "transcript", label: "tabTranscript" },
@@ -304,6 +310,11 @@ export function DoctorConsultation() {
     return () => window.clearTimeout(timer);
   }, [loadHistory]);
   const patientHistory = history?.visitId === visitId ? history.data : undefined;
+  // Old papers load on their own too, and refresh while AI is still reading one.
+  const papers = useVisitDocuments(visitId);
+  const paperCount = papers.data
+    ? papers.data.documents.length + papers.data.earlier.length
+    : 0;
 
   // The visit's queue timeline (token, calls, missed calls, recalls); extra information only.
   const [timeline, setTimeline] = useState<{ visitId: string; events: QueueEvent[] }>();
@@ -329,6 +340,9 @@ export function DoctorConsultation() {
   const [briefDraft, setBriefDraft] = useState<{ visitId: string; text: string } | null>(null);
   const [rejectedShown, setRejectedShown] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  // "Patient asks to stop AI help": confirmed inline, for the visit it was asked on.
+  const [confirmStopAi, setConfirmStopAi] = useState<string | null>(null);
+  const [stoppingAi, setStoppingAi] = useState(false);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const editingBrief = briefDraft?.visitId === visitId ? briefDraft.text : null;
   useEffect(() => {
@@ -500,6 +514,28 @@ export function DoctorConsultation() {
       setError(reason instanceof Error ? reason.message : t("aiReviewFailed"));
     } finally {
       setReviewing(false);
+    }
+  }
+
+  /** Record at the desk that the patient wants no more AI help for this visit. */
+  async function stopAiHelp() {
+    if (!visitId) return;
+    setStoppingAi(true);
+    setError("");
+    try {
+      const response = await staffAuth.request(`/visits/${visitId}/ai-consent/withdraw`, {
+        method: "POST",
+      });
+      // 409: already stopped (perhaps by the patient on their phone).
+      if (!response.ok && response.status !== 409) throw new Error(t("aiHelpStopFailed"));
+      setConfirmStopAi(null);
+      await load();
+      // What AI read from the patient's papers is hidden from now on, too.
+      void papers.reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("aiHelpStopFailed"));
+    } finally {
+      setStoppingAi(false);
     }
   }
 
@@ -922,6 +958,37 @@ export function DoctorConsultation() {
       )
     : t("aiReviewDraft");
   const hideRejected = review?.status === "rejected" && rejectedShown !== visitId;
+  // Why there may be no AI draft, and the desk's way to stop AI help when it is on.
+  const aiHelp = patient?.ai_help ?? null;
+  const aiHelpNote =
+    aiHelp === "off" || aiHelp === "withdrawn" ? (
+      <p className="cx-panel-note cx-ai-help">
+        {t(aiHelp === "off" ? "aiHelpOff" : "aiHelpWithdrawn")}
+      </p>
+    ) : aiHelp === "on" ? (
+      <div className="cx-ai-help no-print">
+        {confirmStopAi === visitId ? (
+          <>
+            <span>{t("aiHelpStopConfirm")}</span>
+            <button
+              type="button"
+              className="cx-btn"
+              disabled={stoppingAi}
+              onClick={() => void stopAiHelp()}
+            >
+              {t("aiHelpStopYes")}
+            </button>
+            <button type="button" className="cx-btn" onClick={() => setConfirmStopAi(null)}>
+              {t("aiHelpStopNo")}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="cx-link" onClick={() => setConfirmStopAi(visitId)}>
+            {t("aiHelpStop")}
+          </button>
+        )}
+      </div>
+    ) : null;
   const aiCard = summary?.brief_en && (
     <section
       className={`cx-card cx-card--ai${review?.status === "rejected" ? " is-rejected" : ""}`}
@@ -1297,6 +1364,7 @@ export function DoctorConsultation() {
         </div>
         <div className="cx-col">
           {aiCard}
+          {aiHelpNote}
           {workflowCard}
         </div>
       </div>
@@ -1334,7 +1402,20 @@ export function DoctorConsultation() {
         visitId={visitId}
         history={patientHistory}
         failed={historyFailed}
-        onLinked={() => void loadHistory()}
+        onLinked={() => {
+          void loadHistory();
+          // A linked record can bring papers from the patient's earlier visits.
+          void papers.reload();
+        }}
+      />
+    );
+  } else if (tab === "papers") {
+    panel = (
+      <DocumentsPanel
+        visitId={visitId}
+        documents={papers.data}
+        failed={papers.failed}
+        onChanged={() => void papers.reload()}
       />
     );
   } else if (tab === "transcript") {
@@ -1718,6 +1799,9 @@ export function DoctorConsultation() {
                 )}
                 {item.id === "previous" && (patientHistory?.previous_visits.length ?? 0) > 0 && (
                   <span className="cx-tab-badge">{patientHistory?.previous_visits.length}</span>
+                )}
+                {item.id === "papers" && paperCount > 0 && (
+                  <span className="cx-tab-badge">{paperCount}</span>
                 )}
                 {item.id === "history" && dirty && (
                   <span className="cx-tab-dot">

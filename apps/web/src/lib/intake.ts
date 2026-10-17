@@ -21,6 +21,8 @@ type Session = {
   visit_id: string;
   patient_access_token: string;
   consent?: ConsentCopy;
+  /** The separate notice about online AI help, asked right after the consent. */
+  ai_consent?: ConsentCopy;
   stage?: string;
   assisted?: boolean;
   /** Started from a hospital's phone check-in QR on the patient's own phone. */
@@ -33,6 +35,11 @@ type Session = {
 
 /** The OPD card a patient brings to the next visit: registration number and PIN. */
 export type OpdCard = { number: string; pin: string };
+
+/** What an old paper is: the patient picks it before taking the photo. */
+export type DocumentKind = "prescription" | "lab_report" | "discharge_summary" | "other";
+/** A photo of an old paper the patient added while checking in (kept for the doctor). */
+export type PatientDocument = { id: string; kind: DocumentKind; size: number; added_at: string };
 
 /** A token issued on this phone: shown again instead of starting a second visit. */
 export type MobileTicket = {
@@ -413,6 +420,7 @@ export const intake = {
       visit_id: string;
       patient_access_token: string;
       consent: ConsentCopy;
+      ai_consent: ConsentCopy;
       expires_in: number;
       hospital_name?: string;
     }>(`/intake/checkin/${encodeURIComponent(code)}/sessions`, {
@@ -423,6 +431,7 @@ export const intake = {
       visit_id: response.visit_id,
       patient_access_token: response.patient_access_token,
       consent: response.consent,
+      ai_consent: response.ai_consent,
       channel: "mobile",
       checkin: code,
       // A minute of margin so the phone never resumes a session the server just expired.
@@ -479,6 +488,12 @@ export const intake = {
         sha256: consent.sha256,
         granted,
       }),
+    }),
+  /** The optional answer about online AI help (its own notice, nothing pre-selected). */
+  aiConsent: (notice: ConsentCopy, granted: boolean) =>
+    patientRequest<{ granted: boolean }>("/consent/ai", {
+      method: "POST",
+      body: JSON.stringify({ version: notice.version, sha256: notice.sha256, granted }),
     }),
   identity: (
     age: number,
@@ -601,7 +616,7 @@ export const intake = {
     return ((await response.json()) as { text: string }).text;
   },
   speechAudio: async (
-    kind: "question" | "consent" | "readback",
+    kind: "question" | "consent" | "consent_ai" | "readback",
     questionId = "",
   ) => {
     const session = getPatientSession();
@@ -649,13 +664,26 @@ export const intake = {
       }
     ).medicines;
   },
+  /** Keep a photo of an old paper with this visit; with AI help it is also read for the doctor. */
+  addDocument: (photo: Blob, kind: DocumentKind) =>
+    patientRequest<PatientDocument>(`/documents?kind=${kind}`, {
+      method: "POST",
+      headers: { "Content-Type": photo.type || "image/jpeg" },
+      body: photo,
+    }),
+  documents: () =>
+    patientRequest<{ documents: PatientDocument[]; limit: number }>("/documents"),
+  removeDocument: (documentId: string) =>
+    patientRequest<void>(`/documents/${documentId}`, { method: "DELETE" }),
   changeLanguage: async (language: Language) => {
-    const result = await patientRequest<{ language: Language; consent: ConsentCopy }>(
-      "/language",
-      { method: "POST", body: JSON.stringify({ language }) },
-    );
+    const result = await patientRequest<{
+      language: Language;
+      consent: ConsentCopy;
+      ai_consent: ConsentCopy;
+    }>("/language", { method: "POST", body: JSON.stringify({ language }) });
     const session = getPatientSession();
-    if (session) savePatientSession({ ...session, consent: result.consent });
+    if (session)
+      savePatientSession({ ...session, consent: result.consent, ai_consent: result.ai_consent });
     return result;
   },
   requestHelp: () =>

@@ -5,6 +5,7 @@ database without seeing each other's rows (row-level security scopes every query
 hospital). Teardown removes everything the hospital owns, in foreign-key order.
 """
 
+import asyncio
 import base64
 import os
 from collections.abc import AsyncIterator, Iterator
@@ -19,6 +20,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.ai.providers.llm.gemini import GeminiProvider
+from app.ai.speech import SpeechService
 from app.config import Settings
 from app.core.security import digest_secret, hash_password, issue_access_token
 from app.db.session import set_hospital_scope
@@ -226,6 +229,8 @@ class PatientSession:
     visit_id: str
     token: str
     consent: dict[str, Any]
+    # The separate notice about online AI help, from the session's start.
+    ai_consent: dict[str, Any] | None = None
 
     def headers(self, *, idempotent: bool = False) -> dict[str, str]:
         headers = {"Authorization": f"Bearer {self.token}"}
@@ -249,6 +254,18 @@ class PatientSession:
             {"version": self.consent["version"], "sha256": self.consent["sha256"], "granted": True},
         )
         assert response.status_code == 200, response.text
+
+    def allow_ai(self, granted: bool = True) -> Any:
+        """Answer the optional question about online AI help."""
+        assert self.ai_consent is not None, "the session was started without its AI notice"
+        return self.post(
+            "/consent/ai",
+            {
+                "version": self.ai_consent["version"],
+                "sha256": self.ai_consent["sha256"],
+                "granted": granted,
+            },
+        )
 
     def identity(self, *, age: int = 34, sex: str = "female", phone: str | None = None) -> Any:
         return self.post("/identity", {"age": age, "sex": sex, "phone": phone})
@@ -282,6 +299,70 @@ class PatientSession:
         return self.post("/confirm")
 
 
+class GeminiOutage(Exception):
+    """What the Gemini client raises when the service is down (HTTP 503)."""
+
+    code = 503
+
+
+class _GeminiResponse:
+    def __init__(self, value: dict[str, Any]) -> None:
+        self.parsed = value
+        self.text = None
+        self.usage_metadata = None
+
+
+class GeminiStub:
+    """Gemini's network client, controlled by the test: "ok", "down" or "hanging".
+
+    ``calls`` counts every request that would have left the server.
+    """
+
+    def __init__(self, mode: str = "ok", value: dict[str, Any] | None = None) -> None:
+        self.mode = mode
+        self.value = value or {}
+        self.calls = 0
+        self.models = self  # The provider calls client.models.generate_content(...).
+
+    async def generate_content(self, *, model: str, contents: Any, config: object) -> object:
+        del model, contents, config
+        self.calls += 1
+        if self.mode == "down":
+            raise GeminiOutage("synthetic outage")
+        if self.mode == "hanging":
+            await asyncio.sleep(120)
+        return _GeminiResponse(self.value)
+
+    async def aclose(self) -> None:
+        return None
+
+
+@contextmanager
+def with_gemini(
+    client: TestClient, stub: GeminiStub, *, speech: bool = False
+) -> Iterator[GeminiProvider]:
+    """Run the app with a Gemini provider whose network calls go to ``stub``.
+
+    ``speech`` also routes speech recognition and speech synthesis through it.
+    """
+    provider = GeminiProvider(
+        api_key="synthetic-test-key",
+        model="gemini-test",
+        fallback_model="gemini-test-fallback",
+        client=stub,
+    )
+    app: Any = client.app
+    previous = (app.state.llm_provider, app.state.speech)
+    app.state.llm_provider = provider
+    if speech:
+        keyed = app.state.settings.model_copy(update={"gemini_api_key": "synthetic-test-key"})
+        app.state.speech = SpeechService(keyed, provider)
+    try:
+        yield provider
+    finally:
+        app.state.llm_provider, app.state.speech = previous
+
+
 def activate_kiosk(client: TestClient, hospital: SyntheticHospital) -> dict[str, str]:
     """Kiosk bearer headers for the hospital's (already paired) kiosk."""
     del client  # Kept in the signature: callers read like the real activation flow.
@@ -306,6 +387,7 @@ def start_kiosk_session(
         visit_id=body["visit_id"],
         token=body["patient_access_token"],
         consent=body["consent"],
+        ai_consent=body["ai_consent"],
     )
 
 
@@ -318,9 +400,16 @@ def complete_intake(
     phone: str | None = None,
     tiles: tuple[str, ...] = (),
     answers: dict[str, str | int] | None = None,
+    allow_ai: bool | None = None,
 ) -> dict[str, Any]:
-    """Consent, identity, danger signs and the interview, ending at the summary."""
+    """Consent, identity, danger signs and the interview, ending at the summary.
+
+    ``allow_ai`` answers the optional AI-help question (None: the patient is not asked).
+    """
     session.agree()
+    if allow_ai is not None:
+        answered = session.allow_ai(allow_ai)
+        assert answered.status_code == 200, answered.text
     identity = session.identity(age=age, sex=sex, phone=phone)
     assert identity.status_code == 200, identity.text
     session.danger_signs(tiles)

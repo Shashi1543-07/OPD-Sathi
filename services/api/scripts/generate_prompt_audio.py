@@ -60,6 +60,8 @@ def collect_prompts() -> dict[str, dict[str, str]]:
             prompts[prompt_id] = {lang: translations[lang] for lang in LANGUAGES}
     for language in LANGUAGES:
         prompts.setdefault("consent", {})[language] = get_consent_copy(language)["text"]
+        # The separate notice about online AI help is read aloud like the first.
+        prompts.setdefault("consent_ai", {})[language] = get_consent_copy(language, "ai")["text"]
     for tile_id, translations in DANGER_TILES.items():
         prompts[f"danger.{tile_id}"] = dict(translations)
 

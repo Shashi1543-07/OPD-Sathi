@@ -23,9 +23,11 @@ from app.core.auth import require_role
 from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.ids import uuid7
+from app.core.ratelimit import check_rate_limit
 from app.core.security import AuthenticationTokenError, decode_access_token
 from app.db.repositories import (
     CaseSheetRepository,
+    IntakeRepository,
     PatientRepository,
     QueueRepository,
     decrypt_case_sheet,
@@ -154,14 +156,19 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         doctors, samples = await repository.queue_estimate_inputs(
             hospital_id=visit["hospital_id"], department_id=visit["department_id"]
         )
-        # Where to go and in which language to show it on the patient's phone.
+        # Where to go and in which language to show it on the patient's phone, and whether
+        # the patient's AI help is on (the page lets them stop it).
         place = (
             (
                 await connection.execute(
                     text(
-                        "SELECT d.name_en, d.name_hi, d.name_mr, h.name AS hospital, v.language "
+                        "SELECT d.name_en, d.name_hi, d.name_mr, h.name AS hospital, v.language, "
+                        "CASE WHEN a.withdrawn_at IS NOT NULL THEN 'withdrawn' "
+                        "WHEN a.granted THEN 'on' ELSE 'off' END AS ai_help "
                         "FROM visits v JOIN departments d ON d.hospital_id = v.hospital_id "
                         "AND d.id = v.department_id JOIN hospitals h ON h.id = v.hospital_id "
+                        "LEFT JOIN consents a ON a.hospital_id = v.hospital_id "
+                        "AND a.visit_id = v.id AND a.purpose = 'ai' "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
                     {"hospital_id": visit["hospital_id"], "visit_id": visit["visit_id"]},
@@ -224,6 +231,7 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         ),
         "hospital": place["hospital"] if place else None,
         "language": place["language"] if place else "en",
+        "ai_help": place["ai_help"] if place else "off",
         "updated_at": datetime.now(UTC).isoformat(),
     }
 
@@ -296,6 +304,78 @@ async def patient_status_stream(token: str, request: Request) -> StreamingRespon
     return StreamingResponse(
         events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"}
     )
+
+
+_STATUS_TOKEN_CHARACTERS = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+)
+
+
+@router.post("/status/{token}/ai-consent/withdraw")
+async def withdraw_ai_help(token: str, request: Request) -> dict[str, Any]:
+    """The patient stops online AI help for their visit, from their own status page.
+
+    The status link shows it is their visit. It can only stop AI help, never start it, so a
+    photographed token slip cannot switch AI on. From then on nothing more about the visit is
+    sent to AI services, and the doctor no longer sees the AI draft.
+    """
+    unavailable = _problem(
+        404, "NOT_FOUND", "Status unavailable", "This status link is unavailable."
+    )
+    if len(token) != 43 or not set(token) <= _STATUS_TOKEN_CHARACTERS:
+        raise unavailable
+    digest = status_token_digest(token)
+    settings = request.app.state.settings
+    limit = await check_rate_limit(
+        request.app.state.redis_state,
+        request.app.state.memory_limiter,
+        key=f"osa:{settings.app_env}:rl:ai-withdraw:{digest}",
+        limit=10,
+        window_seconds=600,
+        fail_closed=False,
+    )
+    if limit is not None and not limit.allowed:
+        raise ApiProblemError(
+            status=429,
+            code="RATE_LIMITED",
+            title="Too many requests",
+            detail="Please wait a moment and try again.",
+            headers={"Retry-After": str(limit.retry_after)},
+        )
+    async with request.app.state.engine.begin() as connection:
+        await set_secret_lookup_scope(
+            connection, setting="app.status_token_hash", secret_hash=digest
+        )
+        visit = await QueueRepository(connection, settings).visit_status_by_hash(digest)
+        if visit is None:
+            raise unavailable
+        await set_hospital_scope(connection, visit["hospital_id"])
+        withdrawn = await IntakeRepository(connection, settings).withdraw_ai_consent(
+            hospital_id=visit["hospital_id"], visit_id=visit["visit_id"], by="patient"
+        )
+        if withdrawn:
+            await audit(
+                connection,
+                request,
+                hospital_id=visit["hospital_id"],
+                actor_type="patient",
+                actor_id=visit["visit_id"],
+                action="consent.ai_withdrawn",
+                resource_type="visit",
+                resource_id=visit["visit_id"],
+                meta={"by": "patient"},
+            )
+    if not withdrawn:
+        raise _problem(
+            409, "AI_HELP_NOT_ON", "AI help is not on", "AI help is not on for this visit."
+        )
+    try:
+        await request.app.state.redis_state.delete(
+            f"osa:{settings.app_env}:status-cache:{digest}"
+        )
+    except RedisError:
+        pass  # The cached status expires within two seconds.
+    return {"ai_help": "withdrawn"}
 
 
 @router.get("/queue")

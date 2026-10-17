@@ -5,18 +5,15 @@ doctor would. Scenarios already covered elsewhere are listed in docs/E2E_SCENARI
 their tests; this file holds the ones that needed a test of their own.
 """
 
-import asyncio
 import time
-from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from typing import Any
 
 from fastapi.testclient import TestClient
 
-from app.ai.providers.llm.gemini import GeminiProvider
 from app.api.v1.speech import MAX_IMAGE_BYTES
 from tests.integration.synthetic import (
+    GeminiStub,
     PatientSession,
     SyntheticHospital,
     activate_kiosk,
@@ -25,65 +22,11 @@ from tests.integration.synthetic import (
     fetch,
     start_kiosk_session,
     synthetic_hospital,
+    with_gemini,
 )
 
 _JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 256
 _PDF = b"%PDF-1.7\n" + b"\x00" * 256
-
-
-class _Outage(Exception):
-    """What the Gemini client raises when the service is down (HTTP 503)."""
-
-    code = 503
-
-
-class _Response:
-    def __init__(self, value: dict[str, Any]) -> None:
-        self.parsed = value
-        self.text = None
-        self.usage_metadata = None
-
-
-class _Models:
-    def __init__(self, mode: str, value: dict[str, Any] | None = None) -> None:
-        self.mode = mode
-        self.value = value or {}
-        self.calls = 0
-
-    async def generate_content(self, *, model: str, contents: Any, config: object) -> object:
-        del model, contents, config
-        self.calls += 1
-        if self.mode == "down":
-            raise _Outage("synthetic outage")
-        if self.mode == "hanging":
-            await asyncio.sleep(120)
-        return _Response(self.value)
-
-
-class _Client:
-    def __init__(self, models: _Models) -> None:
-        self.models = models
-
-    async def aclose(self) -> None:
-        return None
-
-
-@contextmanager
-def _with_gemini(client: TestClient, models: _Models) -> Iterator[GeminiProvider]:
-    """Swap in a Gemini provider whose network calls the test controls."""
-    provider = GeminiProvider(
-        api_key="synthetic-test-key",
-        model="gemini-test",
-        fallback_model="gemini-test-fallback",
-        client=_Client(models),
-    )
-    app: Any = client.app
-    previous = app.state.llm_provider
-    app.state.llm_provider = provider
-    try:
-        yield provider
-    finally:
-        app.state.llm_provider = previous
 
 
 def _start_on_phone(client: TestClient, hospital: SyntheticHospital) -> PatientSession:
@@ -106,6 +49,7 @@ def _start_on_phone(client: TestClient, hospital: SyntheticHospital) -> PatientS
         visit_id=body["visit_id"],
         token=body["patient_access_token"],
         consent=body["consent"],
+        ai_consent=body["ai_consent"],
     )
 
 
@@ -278,11 +222,16 @@ async def test_scenario_08_a_patient_who_left_registers_again_with_their_card() 
 
 
 async def test_scenario_09_check_in_works_while_the_ai_service_is_down() -> None:
+    outage = GeminiStub("down")
     async with synthetic_hospital() as hospital:
-        with api_client(hospital.settings) as client, _with_gemini(client, _Models("down")):
+        with api_client(hospital.settings) as client, with_gemini(client, outage):
             session = start_kiosk_session(client, activate_kiosk(client, hospital))
+            # The patient said yes to AI help, so the system really tries to use it.
             complete_intake(
-                session, complaint="fever with cough", answers={"duration": "4 to 7 days"}
+                session,
+                complaint="fever with cough",
+                answers={"duration": "4 to 7 days"},
+                allow_ai=True,
             )
             photo = client.post(
                 f"/intake/sessions/{session.visit_id}/prescription-photo",
@@ -303,13 +252,14 @@ async def test_scenario_09_check_in_works_while_the_ai_service_is_down() -> None
             assert not (data.get("ai_summary") or {}).get("brief_en")
             board = client.get("/queue", headers=hospital.staff("nurse")).json()["items"]
             assert confirmed.json()["token"] in {item["token"] for item in board}
+        assert outage.calls > 0  # AI was tried and failed; nothing else did.
 
 
 async def test_scenario_09_a_hanging_ai_service_only_slows_confirmation_a_little() -> None:
     async with synthetic_hospital() as hospital:
-        with api_client(hospital.settings) as client, _with_gemini(client, _Models("hanging")):
+        with api_client(hospital.settings) as client, with_gemini(client, GeminiStub("hanging")):
             session = start_kiosk_session(client, activate_kiosk(client, hospital))
-            complete_intake(session, complaint="fever")
+            complete_intake(session, complaint="fever", allow_ai=True)
             started = time.monotonic()
             confirmed = session.confirm()
             elapsed = time.monotonic() - started
@@ -325,10 +275,11 @@ async def test_scenario_14_only_real_photos_of_a_sensible_size_are_read() -> Non
     }
     async with synthetic_hospital() as hospital:
         with api_client(hospital.settings) as client:
-            models = _Models("ok", reading)
-            with _with_gemini(client, models):
+            models = GeminiStub("ok", reading)
+            with with_gemini(client, models):
                 session = start_kiosk_session(client, activate_kiosk(client, hospital))
                 session.agree()
+                assert session.allow_ai().status_code == 200
                 assert session.identity().status_code == 200
                 session.danger_signs()
 

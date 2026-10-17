@@ -5,17 +5,23 @@ import re
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, Depends, Header, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import text
 from starlette.responses import Response as StarletteResponse
 
+from app.api.v1.visit_access import check_visit_department as _check_visit_department
+from app.api.v1.visit_access import visit_in_care
 from app.core.audit import audit
 from app.core.auth import require_role
 from app.core.errors import ApiProblemError
-from app.db.repositories import CaseSheetRepository, InterviewTurnRepository, PatientRepository
+from app.db.repositories import (
+    CaseSheetRepository,
+    IntakeRepository,
+    InterviewTurnRepository,
+    PatientRepository,
+)
 from app.db.session import set_hospital_scope
 from app.domain.case_sheet import CaseSheet
 from app.domain.case_sheet_patch import CaseSheetPatchError, apply_case_sheet_patch
@@ -71,6 +77,9 @@ class PatientContext(BaseModel):
     # Staff-only triage score and the reason for every point (never shown to patients).
     triage: dict[str, Any] | None = None
     queued_at: datetime | None = None
+    # The patient's choice about online AI help: "on", "off" (said no, or never asked), or
+    # "withdrawn" (said yes, then stopped it; the AI draft is no longer shown).
+    ai_help: Literal["on", "off", "withdrawn"] | None = None
 
 
 class CaseSheetResponse(BaseModel):
@@ -121,37 +130,6 @@ def _parse_if_match(value: str | None) -> int:
     return int(candidate)
 
 
-async def _check_visit_department(
-    connection: Any,
-    *,
-    hospital_id: UUID,
-    visit_id: UUID,
-    actor_id: UUID,
-    role: str | None = None,
-) -> None:
-    visit_department = await connection.scalar(
-        text(
-            "SELECT department_id FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id"
-        ),
-        {"hospital_id": hospital_id, "visit_id": visit_id},
-    )
-    if not isinstance(visit_department, UUID):
-        raise _problem(404, "NOT_FOUND", "Visit not found", "The requested visit is unavailable.")
-    if role == "admin":
-        return  # Administrators oversee every department; reads are still audited.
-    assigned_department = await connection.scalar(
-        text(
-            "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
-            "AND id = :actor_id AND is_active = true"
-        ),
-        {"hospital_id": hospital_id, "actor_id": actor_id},
-    )
-    if not isinstance(assigned_department, UUID):
-        raise _problem(403, "FORBIDDEN", "Permission denied", "No staff department is assigned.")
-    if assigned_department != visit_department:
-        raise _problem(404, "NOT_FOUND", "Visit not found", "The requested visit is unavailable.")
-
-
 @router.get("/visits/{visit_id}/case-sheet", response_model=CaseSheetResponse)
 async def get_case_sheet(
     visit_id: UUID,
@@ -176,10 +154,14 @@ async def get_case_sheet(
                     text(
                         "SELECT v.age_years, p.sex, v.language, v.token_label AS token, "
                         "v.urgency, v.status, d.name_en AS department_name, "
-                        "v.acuity AS triage, v.queued_at FROM visits v "
+                        "v.acuity AS triage, v.queued_at, "
+                        "CASE WHEN a.withdrawn_at IS NOT NULL THEN 'withdrawn' "
+                        "WHEN a.granted THEN 'on' ELSE 'off' END AS ai_help FROM visits v "
                         "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
                         "LEFT JOIN departments d ON d.hospital_id = v.hospital_id "
                         "AND d.id = v.department_id "
+                        "LEFT JOIN consents a ON a.hospital_id = v.hospital_id "
+                        "AND a.visit_id = v.id AND a.purpose = 'ai' "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},
@@ -208,14 +190,29 @@ async def get_case_sheet(
         )
     version = int(saved["version"])
     response.headers["ETag"] = f'"{version}"'
+    withdrawn = bool(context and context["ai_help"] == "withdrawn")
     return CaseSheetResponse(
         visit_id=visit_id,
         version=version,
-        case_sheet=_with_flag_reasons(saved["data"]),
+        case_sheet=_with_flag_reasons(_without_ai_draft(saved["data"], withdrawn)),
         confirmed_by_patient=saved.get("confirmed_by_patient") is True,
         confirmed_at=saved.get("confirmed_at"),
         patient=PatientContext(**dict(context)) if context else None,
     )
+
+
+def _without_ai_draft(data: dict[str, Any], withdrawn: bool) -> dict[str, Any]:
+    """The sheet as shown once the patient stopped AI help: the AI draft is left out."""
+    return {**data, "ai_summary": None} if withdrawn else data
+
+
+async def _ai_withdrawn(
+    connection: Any, request: Request, *, hospital_id: UUID, visit_id: UUID
+) -> bool:
+    choice = await IntakeRepository(connection, request.app.state.settings).ai_consent(
+        hospital_id=hospital_id, visit_id=visit_id
+    )
+    return choice == "withdrawn"
 
 
 @router.get("/visits/{visit_id}/case-sheet.pdf", response_class=StarletteResponse)
@@ -242,6 +239,9 @@ async def export_case_sheet_pdf(
             raise _problem(
                 404, "NOT_FOUND", "Case sheet not found", "The case sheet is unavailable."
             )
+        withdrawn = await _ai_withdrawn(
+            connection, request, hospital_id=hospital_id, visit_id=visit_id
+        )
         visit = (
             (
                 await connection.execute(
@@ -291,7 +291,7 @@ async def export_case_sheet_pdf(
         part for part in (f"{age} years" if isinstance(age, int) else "", sex) if part
     )
     pdf = render_case_sheet_pdf(
-        saved["data"],
+        _without_ai_draft(saved["data"], withdrawn),
         queue_number=visit["token_label"] or "",
         attention_reasons=reasons,
         patient_line=patient_line,
@@ -335,6 +335,9 @@ async def patch_case_sheet(
             raise _problem(
                 404, "NOT_FOUND", "Case sheet not found", "The case sheet is unavailable."
             )
+        withdrawn = await _ai_withdrawn(
+            connection, request, hospital_id=hospital_id, visit_id=visit_id
+        )
         if int(saved["version"]) != expected_version:
             raise _problem(
                 409,
@@ -383,7 +386,7 @@ async def patch_case_sheet(
     return CaseSheetResponse(
         visit_id=visit_id,
         version=new_version,
-        case_sheet=_with_flag_reasons(updated),
+        case_sheet=_with_flag_reasons(_without_ai_draft(updated, withdrawn)),
         confirmed_by_patient=saved.get("confirmed_by_patient") is True,
         confirmed_at=saved.get("confirmed_at"),
     )
@@ -424,6 +427,13 @@ async def review_ai_summary(
         if saved is None:
             raise _problem(
                 404, "NOT_FOUND", "Case sheet not found", "The case sheet is unavailable."
+            )
+        if await _ai_withdrawn(connection, request, hospital_id=hospital_id, visit_id=visit_id):
+            raise _problem(
+                409,
+                "AI_HELP_WITHDRAWN",
+                "AI help stopped",
+                "The patient stopped AI help for this visit; the AI draft is not used.",
             )
         if int(saved["version"]) != expected_version:
             raise _problem(
@@ -500,6 +510,51 @@ async def review_ai_summary(
     )
 
 
+@router.post("/visits/{visit_id}/ai-consent/withdraw")
+async def withdraw_ai_help_at_desk(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse", "admin"))],
+) -> dict[str, Any]:
+    """Stop online AI help when a patient asks staff to (for example without a phone).
+
+    The same as the patient's own button on their status page: nothing more about the visit
+    goes to AI services, the doctor no longer sees the AI draft, and the staff member who
+    recorded it is in the audit log.
+    """
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _check_visit_department(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            actor_id=actor_id,
+            role=principal.get("role"),
+        )
+        withdrawn = await IntakeRepository(
+            connection, request.app.state.settings
+        ).withdraw_ai_consent(hospital_id=hospital_id, visit_id=visit_id, by="staff")
+        if withdrawn:
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user",
+                actor_id=actor_id,
+                action="consent.ai_withdrawn",
+                resource_type="visit",
+                resource_id=visit_id,
+                meta={"by": "staff"},
+            )
+    if not withdrawn:
+        raise _problem(
+            409, "AI_HELP_NOT_ON", "AI help is not on", "AI help is not on for this visit."
+        )
+    return {"visit_id": str(visit_id), "ai_help": "withdrawn"}
+
+
 class PreviousVisit(BaseModel):
     """One earlier registered visit, as recorded then. Never edited from here."""
 
@@ -571,7 +626,8 @@ def _previous_visit(row: dict[str, Any]) -> PreviousVisit:
         for flag in sheet.get("red_flags") or []
         if isinstance(flag, dict)
     ]
-    summary = sheet.get("ai_summary") or {}
+    # A visit whose patient stopped AI help shows no AI draft, here as on its own sheet.
+    summary = {} if row.get("ai_withdrawn") else sheet.get("ai_summary") or {}
     return PreviousVisit(
         visit_id=row["visit_id"],
         service_date=row["service_date"],
@@ -630,38 +686,34 @@ async def get_patient_history(
             actor_id=actor_id,
             role=principal.get("role"),
         )
-        visit = (
-            (
-                await connection.execute(
-                    text(
-                        "SELECT v.patient_id, v.patient_link, v.previous_visit_id, p.mrn, "
-                        "(v.status IN ('registering', 'awaiting_confirmation', 'queued', "
-                        "'called', 'in_consult', 'skipped') OR v.service_date = :today) "
-                        "AS in_care "
-                        "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
-                        "AND p.id = v.patient_id "
-                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
-                    ),
-                    {
-                        "hospital_id": hospital_id,
-                        "visit_id": visit_id,
-                        "today": datetime.now(ZoneInfo("Asia/Kolkata")).date(),
-                    },
-                )
-            )
-            .mappings()
-            .one()
+        patient_id, in_care = await visit_in_care(
+            connection, hospital_id=hospital_id, visit_id=visit_id
         )
-        if not visit["in_care"] and principal.get("role") != "admin":
+        if not in_care and principal.get("role") != "admin":
             raise _problem(
                 403,
                 "HISTORY_CLOSED",
                 "Earlier visits unavailable",
                 "Earlier visits are shown only while the patient is under your care today.",
             )
+        visit = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT v.patient_link, v.previous_visit_id, p.mrn FROM visits v "
+                        "JOIN patients p ON p.hospital_id = v.hospital_id "
+                        "AND p.id = v.patient_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
         rows = await PatientRepository(connection, request.app.state.settings).visit_history(
             hospital_id=hospital_id,
-            patient_id=visit["patient_id"],
+            patient_id=patient_id,
             exclude_visit_id=visit_id,
         )
         await audit(

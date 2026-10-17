@@ -12,6 +12,7 @@ from redis.exceptions import RedisError
 from app.ai.providers.stt.base import STTEvent, STTProvider
 from app.core.ratelimit import check_rate_limit
 from app.core.security import AuthenticationTokenError, decode_access_token
+from app.db.repositories import read_ai_consent
 
 router = APIRouter(tags=["intake"])
 _MAX_FRAME_BYTES = 8192
@@ -129,6 +130,15 @@ async def intake_audio_socket(websocket: WebSocket, visit_id: UUID) -> None:
             return
 
         settings = websocket.app.state.settings
+        # Speech recognition is an online service: only with the patient's consent.
+        consent = await read_ai_consent(
+            websocket.app.state.engine, settings, hospital_id=hospital_id, visit_id=visit_id
+        )
+        if consent != "granted":
+            await websocket.send_json({"type": "error", "code": "STT_UNAVAILABLE"})
+            await websocket.send_json({"type": "fallback", "mode": "touch"})
+            await websocket.close(code=4403)
+            return
         rate = await check_rate_limit(
             redis,
             websocket.app.state.memory_limiter,
@@ -210,6 +220,7 @@ async def intake_audio_socket(websocket: WebSocket, visit_id: UUID) -> None:
         try:
             await websocket.send_json({"type": "error", "code": "STT_UNAVAILABLE"})
             await websocket.send_json({"type": "fallback", "mode": "touch"})
+            await websocket.close(code=1011)
         except (RuntimeError, WebSocketDisconnect):
             pass
     finally:

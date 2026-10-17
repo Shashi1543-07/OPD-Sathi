@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 _NONCE_SIZE = 12
 _TAG_SIZE = 16
 _VERSION = "v1:"
+_BYTES_VERSION = b"\x01"
 
 
 def load_key(encoded: str, *, setting_name: str) -> bytes:
@@ -51,6 +52,28 @@ def decrypt_field(value: str, *, key: bytes, associated_data: str) -> str:
         return plaintext.decode("utf-8")
     except (binascii.Error, InvalidTag, UnicodeDecodeError) as exc:
         raise ValueError("encrypted field failed authentication") from exc
+
+
+def encrypt_bytes(data: bytes, *, key: bytes, associated_data: str) -> bytes:
+    """Encrypt binary content (a document photo) with AES-256-GCM, bound to its record."""
+    if len(key) != 32:
+        raise ValueError("AES-256-GCM requires a 32-byte key")
+    nonce = secrets.token_bytes(_NONCE_SIZE)
+    sealed = AESGCM(key).encrypt(nonce, data, associated_data.encode("utf-8"))
+    return _BYTES_VERSION + nonce + sealed
+
+
+def decrypt_bytes(value: bytes, *, key: bytes, associated_data: str) -> bytes:
+    """Decrypt binary content, rejecting tampering and content moved to another record."""
+    if len(key) != 32:
+        raise ValueError("AES-256-GCM requires a 32-byte key")
+    if not value.startswith(_BYTES_VERSION) or len(value) < 1 + _NONCE_SIZE + _TAG_SIZE:
+        raise ValueError("unsupported or truncated encrypted content")
+    nonce = value[1 : 1 + _NONCE_SIZE]
+    try:
+        return AESGCM(key).decrypt(nonce, value[1 + _NONCE_SIZE :], associated_data.encode("utf-8"))
+    except InvalidTag as exc:
+        raise ValueError("encrypted content failed authentication") from exc
 
 
 def lookup_digest(value: str, *, key: bytes) -> str:

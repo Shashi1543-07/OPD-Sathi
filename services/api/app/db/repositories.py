@@ -3,18 +3,25 @@
 import json
 from datetime import UTC, date, datetime
 from math import ceil
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from redis.exceptions import RedisError
 from sqlalchemy import bindparam, column, exists, func, select, table, text, tuple_, update
-from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from app.config import Settings
-from app.core.crypto import decrypt_field, encrypt_field, lookup_digest
+from app.core.crypto import (
+    decrypt_bytes,
+    decrypt_field,
+    encrypt_bytes,
+    encrypt_field,
+    lookup_digest,
+)
 from app.core.ids import uuid7
 from app.core.pagination import CursorPosition, Page, decode_cursor, encode_cursor
+from app.db.session import tenant_transaction
 from app.domain.checkin import checkin_code, checkin_code_digest
 from app.domain.patients import format_mrn
 
@@ -333,10 +340,13 @@ class PatientRepository:
             text(
                 "SELECT v.id AS visit_id, v.service_date, v.status, v.token_label, v.urgency, "
                 "v.registered_at, d.name_en AS department, cs.data AS case_sheet_data, "
-                "(cs.last_edited_by IS NOT NULL) AS staff_edited "
+                "(cs.last_edited_by IS NOT NULL) AS staff_edited, "
+                "(a.withdrawn_at IS NOT NULL) AS ai_withdrawn "
                 "FROM visits v JOIN departments d ON d.hospital_id = v.hospital_id "
                 "AND d.id = v.department_id LEFT JOIN case_sheets cs "
                 "ON cs.hospital_id = v.hospital_id AND cs.visit_id = v.id "
+                "LEFT JOIN consents a ON a.hospital_id = v.hospital_id AND a.visit_id = v.id "
+                "AND a.purpose = 'ai' "
                 "WHERE v.hospital_id = :hospital_id AND v.patient_id = :patient_id "
                 "AND v.id <> :exclude_visit_id AND v.token_number IS NOT NULL "
                 "ORDER BY v.registered_at DESC, v.id DESC LIMIT :limit"
@@ -1529,8 +1539,14 @@ class IntakeRepository:
                     text(
                         "SELECT v.id, v.patient_id, v.language, v.status, v.age_years, "
                         "v.pregnant, v.patient_link, p.sex, "
-                        "c.granted AS consent_granted FROM visits v LEFT JOIN consents c "
+                        "c.granted AS consent_granted, "
+                        "CASE WHEN a.withdrawn_at IS NOT NULL THEN 'withdrawn' "
+                        "WHEN a.granted THEN 'granted' WHEN a.id IS NOT NULL THEN 'declined' "
+                        "END AS ai_consent FROM visits v LEFT JOIN consents c "
                         "ON c.hospital_id = v.hospital_id AND c.visit_id = v.id "
+                        "AND c.purpose = 'care' LEFT JOIN consents a "
+                        "ON a.hospital_id = v.hospital_id AND a.visit_id = v.id "
+                        "AND a.purpose = 'ai' "
                         "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
@@ -1541,6 +1557,69 @@ class IntakeRepository:
             .first()
         )
         return dict(row) if row is not None else None
+
+    async def ai_consent(self, *, hospital_id: UUID, visit_id: UUID) -> str | None:
+        """The patient's choice about online AI help: granted, declined, withdrawn or None."""
+        return cast(
+            str | None,
+            await self.connection.scalar(
+                text(
+                    "SELECT CASE WHEN withdrawn_at IS NOT NULL THEN 'withdrawn' "
+                    "WHEN granted THEN 'granted' ELSE 'declined' END FROM consents "
+                    "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                    "AND purpose = 'ai'"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id},
+            ),
+        )
+
+    async def record_ai_consent(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        language: str,
+        version: str,
+        text_sha256: str,
+        granted: bool,
+        channel: str,
+    ) -> None:
+        """Record (or, while still registering, change) the answer about online AI help."""
+        await self.connection.execute(
+            text(
+                "INSERT INTO consents (id, hospital_id, visit_id, purpose, language, "
+                "text_version, text_sha256, granted, granted_at, channel) VALUES (:id, "
+                ":hospital_id, :visit_id, 'ai', :language, :version, :text_sha256, :granted, "
+                ":granted_at, :channel) ON CONFLICT (hospital_id, visit_id, purpose) DO UPDATE "
+                "SET language = EXCLUDED.language, text_version = EXCLUDED.text_version, "
+                "text_sha256 = EXCLUDED.text_sha256, granted = EXCLUDED.granted, "
+                "granted_at = EXCLUDED.granted_at, channel = EXCLUDED.channel, "
+                "withdrawn_at = NULL, withdrawn_by = NULL"
+            ),
+            {
+                "id": uuid7(),
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "language": language,
+                "version": version,
+                "text_sha256": text_sha256,
+                "granted": granted,
+                "granted_at": datetime.now(UTC) if granted else None,
+                "channel": channel,
+            },
+        )
+
+    async def withdraw_ai_consent(self, *, hospital_id: UUID, visit_id: UUID, by: str) -> bool:
+        """Stop online AI help for a visit; False if it was never granted or already stopped."""
+        withdrawn = await self.connection.scalar(
+            text(
+                "UPDATE consents SET withdrawn_at = now(), withdrawn_by = :by "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id AND purpose = 'ai' "
+                "AND granted AND withdrawn_at IS NULL RETURNING id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id, "by": by},
+        )
+        return withdrawn is not None
 
     async def record_consent(
         self,
@@ -1555,7 +1634,8 @@ class IntakeRepository:
     ) -> None:
         existing = await self.connection.scalar(
             text(
-                "SELECT id FROM consents WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+                "SELECT id FROM consents WHERE hospital_id = :hospital_id "
+                "AND visit_id = :visit_id AND purpose = 'care'"
             ),
             {"hospital_id": hospital_id, "visit_id": visit_id},
         )
@@ -1744,6 +1824,302 @@ class IntakeRepository:
             {"status": status, "hospital_id": hospital_id, "visit_id": visit_id},
         )
         return str(previous)
+
+
+class DocumentRepository:
+    """A visit's old papers: their details, the encrypted photo, and what AI read from them.
+
+    The photo lives in ``document_contents``, sealed with AES-GCM to its document, so a photo
+    copied onto another record cannot be decrypted; listing documents never loads photos.
+    """
+
+    def __init__(self, connection: AsyncConnection, settings: Settings):
+        self.connection = connection
+        self.settings = settings
+
+    async def add(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        kind: str,
+        mime: str,
+        content: bytes,
+        source: str,
+        uploaded_by: UUID | None,
+        ocr_status: str,
+    ) -> UUID:
+        document_id = uuid7()
+        await self.connection.execute(
+            text(
+                "INSERT INTO documents (id, hospital_id, visit_id, object_key, mime, size, "
+                "ocr_status, kind, source, uploaded_by) VALUES (:id, :hospital_id, :visit_id, "
+                ":object_key, :mime, :size, :ocr_status, :kind, :source, :uploaded_by)"
+            ),
+            {
+                "id": document_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "object_key": f"pg:{document_id}",
+                "mime": mime,
+                "size": len(content),
+                "ocr_status": ocr_status,
+                "kind": kind,
+                "source": source,
+                "uploaded_by": uploaded_by,
+            },
+        )
+        await self.connection.execute(
+            text(
+                "INSERT INTO document_contents (hospital_id, document_id, ciphertext) "
+                "VALUES (:hospital_id, :document_id, :ciphertext)"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "document_id": document_id,
+                "ciphertext": encrypt_bytes(
+                    content,
+                    key=self.settings.app_data_key_bytes,
+                    associated_data=f"documents:content:{document_id}",
+                ),
+            },
+        )
+        return document_id
+
+    async def lock_visit(self, *, hospital_id: UUID, visit_id: UUID) -> str | None:
+        """Lock the visit for this transaction and return its status.
+
+        Uploads to one visit then count their papers one after another, and the patient
+        cannot confirm (which changes the status) halfway through an upload.
+        """
+        return cast(
+            str | None,
+            await self.connection.scalar(
+                text(
+                    "SELECT status FROM visits WHERE hospital_id = :hospital_id "
+                    "AND id = :visit_id FOR UPDATE"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id},
+            ),
+        )
+
+    async def count_for_visit(self, *, hospital_id: UUID, visit_id: UUID) -> dict[str, int]:
+        """How many papers the visit has, by who added them."""
+        result = await self.connection.execute(
+            text(
+                "SELECT source, count(*) AS papers FROM documents "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id GROUP BY source"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        return {str(row.source): int(row.papers) for row in result}
+
+    def _decrypt_reading(self, row: dict[str, Any]) -> dict[str, Any]:
+        """Swap the stored ``extracted`` value for the decrypted reading (None if unreadable)."""
+        stored = row.pop("extracted", None)
+        reading = None
+        if isinstance(stored, dict) and isinstance(stored.get("ciphertext"), str):
+            try:
+                value = json.loads(
+                    decrypt_field(
+                        stored["ciphertext"],
+                        key=self.settings.app_data_key_bytes,
+                        associated_data=f"documents:extracted:{row['id']}",
+                    )
+                )
+            except Exception:
+                value = None
+            reading = value if isinstance(value, dict) else None
+        row["reading"] = reading
+        return row
+
+    async def list_for_visit(self, *, hospital_id: UUID, visit_id: UUID) -> list[dict[str, Any]]:
+        """This visit's papers, newest first, each with what AI read (if anything).
+
+        Each row says who added and reviewed the paper, and whether the patient stopped AI
+        help for its visit (then what AI read is not shown).
+        """
+        result = await self.connection.execute(
+            text(
+                "SELECT d.id, d.visit_id, d.kind, d.source, d.mime, d.size, d.ocr_status, "
+                "d.extracted, d.document_date, d.review_status, d.reviewed_at, d.created_at, "
+                "v.service_date, u.name AS uploaded_by_name, r.name AS reviewed_by_name, "
+                "EXISTS (SELECT 1 FROM consents a WHERE a.hospital_id = d.hospital_id "
+                "AND a.visit_id = d.visit_id AND a.purpose = 'ai' "
+                "AND a.withdrawn_at IS NOT NULL) AS ai_withdrawn "
+                "FROM documents d JOIN visits v ON v.hospital_id = d.hospital_id "
+                "AND v.id = d.visit_id LEFT JOIN users u ON u.hospital_id = d.hospital_id "
+                "AND u.id = d.uploaded_by LEFT JOIN users r ON r.hospital_id = d.hospital_id "
+                "AND r.id = d.reviewed_by WHERE d.hospital_id = :hospital_id "
+                "AND d.visit_id = :visit_id ORDER BY d.created_at DESC, d.id DESC"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        return [self._decrypt_reading(dict(row)) for row in result.mappings().all()]
+
+    async def list_earlier(
+        self, *, hospital_id: UUID, patient_id: UUID, exclude_visit_id: UUID, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Papers from the patient's earlier registered visits, newest paper first."""
+        result = await self.connection.execute(
+            text(
+                "SELECT d.id, d.visit_id, d.kind, d.source, d.mime, d.size, d.ocr_status, "
+                "d.extracted, d.document_date, d.review_status, d.reviewed_at, d.created_at, "
+                "v.service_date, u.name AS uploaded_by_name, r.name AS reviewed_by_name, "
+                "EXISTS (SELECT 1 FROM consents a WHERE a.hospital_id = d.hospital_id "
+                "AND a.visit_id = d.visit_id AND a.purpose = 'ai' "
+                "AND a.withdrawn_at IS NOT NULL) AS ai_withdrawn "
+                "FROM documents d JOIN visits v ON v.hospital_id = d.hospital_id "
+                "AND v.id = d.visit_id LEFT JOIN users u ON u.hospital_id = d.hospital_id "
+                "AND u.id = d.uploaded_by LEFT JOIN users r ON r.hospital_id = d.hospital_id "
+                "AND r.id = d.reviewed_by WHERE d.hospital_id = :hospital_id "
+                "AND v.patient_id = :patient_id AND v.id <> :exclude_visit_id "
+                "AND v.token_number IS NOT NULL "
+                "ORDER BY coalesce(d.document_date, v.service_date) DESC, d.created_at DESC "
+                "LIMIT :limit"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "patient_id": patient_id,
+                "exclude_visit_id": exclude_visit_id,
+                "limit": limit,
+            },
+        )
+        return [self._decrypt_reading(dict(row)) for row in result.mappings().all()]
+
+    async def list_for_patient_session(
+        self, *, hospital_id: UUID, visit_id: UUID
+    ) -> list[dict[str, Any]]:
+        """The photos a patient added during this check-in (never what AI read from them)."""
+        result = await self.connection.execute(
+            text(
+                "SELECT id, kind, size, created_at FROM documents "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                "AND source = 'patient' ORDER BY created_at, id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+    async def find(self, *, hospital_id: UUID, document_id: UUID) -> dict[str, Any] | None:
+        """Which visit and patient a paper belongs to, for authorisation."""
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT d.id, d.visit_id, d.ocr_status, d.review_status, v.patient_id, "
+                        "(v.token_number IS NOT NULL) AS registered FROM documents d "
+                        "JOIN visits v ON v.hospital_id = d.hospital_id AND v.id = d.visit_id "
+                        "WHERE d.hospital_id = :hospital_id AND d.id = :document_id"
+                    ),
+                    {"hospital_id": hospital_id, "document_id": document_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row is not None else None
+
+    async def content(self, *, hospital_id: UUID, document_id: UUID) -> tuple[str, bytes] | None:
+        """The photo itself, decrypted, with its media type."""
+        row = (
+            (
+                await self.connection.execute(
+                    text(
+                        "SELECT d.mime, c.ciphertext FROM documents d JOIN document_contents c "
+                        "ON c.hospital_id = d.hospital_id AND c.document_id = d.id "
+                        "WHERE d.hospital_id = :hospital_id AND d.id = :document_id"
+                    ),
+                    {"hospital_id": hospital_id, "document_id": document_id},
+                )
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            return None
+        photo = decrypt_bytes(
+            bytes(row["ciphertext"]),
+            key=self.settings.app_data_key_bytes,
+            associated_data=f"documents:content:{document_id}",
+        )
+        return str(row["mime"]), photo
+
+    async def save_reading(
+        self,
+        *,
+        hospital_id: UUID,
+        document_id: UUID,
+        reading: dict[str, Any] | None,
+        status: str,
+        document_date: date | None = None,
+    ) -> None:
+        """Store what AI read (encrypted), unless a doctor has already decided on it."""
+        await self.connection.execute(
+            text(
+                "UPDATE documents SET ocr_status = :status, "
+                "extracted = CAST(:extracted AS jsonb), document_date = :document_date "
+                "WHERE hospital_id = :hospital_id AND id = :document_id "
+                "AND review_status = 'unreviewed'"
+            ),
+            {
+                "status": status,
+                "extracted": json.dumps(
+                    {
+                        "ciphertext": encrypt_field(
+                            json.dumps(reading, separators=(",", ":"), ensure_ascii=False),
+                            key=self.settings.app_data_key_bytes,
+                            associated_data=f"documents:extracted:{document_id}",
+                        )
+                    }
+                )
+                if reading is not None
+                else None,
+                "document_date": document_date,
+                "hospital_id": hospital_id,
+                "document_id": document_id,
+            },
+        )
+
+    async def review(
+        self, *, hospital_id: UUID, document_id: UUID, decision: str, reviewer_id: UUID
+    ) -> bool:
+        """The doctor accepts or rejects what AI read from a paper."""
+        reviewed = await self.connection.scalar(
+            text(
+                "UPDATE documents SET review_status = :decision, reviewed_by = :reviewer_id, "
+                "reviewed_at = now() WHERE hospital_id = :hospital_id AND id = :document_id "
+                "AND ocr_status = 'complete' RETURNING id"
+            ),
+            {
+                "decision": decision,
+                "reviewer_id": reviewer_id,
+                "hospital_id": hospital_id,
+                "document_id": document_id,
+            },
+        )
+        return reviewed is not None
+
+    async def remove(self, *, hospital_id: UUID, visit_id: UUID, document_id: UUID) -> bool:
+        """A patient takes back a photo they added (staff never delete documents)."""
+        removed = await self.connection.scalar(
+            text(
+                "DELETE FROM documents WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                "AND id = :document_id AND source = 'patient' RETURNING id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id, "document_id": document_id},
+        )
+        return removed is not None
+
+
+async def read_ai_consent(
+    engine: AsyncEngine, settings: Settings, *, hospital_id: UUID, visit_id: UUID
+) -> str | None:
+    """A visit's choice about online AI help, read in its own short transaction."""
+    async with tenant_transaction(engine, hospital_id) as connection:
+        return await IntakeRepository(connection, settings).ai_consent(
+            hospital_id=hospital_id, visit_id=visit_id
+        )
 
 
 class DepartmentRepository:

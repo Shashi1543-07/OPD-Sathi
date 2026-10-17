@@ -31,7 +31,7 @@ Without keys everything still works: tap-to-answer questions, the browser's own 
 
 ## Project status
 
-Phases 0–14 have implementation reports. Phase 11 adds opt-in notification adapters and audited tenant-scoped analytics. Phase 12 adds encrypted offline short-form intake and replay-safe sync. Phase 13 adds operational hardening and verified backup/restore and failure drills using a separate, temporary synthetic-data stack. Phase 14 adds demo-safe provider selection, Judge Mode UI, and full automated acceptance evidence. See the [phase reports](docs/phase-reports/), [final product readiness review](docs/FINAL_PRODUCT_READINESS.md), [product audit](docs/PRODUCT_AUDIT.md), [evaluation results](docs/EVALUATION.md), and [three-minute demo](docs/DEMO.md).
+Phases 0–14 have implementation reports. Phase 11 adds opt-in notification adapters and audited tenant-scoped analytics. Phase 12 adds encrypted offline short-form intake and replay-safe sync. Phase 13 adds operational hardening and verified backup/restore and failure drills using a separate, temporary synthetic-data stack. Phase 14 adds demo-safe provider selection, Judge Mode UI, and full automated acceptance evidence. See the [phase reports](docs/phase-reports/), [final product readiness review](docs/FINAL_PRODUCT_READINESS.md), [product audit](docs/PRODUCT_AUDIT.md), [evaluation results](docs/EVALUATION.md), and [demo script](docs/DEMO.md).
 
 ## Development setup
 
@@ -71,7 +71,7 @@ After applying migrations, run `python -m app.cli create-admin`. The operator pr
 
 ### Synthetic demo data
 
-Set `PROVIDER_MODE=demo-safe` for local scripted speech and mock language/TTS adapters, then use `make demo-seed` to provision the fictional Nagpur hospital. Follow [docs/DEMO.md](docs/DEMO.md) to run the three-minute demo and offline check. `make demo-history` fills the last 30 days with believable finished OPD days (arrivals, waits, consultations, case sheets) so Reports look like a real hospital; `make clear-demo-history` removes them. `make seed-bulk` creates 100,000 bare synthetic visits for performance work only: it makes Reports meaningless, so remove them afterwards with `make clear-bulk`, and never use it against real data. Never use real patient information in this demo.
+Set `PROVIDER_MODE=demo-safe` for local scripted speech and mock language/TTS adapters, then use `make demo-seed` to provision the fictional Nagpur hospital. Follow [docs/DEMO.md](docs/DEMO.md) to run the demo (about ten minutes, with a pre-demo check and what to do when something fails). `make demo-history` fills the last 30 days with believable finished OPD days (arrivals, waits, consultations, case sheets) so Reports look like a real hospital; `make clear-demo-history` removes them. `make seed-bulk` creates 100,000 bare synthetic visits for performance work only: it makes Reports meaningless, so remove them afterwards with `make clear-bulk`, and never use it against real data. Never use real patient information in this demo.
 
 ## Safety and data
 

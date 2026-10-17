@@ -6,8 +6,8 @@ PostgreSQL and Redis (`services/api/tests/integration`); web tests are Vitest co
 (`apps/web/src/**/*.test.tsx`) and Playwright specs (`apps/web/e2e`, API mocked).
 
 Status: **15 of 15 covered.** Scenarios 5, 10, 12 and 14 found defects, now fixed (see
-"Defects found" below). Scenario 14 covers the prescription photo, the only upload that
-exists today; document upload (R6) arrives in Phase 6 and must add its own tests here.
+"Defects found" below). Scenario 14 covers both uploads: the prescription scan and, since
+Phase 6, photos of old papers kept for the doctor (R6).
 
 | # | Scenario | What must happen | Tests |
 |---|---|---|---|
@@ -24,7 +24,7 @@ exists today; document upload (R6) arrives in Phase 6 and must add its own tests
 | 11 | Two doctors in conflict | Two doctors pressing "Call next" together get different patients; a doctor holds one patient at a time and cannot act on another doctor's patient | API `test_queue_workflow.py::test_two_doctors_calling_at_once_never_get_the_same_patient`, `::test_a_doctor_has_one_patient_at_a_time`; web `StaffQueueBoard.test.tsx` (DOCTOR_BUSY message) |
 | 12 | Another patient's records | A patient session reaches only its own visit, on every intake route and the audio socket; staff of another department get "not found"; a session cannot cancel a visit that has a token or change answers after confirming | API `test_access_isolation.py::test_a_patient_session_reaches_only_its_own_visit`, `::test_another_department_cannot_reach_a_visit`, `test_session_safety.py` (first two tests), `test_returning_patients.py::test_history_stays_with_the_treating_department_and_inside_the_hospital` |
 | 13 | Another hospital's records | Every route that names a record answers "not found" to another hospital's staff, changes nothing and writes nothing to the owner's audit trail; lists, lookups, the audit log and the live board show none of another hospital's patients | API `test_access_isolation.py` (all tests, including the route inventory), `test_tenant_rls.py`, `test_phase3_data.py::test_domain_rls_and_encrypted_patient_fields`, `test_mobile_checkin.py::test_phone_checkin_codes_never_cross_hospitals`, `test_analytics_rollup.py` |
-| 14 | Invalid or oversized document | Only a JPEG, PNG or WebP photo whose contents match its type, under 1 MB, reaches the model; anything else is refused with a reason the kiosk explains in the patient's language; at most 5 readings per visit in 10 minutes | API `test_scenarios.py::test_scenario_14_only_real_photos_of_a_sensible_size_are_read`; web `KioskIntake.test.tsx` "says why a prescription photo could not be used" |
+| 14 | Invalid or oversized document | Only a JPEG, PNG or WebP photo whose contents match its type, under 1 MB, reaches the model or is kept; anything else is refused with a reason the kiosk explains in the patient's language; at most 5 readings per visit in 10 minutes; at most 5 kept papers per check-in (10 per visit with staff) | API `test_scenarios.py::test_scenario_14_only_real_photos_of_a_sensible_size_are_read`, `test_documents.py::test_only_real_photos_of_known_kinds_are_kept` and `::test_a_patient_takes_photos_back_until_confirming_and_adds_at_most_five`; web `KioskIntake.test.tsx` "says why a prescription photo could not be used", `KioskPapers.test.tsx` "explains a refused photo in the patient's language" |
 | 15 | Simultaneous registrations | Many kiosks and phones confirming at once get distinct tokens in order with no gap, and the board shows every patient once | API `test_scenarios.py::test_scenario_15_simultaneous_registrations_get_distinct_tokens_in_order` (12 at once); load smoke `tests/perf/test_load_smoke.py` (40 patients on the running stack, results below) |
 
 ## Defects found by the scenarios and the isolation tests

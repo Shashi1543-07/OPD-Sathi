@@ -29,6 +29,7 @@ import { ConnectionIndicator, Popover, UrgencyBadge } from "../components/ui";
 import { TriageWhy } from "./TriageWhy";
 import { apiSocketUrl } from "../lib/api";
 import { staffAuth } from "../lib/auth";
+import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
 import { newRequestId } from "../lib/ids";
 import {
   applyQueueOperations,
@@ -872,6 +873,8 @@ export function StaffQueueBoard() {
         <section className="qb-alerts" aria-label="Unacknowledged staff alerts" aria-live="assertive">
           {alerts.map((alert) => {
             const help = alert.rule_id === "PATIENT_HELP";
+            // A danger-sign tile is stored by its code; say what the patient tapped.
+            const tile = alert.evidence ? DANGER_TILE_LABELS[alert.evidence] : undefined;
             return (
               <article
                 className={`qb-alert ${help ? "qb-alert--help" : alert.level === "priority" ? "qb-alert--priority" : "qb-alert--urgent"}`}
@@ -890,7 +893,9 @@ export function StaffQueueBoard() {
                     {alert.evidence && !help
                       ? alert.rule_id === "AI_TRIAGE_REVIEW" || alert.source === "llm"
                         ? ` — AI quoted: “${alert.evidence}”`
-                        : ` — patient said “${alert.evidence}”`
+                        : tile
+                          ? ` — patient tapped “${tile}”`
+                          : ` — patient said “${alert.evidence}”`
                       : ""}
                   </span>
                 </div>

@@ -39,7 +39,7 @@ class Probe:
     """One request to a record route, valid in every respect except who is asking."""
 
     method: str
-    path: str  # with {visit}, {alert} or {resource} in place of the record's id
+    path: str  # with {visit}, {alert}, {document} or {resource} in place of the record's id
     roles: tuple[str, ...]  # roles the route accepts, so only the record check can refuse
     json: Any = None
     content: bytes | None = None
@@ -56,7 +56,9 @@ class Probe:
 
 
 _STAFF = ("nurse", "doctor", "admin")
-# Routes for staff that address one visit or one alert.
+_JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+_PHOTO = {"Content-Type": "image/jpeg"}
+# Routes for staff that address one visit, one alert or one of a visit's papers.
 VISIT_PROBES = (
     Probe("GET", "/visits/{visit}/case-sheet", _STAFF),
     Probe("GET", "/visits/{visit}/case-sheet.pdf", _STAFF),
@@ -77,6 +79,18 @@ VISIT_PROBES = (
         headers={"If-Match": '"1"'},
     ),
     Probe("GET", "/visits/{visit}/history", _STAFF),
+    Probe("GET", "/visits/{visit}/documents", _STAFF),
+    Probe(
+        "POST", "/visits/{visit}/documents", ("doctor", "nurse"), content=_JPEG, headers=_PHOTO
+    ),
+    Probe("GET", "/visits/{visit}/documents/{document}/content", _STAFF),
+    Probe(
+        "POST",
+        "/visits/{visit}/documents/{document}/review",
+        ("doctor",),
+        json={"decision": "accepted"},
+    ),
+    Probe("POST", "/visits/{visit}/ai-consent/withdraw", _STAFF),
     Probe("GET", "/visits/{visit}/transcript", ("doctor", "admin")),
     Probe("GET", "/visits/{visit}/queue-events", _STAFF),
     Probe("POST", "/queue/{visit}/call", _STAFF),
@@ -120,12 +134,17 @@ ADMIN_PROBES = (
     Probe("DELETE", "/admin/departments/{resource}", ("admin",)),
 )
 # A patient's own session: the patient token names exactly one visit.
-_JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
 SESSION_PROBES = (
     Probe("POST", "/intake/sessions/{visit}/language", ("patient",), json={"language": "en"}),
     Probe(
         "POST",
         "/intake/sessions/{visit}/consent",
+        ("patient",),
+        json={"version": "v1", "sha256": "0" * 64, "granted": True},
+    ),
+    Probe(
+        "POST",
+        "/intake/sessions/{visit}/consent/ai",
         ("patient",),
         json={"version": "v1", "sha256": "0" * 64, "granted": True},
     ),
@@ -174,12 +193,22 @@ SESSION_PROBES = (
         "/intake/sessions/{visit}/prescription-photo",
         ("patient",),
         content=_JPEG,
-        headers={"Content-Type": "image/jpeg"},
+        headers=_PHOTO,
     ),
+    Probe(
+        "POST", "/intake/sessions/{visit}/documents", ("patient",), content=_JPEG, headers=_PHOTO
+    ),
+    Probe("GET", "/intake/sessions/{visit}/documents", ("patient",)),
+    Probe("DELETE", "/intake/sessions/{visit}/documents/{document}", ("patient",)),
 )
 # Routes whose record is named by an opaque secret in the path instead of an id; they are
 # covered by the status-page and phone check-in tests.
-_SECRET_ROUTES = {"/status/{token}", "/status/{token}/stream", "/intake/checkin/{code}"}
+_SECRET_ROUTES = {
+    "/status/{token}",
+    "/status/{token}/stream",
+    "/status/{token}/ai-consent/withdraw",
+    "/intake/checkin/{code}",
+}
 _PATIENT_SOCKET = "/ws/intake/{visit_id}/audio"
 
 
@@ -187,6 +216,7 @@ def _template(path: str) -> str:
     return (
         path.replace("{visit}", "{visit_id}")
         .replace("{alert}", "{alert_id}")
+        .replace("{document}", "{document_id}")
         .replace("{resource}", "{resource_id}")
     )
 
@@ -230,12 +260,19 @@ def test_every_record_route_is_in_the_isolation_matrix() -> None:
 
 def _queued_visit(
     client: TestClient, hospital: SyntheticHospital, *, tiles: tuple[str, ...] = ("chest_pain",)
-) -> tuple[PatientSession, dict[str, Any]]:
+) -> tuple[PatientSession, dict[str, Any], str]:
+    """A confirmed visit in the queue, with one photo of an old paper the patient added."""
     session = start_kiosk_session(client, activate_kiosk(client, hospital))
     complete_intake(session, complaint="fever and cough", tiles=tiles, phone="9876500011")
+    paper = client.post(
+        f"/intake/sessions/{session.visit_id}/documents?kind=lab_report",
+        content=_JPEG,
+        headers={**session.headers(), **_PHOTO},
+    )
+    assert paper.status_code == 201, paper.text
     receipt = session.confirm()
     assert receipt.status_code == 200, receipt.text
-    return session, dict(receipt.json())
+    return session, dict(receipt.json()), str(paper.json()["id"])
 
 
 def _alert_id(client: TestClient, hospital: SyntheticHospital, visit_id: str) -> str:
@@ -258,6 +295,20 @@ async def _visit_record(hospital: SyntheticHospital, visit_id: str) -> dict[str,
     return dict(rows[0])
 
 
+async def _papers(hospital: SyntheticHospital, visit_id: str) -> int:
+    """How many photos of old papers the visit has (refused requests add or remove none)."""
+    rows = await fetch(
+        hospital.settings,
+        hospital.hospital_id,
+        "SELECT count(*) AS n FROM documents d JOIN document_contents c "
+        "ON c.hospital_id = d.hospital_id AND c.document_id = d.id "
+        "WHERE d.hospital_id = :h AND d.visit_id = :v",
+        h=hospital.hospital_id,
+        v=visit_id,
+    )
+    return int(rows[0]["n"])
+
+
 def _first_allowed(probe: Probe, preference: tuple[str, ...]) -> str:
     return next(role for role in preference if role in probe.roles)
 
@@ -265,14 +316,16 @@ def _first_allowed(probe: Probe, preference: tuple[str, ...]) -> str:
 async def test_another_hospital_cannot_reach_any_record() -> None:
     async with synthetic_hospital() as hospital, synthetic_hospital() as other:
         with api_client(hospital.settings) as client:
-            session, _ = _queued_visit(client, hospital)
+            session, _, paper = _queued_visit(client, hospital)
             visit = session.visit_id
             alert = _alert_id(client, hospital, visit)
             before = await _visit_record(hospital, visit)
             for probe in VISIT_PROBES:
                 # Staff of the other hospital with a role the route accepts.
                 who = _first_allowed(probe, ("admin", "nurse", "doctor"))
-                response = probe.send(client, other.staff(who), visit=visit, alert=alert)
+                response = probe.send(
+                    client, other.staff(who), visit=visit, alert=alert, document=paper
+                )
                 assert response.status_code == 404, (probe.method, probe.path, response.text)
 
             point = client.post(
@@ -301,6 +354,7 @@ async def test_another_hospital_cannot_reach_any_record() -> None:
             assert moved.status_code in {404, 422}, moved.text
 
         assert await _visit_record(hospital, visit) == before
+        assert await _papers(hospital, visit) == 1
         changed = await fetch(
             hospital.settings,
             hospital.hospital_id,
@@ -330,7 +384,7 @@ async def test_another_hospital_cannot_reach_any_record() -> None:
 async def test_another_department_cannot_reach_a_visit() -> None:
     async with synthetic_hospital() as hospital:
         with api_client(hospital.settings) as client:
-            session, _ = _queued_visit(client, hospital)
+            session, _, paper = _queued_visit(client, hospital)
             visit = session.visit_id
             alert = _alert_id(client, hospital, visit)
             before = await _visit_record(hospital, visit)
@@ -338,9 +392,12 @@ async def test_another_department_cannot_reach_a_visit() -> None:
                 # Orthopaedics staff with a role the route accepts; administrators act
                 # hospital-wide by design, so they are not part of this check.
                 who = "ortho_doctor" if "doctor" in probe.roles else "ortho_nurse"
-                response = probe.send(client, hospital.staff(who), visit=visit, alert=alert)
+                response = probe.send(
+                    client, hospital.staff(who), visit=visit, alert=alert, document=paper
+                )
                 assert response.status_code == 404, (probe.method, probe.path, response.text)
         assert await _visit_record(hospital, visit) == before
+        assert await _papers(hospital, visit) == 1
 
 
 async def test_a_patient_session_reaches_only_its_own_visit() -> None:
@@ -349,23 +406,32 @@ async def test_a_patient_session_reaches_only_its_own_visit() -> None:
             kiosk = activate_kiosk(client, hospital)
             mine = start_kiosk_session(client, kiosk)
             complete_intake(mine, complaint="fever")
-            theirs, _ = _queued_visit(client, hospital)
+            theirs, _, paper = _queued_visit(client, hospital)
             elsewhere = start_kiosk_session(client, activate_kiosk(client, other))
             before = await _visit_record(hospital, theirs.visit_id)
             for probe in SESSION_PROBES:
                 for target in (theirs.visit_id, elsewhere.visit_id):
-                    response = probe.send(client, mine.headers(), visit=target)
+                    response = probe.send(client, mine.headers(), visit=target, document=paper)
                     assert response.status_code == 404, (probe.method, probe.path, response.text)
+            # Nor can a session reach another visit's paper through its own visit.
+            taken = client.delete(
+                f"/intake/sessions/{mine.visit_id}/documents/{paper}", headers=mine.headers()
+            )
+            assert taken.status_code == 404, taken.text
             # The kiosk that started a session is not the patient either.
             for probe in SESSION_PROBES:
-                if probe.method == "DELETE":
+                if probe.method == "DELETE" and probe.path == "/intake/sessions/{visit}":
                     continue  # A kiosk may end the session it started (tested elsewhere).
-                response = probe.send(client, kiosk, visit=mine.visit_id)
+                response = probe.send(client, kiosk, visit=mine.visit_id, document=paper)
                 assert response.status_code == 403, (probe.method, probe.path, response.text)
             # Staff routes refuse patient sessions outright.
             for probe in VISIT_PROBES:
                 response = probe.send(
-                    client, mine.headers(), visit=mine.visit_id, alert=mine.visit_id
+                    client,
+                    mine.headers(),
+                    visit=mine.visit_id,
+                    alert=mine.visit_id,
+                    document=paper,
                 )
                 assert response.status_code == 403, (probe.method, probe.path, response.text)
             with client.websocket_connect(f"/ws/intake/{theirs.visit_id}/audio") as socket:
@@ -374,12 +440,14 @@ async def test_a_patient_session_reaches_only_its_own_visit() -> None:
                     socket.receive_json()
             assert closed.value.code == 4403
         assert await _visit_record(hospital, theirs.visit_id) == before
+        assert await _papers(hospital, theirs.visit_id) == 1
+        assert await _papers(hospital, mine.visit_id) == 0
 
 
 async def test_lists_never_show_another_hospitals_or_departments_patients() -> None:
     async with synthetic_hospital() as hospital, synthetic_hospital() as other:
         with api_client(hospital.settings) as client:
-            session, receipt = _queued_visit(client, hospital)
+            session, receipt, _ = _queued_visit(client, hospital)
             visit, token = session.visit_id, receipt["token"]
             genmed = str(hospital.departments["GENMED"])
 

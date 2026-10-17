@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui";
 import { EmergencyNotice } from "./EmergencyNotice";
+import { KioskPapers } from "./KioskPapers";
 import {
   intake,
   IntakeRequestError,
@@ -31,6 +32,7 @@ import {
 import { useLanguageStore } from "../languageStore";
 import type { Language } from "../i18n";
 import { useKioskPrefs } from "../lib/kioskPrefs";
+import { shrinkPhoto } from "../lib/photos";
 import {
   browserRecognitionAvailable,
   listenInBrowser,
@@ -46,6 +48,8 @@ import "./intake.css";
 
 type Stage =
   | "consent"
+  /** The separate, optional question about online AI help. */
+  | "ai"
   | "identity"
   | "returning"
   | "danger"
@@ -68,7 +72,7 @@ type QueueTicket = {
 };
 
 const STEPS: { stage: Stage[]; key: string }[] = [
-  { stage: ["consent"], key: "stepConsent" },
+  { stage: ["consent", "ai"], key: "stepConsent" },
   { stage: ["identity", "returning"], key: "stepDetails" },
   { stage: ["danger"], key: "stepSafety" },
   { stage: ["interview"], key: "stepQuestions" },
@@ -78,24 +82,6 @@ const STEPS: { stage: Stage[]; key: string }[] = [
 const RESTART_SECONDS = 60;
 /** A patient idle this long on the review screen gets a nurse sent to them. */
 const SUMMARY_IDLE_MS = 90_000;
-
-/** Downscale a camera photo to a ~1280px JPEG so uploads stay small on slow networks. */
-async function shrinkPhoto(file: File): Promise<Blob> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.82),
-    );
-    return blob ?? file;
-  } catch {
-    return file;
-  }
-}
 
 /** Split a stored answer back into tapped options and free text. */
 function splitAnswer(question: Question, answer: string | number | null) {
@@ -178,16 +164,20 @@ function SpeakButton({
   language,
   fetchAudio,
   autoPlayKey,
+  localOnly = false,
 }: {
   text: string;
   language: string;
   fetchAudio?: () => Promise<Blob>;
   /** When this value changes and voice guidance is on, read the text automatically. */
   autoPlayKey?: string;
+  /** The patient's own words without consent to online help: only on-device voices. */
+  localOnly?: boolean;
 }) {
   const { t } = useTranslation("intake");
   const voiceGuidance = useKioskPrefs((state) => state.voiceGuidance);
   const [playing, setPlaying] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const fetchRef = useRef(fetchAudio);
   useEffect(() => {
     fetchRef.current = fetchAudio;
@@ -195,8 +185,11 @@ function SpeakButton({
 
   const play = useCallback(() => {
     setPlaying(true);
-    void speak(text, language, fetchRef.current).finally(() => setPlaying(false));
-  }, [text, language]);
+    setUnavailable(false);
+    void speak(text, language, fetchRef.current, { localOnly })
+      .then((spoken) => setUnavailable(!spoken))
+      .finally(() => setPlaying(false));
+  }, [text, language, localOnly]);
 
   useEffect(() => {
     if (!autoPlayKey || !voiceGuidance) return;
@@ -208,19 +201,30 @@ function SpeakButton({
   }, [autoPlayKey, voiceGuidance, play]);
 
   return (
-    <button
-      type="button"
-      className={`intake-speak ${playing ? "is-playing" : ""}`}
-      onClick={() => {
-        if (playing) {
-          stopSpeaking();
-          setPlaying(false);
-        } else play();
-      }}
-    >
-      {playing ? <Square aria-hidden="true" size={18} /> : <Volume2 aria-hidden="true" size={20} />}
-      <span>{playing ? t("stopListening") : t("listen")}</span>
-    </button>
+    <>
+      <button
+        type="button"
+        className={`intake-speak ${playing ? "is-playing" : ""}`}
+        onClick={() => {
+          if (playing) {
+            stopSpeaking();
+            setPlaying(false);
+          } else play();
+        }}
+      >
+        {playing ? (
+          <Square aria-hidden="true" size={18} />
+        ) : (
+          <Volume2 aria-hidden="true" size={20} />
+        )}
+        <span>{playing ? t("stopListening") : t("listen")}</span>
+      </button>
+      {unavailable && (
+        <p className="intake-hint" role="status">
+          {t("readAloudUnavailable", { ns: "common" })}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -292,9 +296,11 @@ function AnswerPanel({
   useEffect(() => () => listener.current?.cancel(), []);
 
   const serverVoice = capabilities?.stt === "sarvam" || capabilities?.stt === "gemini";
+  // "off": the patient said no to online AI help; the browser's own recogniser is online too.
   const voiceAvailable =
     question.input === "text" &&
     capabilities !== undefined &&
+    capabilities.stt !== "off" &&
     ((serverVoice && recordingAvailable()) || browserRecognitionAvailable());
 
   const options = question.options ?? [];
@@ -485,7 +491,9 @@ function AnswerPanel({
               {listening ? t("listeningNow") : voiceMessage}
             </p>
             {!voiceAvailable && capabilities !== undefined && options.length === 0 && (
-              <p className="intake-hint">{t("voiceUnavailable")}</p>
+              <p className="intake-hint">
+                {t(capabilities.stt === "off" ? "voiceOff" : "voiceUnavailable")}
+              </p>
             )}
             {showText && (
               <textarea
@@ -556,6 +564,7 @@ export function KioskIntake() {
   const hospitalName = useKioskHospitalName();
   const session = useMemo(() => intake.session(), []);
   const [consent, setConsent] = useState<ConsentCopy | undefined>(session?.consent);
+  const [aiConsent, setAiConsent] = useState<ConsentCopy | undefined>(session?.ai_consent);
   const language: Language = consent?.language ?? "en";
   const [stage, setStage] = useState<Stage>((session?.stage as Stage) ?? "consent");
   const [error, setError] = useState("");
@@ -651,7 +660,8 @@ export function KioskIntake() {
     void intake
       .capabilities()
       .then(setCapabilities)
-      .catch(() => setCapabilities({ stt: "browser", tts: "browser", ai: false }));
+      // Unknown: nothing goes online until the server confirms the patient's consent.
+      .catch(() => setCapabilities({ stt: "off", tts: "browser", ai: false, online: false }));
     const resume = async () => {
       try {
         if (stage === "interview" || stage === "summary")
@@ -719,6 +729,19 @@ export function KioskIntake() {
   async function toSafetyScreen() {
     setTiles((await intake.dangerTiles()).tiles);
     move("danger");
+  }
+
+  /** Record the answer about online AI help; voice and photo reading follow it. */
+  async function answerAi(granted: boolean) {
+    if (!aiConsent) return;
+    await run(async () => {
+      await intake.aiConsent(aiConsent, granted);
+      void intake
+        .capabilities()
+        .then(setCapabilities)
+        .catch(() => undefined);
+      move("identity");
+    });
   }
 
   /** Save the details, then ask a patient at a kiosk or phone whether they came before. */
@@ -792,6 +815,7 @@ export function KioskIntake() {
     await run(async () => {
       const result = await intake.changeLanguage(next);
       setConsent(result.consent);
+      setAiConsent(result.ai_consent);
       setLanguage(next);
       if (stage === "danger") setTiles((await intake.dangerTiles()).tiles);
       if (stage === "interview" || stage === "summary") {
@@ -890,7 +914,8 @@ export function KioskIntake() {
                   void run(async () => {
                     await intake.consent(consent, true);
                     setConsentGiven(true);
-                    move("identity");
+                    // Online AI help is a separate question with its own notice.
+                    move(aiConsent ? "ai" : "identity");
                   })
                 }
               >
@@ -915,6 +940,43 @@ export function KioskIntake() {
                 }}
               >
                 {t("consentDecline")}
+              </button>
+            </div>
+          </>
+        )}
+
+        {stage === "ai" && aiConsent && (
+          <>
+            <h1 className="intake-title">{t("aiTitle")}</h1>
+            <p className="intake-lead">{aiConsent.text}</p>
+            <SpeakButton
+              text={aiConsent.text}
+              language={language}
+              autoPlayKey={`consent-ai-${language}`}
+              fetchAudio={
+                capabilities?.tts && capabilities.tts !== "browser"
+                  ? () => intake.speechAudio("consent_ai")
+                  : undefined
+              }
+            />
+            {/* Two equal choices, styled alike so neither is nudged: nothing is pre-selected
+                and either one continues. */}
+            <div className="intake-actions intake-actions--stack">
+              <button
+                type="button"
+                className="intake-btn intake-btn--secondary intake-btn--large"
+                disabled={busy}
+                onClick={() => void answerAi(true)}
+              >
+                {t("aiYes")}
+              </button>
+              <button
+                type="button"
+                className="intake-btn intake-btn--secondary intake-btn--large"
+                disabled={busy}
+                onClick={() => void answerAi(false)}
+              >
+                {t("aiNo")}
               </button>
             </div>
           </>
@@ -1002,7 +1064,7 @@ export function KioskIntake() {
                 type="button"
                 className="intake-btn intake-btn--ghost"
                 disabled={busy}
-                onClick={() => move("consent")}
+                onClick={() => move(aiConsent ? "ai" : "consent")}
               >
                 <ChevronLeft aria-hidden="true" size={22} />
                 {t("back")}
@@ -1344,8 +1406,11 @@ export function KioskIntake() {
                   text={readback}
                   language={language}
                   autoPlayKey={`readback-${language}`}
+                  // The read-back is the patient's own words: an online voice only with
+                  // their consent to online AI help, otherwise a voice on this device.
+                  localOnly={!capabilities?.online}
                   fetchAudio={
-                    capabilities?.tts && capabilities.tts !== "browser"
+                    capabilities?.online && capabilities.tts !== "browser"
                       ? () => intake.speechAudio("readback")
                       : undefined
                   }
@@ -1382,6 +1447,7 @@ export function KioskIntake() {
                 </li>
               ))}
             </ul>
+            <KioskPapers online={capabilities?.online === true} disabled={busy} />
             <div className="intake-actions">
               <span className="intake-actions-spacer" />
               <button

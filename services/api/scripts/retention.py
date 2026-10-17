@@ -36,7 +36,13 @@ async def _run(
     retention_cutoff = datetime.now(UTC) - timedelta(days=retention_days)
     anonymise_cutoff = datetime.now(UTC) - timedelta(days=anonymise_days)
     engine = create_async_engine(configured.migrations_database_url)
-    totals = {"interview_turns": 0, "case_sheets": 0, "red_flag_events": 0, "patients": 0}
+    totals = {
+        "interview_turns": 0,
+        "case_sheets": 0,
+        "red_flag_events": 0,
+        "documents": 0,
+        "patients": 0,
+    }
     try:
         await _process_hospital(
             engine,
@@ -53,7 +59,7 @@ async def _run(
     print(
         f"{mode}: interview_turns={totals['interview_turns']} "
         f"case_sheets={totals['case_sheets']} red_flag_events={totals['red_flag_events']} "
-        f"patients_to_pseudonymize={totals['patients']}"
+        f"documents={totals['documents']} patients_to_pseudonymize={totals['patients']}"
     )
     return totals
 
@@ -83,6 +89,15 @@ async def _process_hospital(
                 {"hospital_id": hospital_id, "cutoff": cutoff},
             )
             totals[table_name] += int(count or 0)
+        # Photos of old papers (with what AI read from them) go with the visit's case sheet.
+        papers = await connection.scalar(
+            text(
+                "SELECT count(*) FROM documents WHERE hospital_id = :hospital_id AND visit_id IN "
+                "(SELECT id FROM visits WHERE hospital_id = :hospital_id AND created_at < :cutoff)"
+            ),
+            {"hospital_id": hospital_id, "cutoff": anonymise_cutoff},
+        )
+        totals["documents"] += int(papers or 0)
 
         candidates = list(
             (
@@ -126,6 +141,14 @@ async def _process_hospital(
             ),
             {"hospital_id": hospital_id, "cutoff": anonymise_cutoff},
         )
+        # The encrypted photos in document_contents are deleted with their documents.
+        await connection.execute(
+            text(
+                "DELETE FROM documents WHERE hospital_id = :hospital_id AND visit_id IN "
+                "(SELECT id FROM visits WHERE hospital_id = :hospital_id AND created_at < :cutoff)"
+            ),
+            {"hospital_id": hospital_id, "cutoff": anonymise_cutoff},
+        )
         await connection.execute(
             text(
                 "UPDATE visits SET age_years = NULL, pregnant = NULL, "
@@ -160,7 +183,10 @@ def main() -> None:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="delete expired interview/summary records and pseudonymize eligible patients",
+        help=(
+            "delete expired interview/summary records and paper photos, "
+            "and pseudonymize eligible patients"
+        ),
     )
     args = parser.parse_args()
     retention_days = _cutoff_days("RETENTION_DAYS", 30)

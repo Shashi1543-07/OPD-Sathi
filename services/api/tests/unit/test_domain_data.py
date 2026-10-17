@@ -11,7 +11,14 @@ from uuid import uuid4
 import pytest
 
 from app.config import Settings
-from app.core.crypto import decrypt_field, encrypt_field, load_key, lookup_digest
+from app.core.crypto import (
+    decrypt_bytes,
+    decrypt_field,
+    encrypt_bytes,
+    encrypt_field,
+    load_key,
+    lookup_digest,
+)
 from app.core.errors import ApiProblemError
 from app.core.ids import stable_uuid7, uuid7
 from app.core.pagination import CursorPosition, decode_cursor, encode_cursor
@@ -75,6 +82,28 @@ def test_crypto_rejects_invalid_keys_versions_and_payloads() -> None:
         decrypt_field("v1:bad!", key=b"k" * 32, associated_data="patients:name:1")
     with pytest.raises(ValueError):
         lookup_digest("value", key=b"short")
+
+
+def test_binary_content_is_sealed_to_its_record() -> None:
+    key = secrets.token_bytes(32)
+    photo = b"\xff\xd8\xff" + secrets.token_bytes(512)
+    sealed = encrypt_bytes(photo, key=key, associated_data="documents:content:1")
+    assert sealed[:1] == b"\x01" and photo not in sealed
+    assert decrypt_bytes(sealed, key=key, associated_data="documents:content:1") == photo
+    # Moved to another record, tampered with, cut short or under another key: refused.
+    for value, context, used_key in (
+        (sealed, "documents:content:2", key),
+        (sealed[:-1] + bytes([sealed[-1] ^ 1]), "documents:content:1", key),
+        (sealed[:20], "documents:content:1", key),
+        (b"\x02" + sealed[1:], "documents:content:1", key),
+        (sealed, "documents:content:1", secrets.token_bytes(32)),
+    ):
+        with pytest.raises(ValueError):
+            decrypt_bytes(value, key=used_key, associated_data=context)
+    with pytest.raises(ValueError):
+        encrypt_bytes(photo, key=b"short", associated_data="documents:content:1")
+    with pytest.raises(ValueError):
+        decrypt_bytes(sealed, key=b"short", associated_data="documents:content:1")
 
 
 def test_crypto_uses_unique_nonces_for_100000_encryptions() -> None:

@@ -120,6 +120,12 @@ docker compose run --rm -e DEMO_ADMIN_EMAIL=$adminEmail -e DEMO_ADMIN_PASSWORD=$
 Write-Step "Adding a month of sample OPD history for Reports"
 docker compose run --rm api python -m app.cli seed-demo-history --days 30 | Out-Host
 
+# A fictional returning patient with an OPD card, an earlier visit and an old prescription.
+# --reset removes visits joined to her record by earlier run-throughs, so each demo starts clean.
+Write-Step "Preparing the returning patient for the demo"
+$returning = docker compose run --rm api python -m app.cli seed-demo-returning --reset
+$returningLine = $returning | Select-String "OPD number" | Select-Object -First 1
+
 Write-Step "Starting API, worker and web app"
 docker compose up -d @build api worker web
 if ($LASTEXITCODE -ne 0) { throw "Could not start the application containers." }
@@ -155,6 +161,11 @@ Write-Host "      doctor07 Ophthalmology | doctor08 General Surgery     (each @d
 Write-Host "    Nurses (password $staffPassword), General Medicine with doctor01:"
 Write-Host "      nurse01 ... nurse05@demo.opdsathi.test"
 Write-Host "  API docs:          http://localhost:8000/docs"
+if ($returningLine) {
+  Write-Host "  Returning patient for the demo (answer age 52, Female, then use her OPD card):"
+  Write-Host "    $($returningLine.ToString().Trim())" -ForegroundColor Yellow
+  Write-Host "    Her old test report to photograph: docs\demo-papers\synthetic-lab-report.png"
+}
 if ($phoneUrl) {
   Write-Host "  Token QR codes open on phones via $phoneUrl (phone must be on the same Wi-Fi)." -ForegroundColor Green
   if ($checkinLink) {

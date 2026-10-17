@@ -13,11 +13,13 @@ from app.ai.providers.llm.base import LLMUnavailableError
 from app.ai.providers.llm.gemini import GeminiProvider
 from app.ai.readback import build_readback, build_readback_from_answers
 from app.ai.speech import SpeechService, SpeechUnavailableError
+from app.api.v1.ai_gate import ai_consented, llm_allowed
 from app.core.auth import require_patient
 from app.core.errors import ApiProblemError
 from app.core.ratelimit import check_rate_limit
 from app.db.repositories import CaseSheetRepository
 from app.db.session import set_hospital_scope
+from app.domain.documents import IMAGE_TYPES, MAX_IMAGE_BYTES, looks_like
 from app.domain.interview.bank import QUESTIONS, Question
 from app.domain.interview.consent import get_consent_copy
 from app.domain.interview.engine import InterviewState
@@ -66,13 +68,22 @@ async def speech_capabilities(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_patient())],
 ) -> dict[str, Any]:
-    """Tell the kiosk which speech features the server provides for this deployment."""
-    del principal
+    """Tell the kiosk which speech and AI features this visit may use.
+
+    Without the patient's consent to online AI help there is no voice input at all (the
+    browser's own recogniser also sends audio online), and the patient taps and types.
+    Recorded question audio needs no consent: it is the hospital's text, not the patient's.
+    """
+    hospital_id = UUID(str(principal["hospital_id"]))
+    visit_id = UUID(str(principal["sub"]))
     speech = _speech(request)
+    online = await ai_consented(request, hospital_id, visit_id)
     return {
-        "stt": speech.stt_mode,
+        "stt": speech.stt_mode if online else "off",
         "tts": speech.tts_mode,
-        "ai": getattr(request.app.state.llm_provider, "name", "mock") == "gemini",
+        "ai": getattr(request.app.state.llm_provider, "name", "mock") == "gemini"
+        and await llm_allowed(request, hospital_id, visit_id),
+        "online": online,
     }
 
 
@@ -88,7 +99,7 @@ async def transcribe_answer(
     if state.get("phase") not in {"interview", "summary"}:
         raise _error(409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Finish the step.")
     speech = _speech(request)
-    if not speech.server_stt:
+    if not speech.server_stt or not await ai_consented(request, hospital_id, visit_id):
         raise _error(503, "STT_UNAVAILABLE", "Voice unavailable", "Please type or tap.")
     content_type = request.headers.get("content-type", "").lower()
     if not content_type.startswith(_AUDIO_TYPES):
@@ -125,7 +136,7 @@ async def transcribe_answer(
 
 class SpeakPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    kind: Literal["question", "consent", "readback"]
+    kind: Literal["question", "consent", "consent_ai", "readback"]
     question_id: str = Field(default="", max_length=80)
 
 
@@ -136,20 +147,30 @@ async def speak_prompt(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(require_patient())],
 ) -> Response:
-    """Speak approved text only: bank questions, the consent notice, or this read-back."""
+    """Speak approved text only: bank questions, the consent notices, or this read-back.
+
+    The read-back and AI-written follow-up questions come from the patient's own answers,
+    so an online voice speaks them only with the patient's consent to online AI help.
+    """
     hospital_id, state = await _session_state(request, visit_id, principal)
     speech = _speech(request)
     if not speech.server_tts:
         raise _error(503, "TTS_UNAVAILABLE", "Audio unavailable", "Text remains on screen.")
     language = str(state.get("language", "en"))
+    personal = payload.kind == "readback" or (
+        payload.kind == "question" and payload.question_id not in QUESTIONS
+    )
+    if personal and not await ai_consented(request, hospital_id, visit_id):
+        raise _error(503, "TTS_UNAVAILABLE", "Audio unavailable", "Text remains on screen.")
     cache = request.app.state.redis_cache
     if payload.kind == "question":
         question = _session_question(state, payload.question_id)
         if question is None:
             raise _error(404, "NOT_FOUND", "Unknown question", "Question not found.")
         spoken = question.prompt[language]  # type: ignore[index]
-    elif payload.kind == "consent":
-        spoken = str(get_consent_copy(language)["text"])  # type: ignore[arg-type]
+    elif payload.kind in {"consent", "consent_ai"}:
+        purpose = "ai" if payload.kind == "consent_ai" else "care"
+        spoken = str(get_consent_copy(language, purpose)["text"])  # type: ignore[arg-type]
     else:
         # Patient-specific read-back is generated on demand and never cached.
         cache = None
@@ -188,20 +209,6 @@ async def speak_prompt(
     )
 
 
-_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
-# The kiosk sends a ~1280 px JPEG (about 200 kB); the API refuses any request over 1 MiB.
-MAX_IMAGE_BYTES = 1_000_000
-
-
-def _looks_like(content_type: str, image: bytes) -> bool:
-    """Whether the file starts with the signature of the image type it claims to be."""
-    if content_type == "image/jpeg":
-        return image.startswith(b"\xff\xd8\xff")
-    if content_type == "image/png":
-        return image.startswith(b"\x89PNG\r\n\x1a\n")
-    return image[:4] == b"RIFF" and image[8:12] == b"WEBP"
-
-
 @router.post("/sessions/{visit_id}/prescription-photo")
 async def read_prescription_photo(
     visit_id: UUID,
@@ -217,7 +224,7 @@ async def read_prescription_photo(
     if state.get("phase") not in {"interview", "summary"}:
         raise _error(409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Finish the step.")
     content_type = request.headers.get("content-type", "").lower().split(";")[0].strip()
-    if content_type not in _IMAGE_TYPES:
+    if content_type not in IMAGE_TYPES:
         raise _error(
             415, "UNSUPPORTED_IMAGE", "Unsupported photo", "Take a photo of the prescription."
         )
@@ -226,12 +233,16 @@ async def read_prescription_photo(
         raise _error(400, "EMPTY_IMAGE", "No photo", "Take the photo again.")
     if len(image) > MAX_IMAGE_BYTES:
         raise _error(413, "IMAGE_TOO_LARGE", "Photo too large", "Take the photo again.")
-    if not _looks_like(content_type, image):
+    if not looks_like(content_type, image):
         raise _error(
             415, "UNSUPPORTED_IMAGE", "Not a photo", "This file is not a photo. Take a photo."
         )
     provider = request.app.state.llm_provider
-    if not isinstance(provider, GeminiProvider):
+    hospital_id = UUID(str(principal["hospital_id"]))
+    # Reading a photo sends it to the model: the hospital's AI switch and the patient's yes.
+    if not isinstance(provider, GeminiProvider) or not await llm_allowed(
+        request, hospital_id, visit_id
+    ):
         raise _error(503, "AI_UNAVAILABLE", "Scanning unavailable", "Please say or type it.")
     settings = request.app.state.settings
     limit = await check_rate_limit(

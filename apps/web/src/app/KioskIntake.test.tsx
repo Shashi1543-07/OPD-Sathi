@@ -46,6 +46,8 @@ const { intakeMock, voiceMock, IntakeRequestErrorMock, captured } = vi.hoisted((
       speechAudio: vi.fn(),
       changeLanguage: vi.fn(),
       readPrescription: vi.fn(),
+      consent: vi.fn(),
+      aiConsent: vi.fn(),
     },
     voiceMock: {
       listenWithServer: vi.fn((_transcribe: unknown, handlers: Handlers) => {
@@ -82,12 +84,20 @@ const consent = {
   text: "Synthetic consent copy",
 };
 
-function renderIntake(stage: string) {
+const aiConsent = {
+  language: "en",
+  version: "ai-consent-1.0",
+  sha256: "b".repeat(64),
+  text: "Synthetic notice about optional AI help",
+};
+
+function renderIntake(stage: string, extra: Record<string, unknown> = {}) {
   intakeMock.session.mockReturnValue({
     visit_id: "visit-synthetic",
     patient_access_token: "synthetic-token",
     consent,
     stage,
+    ...extra,
   });
   return render(
     <I18nextProvider i18n={i18n}>
@@ -181,6 +191,46 @@ describe("kiosk intake", () => {
       await screen.findByRole("heading", { name: "Do you have any of these right now?" }),
     ).toBeInTheDocument();
     expect(intakeMock.markFollowUp).not.toHaveBeenCalled();
+  });
+
+  it("asks about AI help separately after the consent, and either answer continues", async () => {
+    const user = userEvent.setup();
+    intakeMock.consent.mockResolvedValue({ next: "identity" });
+    intakeMock.aiConsent.mockResolvedValue({ granted: false });
+    renderIntake("consent", { ai_consent: aiConsent });
+
+    await user.click(await screen.findByRole("button", { name: "I agree, continue" }));
+    expect(
+      await screen.findByRole("heading", { name: "Help from AI (optional)" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Synthetic notice about optional AI help")).toBeInTheDocument();
+    // Two equal choices; nothing is chosen for the patient.
+    expect(screen.getByRole("button", { name: "Yes, use AI help" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "No, continue without AI" }));
+    await waitFor(() => expect(intakeMock.aiConsent).toHaveBeenCalledWith(aiConsent, false));
+    expect(await screen.findByLabelText("How old are you?")).toBeInTheDocument();
+    // What the patient may use is fetched again for their answer.
+    await waitFor(() => expect(intakeMock.capabilities).toHaveBeenCalledTimes(2));
+  });
+
+  it("offers no voice at all to a patient who said no to AI help", async () => {
+    intakeMock.capabilities.mockResolvedValue({
+      stt: "off",
+      tts: "browser",
+      ai: false,
+      online: false,
+    });
+    intakeMock.nextQuestion.mockResolvedValue({
+      question: { ...chiefConcern, options: [] },
+      progress: { current: 1, total: 10 },
+      answered: [],
+    });
+    renderIntake("interview");
+
+    expect(
+      await screen.findByText("Without AI help, please tap or type your answers."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tap and speak" })).toBeNull();
   });
 
   it("takes a first-time patient straight on to the safety questions", async () => {

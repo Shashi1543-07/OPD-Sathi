@@ -653,6 +653,85 @@
   color: var(--navy-900);
 }
 
+/* Old papers on the review screen (optional photos for the doctor) */
+.intake-papers {
+  border: 2px dashed var(--border);
+  border-radius: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+.intake-papers-title {
+  align-items: center;
+  color: var(--navy-900);
+  display: inline-flex;
+  font-size: 1.45rem;
+  gap: var(--space-2);
+  margin: 0;
+}
+.intake-papers-lead {
+  color: var(--slate-600);
+  font-size: 1.15rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.intake-papers-pick {
+  color: var(--navy-900);
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+}
+.intake-papers-kinds {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+}
+.intake-papers-list {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.intake-papers-list li {
+  align-items: stretch;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+.intake-papers-list img,
+.intake-papers-icon {
+  aspect-ratio: 4 / 3;
+  background: var(--surface-subtle);
+  border-radius: 0.75rem;
+  object-fit: cover;
+  width: 100%;
+}
+.intake-papers-icon {
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+}
+.intake-papers-kind {
+  color: var(--navy-900);
+  font-weight: 700;
+}
+.intake-papers-status {
+  align-items: center;
+  color: var(--text-muted);
+  display: flex;
+  font-size: 1.05rem;
+  font-weight: 600;
+  gap: var(--space-2);
+  margin: 0;
+  min-height: 1.5em;
+}
+
 /* Ticket */
 .intake-ticket {
   display: flex;
