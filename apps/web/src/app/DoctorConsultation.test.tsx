@@ -658,4 +658,41 @@ describe("Phase 7.4 doctor consultation", () => {
     expect(calls()[2][0]).toBe("/visits/visit-1/case-sheet.pdf");
     expect(downloadClick).toHaveBeenCalledOnce();
   });
+
+  it("lets the desk stop AI help when the patient asks, and says it stopped", async () => {
+    const withAiHelp = (aiHelp: string) =>
+      new Response(
+        JSON.stringify({
+          visit_id: "visit-1",
+          version: 1,
+          case_sheet: sheet,
+          confirmed_by_patient: true,
+          confirmed_at: "2026-10-06T04:30:00Z",
+          patient: { ai_help: aiHelp },
+        }),
+        { status: 200, headers: { ETag: '"1"' } },
+      );
+    const { calls } = mockRequests([
+      withAiHelp("on"),
+      transcriptResponse(),
+      new Response(JSON.stringify({ visit_id: "visit-1", ai_help: "withdrawn" }), {
+        status: 200,
+      }),
+      withAiHelp("withdrawn"),
+      transcriptResponse(),
+    ]);
+    renderConsult();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Patient asks to stop AI help" }));
+    expect(screen.getByText("Stop AI help for this visit, as the patient asked?")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Yes, stop AI help" }));
+    expect(
+      await screen.findByText(
+        "The patient stopped AI help for this visit. The AI draft is not shown and nothing more is sent to AI services.",
+      ),
+    ).toBeVisible();
+    expect(calls()[2][0]).toBe("/visits/visit-1/ai-consent/withdraw");
+    expect(calls()[2][1]?.method).toBe("POST");
+  });
 });

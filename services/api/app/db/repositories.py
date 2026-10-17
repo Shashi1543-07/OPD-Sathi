@@ -3,18 +3,19 @@
 import json
 from datetime import UTC, date, datetime
 from math import ceil
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from redis.exceptions import RedisError
 from sqlalchemy import bindparam, column, exists, func, select, table, text, tuple_, update
-from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from app.config import Settings
 from app.core.crypto import decrypt_field, encrypt_field, lookup_digest
 from app.core.ids import uuid7
 from app.core.pagination import CursorPosition, Page, decode_cursor, encode_cursor
+from app.db.session import tenant_transaction
 from app.domain.checkin import checkin_code, checkin_code_digest
 from app.domain.patients import format_mrn
 
@@ -333,10 +334,13 @@ class PatientRepository:
             text(
                 "SELECT v.id AS visit_id, v.service_date, v.status, v.token_label, v.urgency, "
                 "v.registered_at, d.name_en AS department, cs.data AS case_sheet_data, "
-                "(cs.last_edited_by IS NOT NULL) AS staff_edited "
+                "(cs.last_edited_by IS NOT NULL) AS staff_edited, "
+                "(a.withdrawn_at IS NOT NULL) AS ai_withdrawn "
                 "FROM visits v JOIN departments d ON d.hospital_id = v.hospital_id "
                 "AND d.id = v.department_id LEFT JOIN case_sheets cs "
                 "ON cs.hospital_id = v.hospital_id AND cs.visit_id = v.id "
+                "LEFT JOIN consents a ON a.hospital_id = v.hospital_id AND a.visit_id = v.id "
+                "AND a.purpose = 'ai' "
                 "WHERE v.hospital_id = :hospital_id AND v.patient_id = :patient_id "
                 "AND v.id <> :exclude_visit_id AND v.token_number IS NOT NULL "
                 "ORDER BY v.registered_at DESC, v.id DESC LIMIT :limit"
@@ -1529,8 +1533,14 @@ class IntakeRepository:
                     text(
                         "SELECT v.id, v.patient_id, v.language, v.status, v.age_years, "
                         "v.pregnant, v.patient_link, p.sex, "
-                        "c.granted AS consent_granted FROM visits v LEFT JOIN consents c "
+                        "c.granted AS consent_granted, "
+                        "CASE WHEN a.withdrawn_at IS NOT NULL THEN 'withdrawn' "
+                        "WHEN a.granted THEN 'granted' WHEN a.id IS NOT NULL THEN 'declined' "
+                        "END AS ai_consent FROM visits v LEFT JOIN consents c "
                         "ON c.hospital_id = v.hospital_id AND c.visit_id = v.id "
+                        "AND c.purpose = 'care' LEFT JOIN consents a "
+                        "ON a.hospital_id = v.hospital_id AND a.visit_id = v.id "
+                        "AND a.purpose = 'ai' "
                         "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
@@ -1541,6 +1551,69 @@ class IntakeRepository:
             .first()
         )
         return dict(row) if row is not None else None
+
+    async def ai_consent(self, *, hospital_id: UUID, visit_id: UUID) -> str | None:
+        """The patient's choice about online AI help: granted, declined, withdrawn or None."""
+        return cast(
+            str | None,
+            await self.connection.scalar(
+                text(
+                    "SELECT CASE WHEN withdrawn_at IS NOT NULL THEN 'withdrawn' "
+                    "WHEN granted THEN 'granted' ELSE 'declined' END FROM consents "
+                    "WHERE hospital_id = :hospital_id AND visit_id = :visit_id "
+                    "AND purpose = 'ai'"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id},
+            ),
+        )
+
+    async def record_ai_consent(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        language: str,
+        version: str,
+        text_sha256: str,
+        granted: bool,
+        channel: str,
+    ) -> None:
+        """Record (or, while still registering, change) the answer about online AI help."""
+        await self.connection.execute(
+            text(
+                "INSERT INTO consents (id, hospital_id, visit_id, purpose, language, "
+                "text_version, text_sha256, granted, granted_at, channel) VALUES (:id, "
+                ":hospital_id, :visit_id, 'ai', :language, :version, :text_sha256, :granted, "
+                ":granted_at, :channel) ON CONFLICT (hospital_id, visit_id, purpose) DO UPDATE "
+                "SET language = EXCLUDED.language, text_version = EXCLUDED.text_version, "
+                "text_sha256 = EXCLUDED.text_sha256, granted = EXCLUDED.granted, "
+                "granted_at = EXCLUDED.granted_at, channel = EXCLUDED.channel, "
+                "withdrawn_at = NULL, withdrawn_by = NULL"
+            ),
+            {
+                "id": uuid7(),
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "language": language,
+                "version": version,
+                "text_sha256": text_sha256,
+                "granted": granted,
+                "granted_at": datetime.now(UTC) if granted else None,
+                "channel": channel,
+            },
+        )
+
+    async def withdraw_ai_consent(self, *, hospital_id: UUID, visit_id: UUID, by: str) -> bool:
+        """Stop online AI help for a visit; False if it was never granted or already stopped."""
+        withdrawn = await self.connection.scalar(
+            text(
+                "UPDATE consents SET withdrawn_at = now(), withdrawn_by = :by "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id AND purpose = 'ai' "
+                "AND granted AND withdrawn_at IS NULL RETURNING id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id, "by": by},
+        )
+        return withdrawn is not None
 
     async def record_consent(
         self,
@@ -1555,7 +1628,8 @@ class IntakeRepository:
     ) -> None:
         existing = await self.connection.scalar(
             text(
-                "SELECT id FROM consents WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+                "SELECT id FROM consents WHERE hospital_id = :hospital_id "
+                "AND visit_id = :visit_id AND purpose = 'care'"
             ),
             {"hospital_id": hospital_id, "visit_id": visit_id},
         )
@@ -1744,6 +1818,16 @@ class IntakeRepository:
             {"status": status, "hospital_id": hospital_id, "visit_id": visit_id},
         )
         return str(previous)
+
+
+async def read_ai_consent(
+    engine: AsyncEngine, settings: Settings, *, hospital_id: UUID, visit_id: UUID
+) -> str | None:
+    """A visit's choice about online AI help, read in its own short transaction."""
+    async with tenant_transaction(engine, hospital_id) as connection:
+        return await IntakeRepository(connection, settings).ai_consent(
+            hospital_id=hospital_id, visit_id=visit_id
+        )
 
 
 class DepartmentRepository:

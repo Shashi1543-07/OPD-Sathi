@@ -25,6 +25,7 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/kiosks/token"),
         ("GET", "/status/{token}"),
         ("GET", "/status/{token}/stream"),
+        ("POST", "/status/{token}/ai-consent/withdraw"),
         ("GET", "/intake/checkin/{code}"),
         ("POST", "/intake/checkin/{code}/sessions"),
         ("GET", "/openapi.json"),
@@ -73,6 +74,8 @@ def current_principal(request: Request) -> dict[str, Any]:
 # Public routes that carry an opaque 256-bit code in the path (method, exact path shape).
 PUBLIC_CODE_ROUTES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("GET", re.compile(r"/status/[A-Za-z0-9_-]{43}(?:/stream)?")),
+    # The patient's status link can stop (never start) online AI help for their visit.
+    ("POST", re.compile(r"/status/[A-Za-z0-9_-]{43}/ai-consent/withdraw")),
     # A hospital's phone check-in QR: look it up, then start a patient session from it.
     ("GET", re.compile(r"/intake/checkin/[A-Za-z0-9_-]{43}")),
     ("POST", re.compile(r"/intake/checkin/[A-Za-z0-9_-]{43}/sessions")),

@@ -2821,6 +2821,53 @@
   color: var(--text-dim);
   font-size: var(--font-size-xs);
 }
+/* The patient's own switch to stop online AI help for this visit. */
+.status-ai {
+  display: grid;
+  gap: var(--space-2-5);
+  padding: var(--space-3-5);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-subtle);
+}
+.status-ai p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+.status-ai-confirm {
+  display: grid;
+  gap: var(--space-2-5);
+}
+.status-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.status-ai-button {
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3-5);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  justify-self: start;
+}
+.status-ai-button.is-stop {
+  border-color: var(--urgent);
+  background: var(--urgent-tint);
+  color: var(--urgent-ink);
+}
+.status-ai-button:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+.status-ai .status-ai-error {
+  color: var(--urgent-ink);
+}
 
 /* ============================================================
    9. OFFLINE INTAKE & DEMO RIBBON
@@ -5790,6 +5837,17 @@
   color: var(--primary);
   flex: none;
   margin-top: 0.1rem;
+}
+/* The patient's choice about online AI help, next to the AI draft. */
+.cx-ai-help {
+  align-items: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--font-size-sm);
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
 }
 
 /* Overview */

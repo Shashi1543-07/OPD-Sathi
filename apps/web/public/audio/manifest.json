@@ -23,6 +23,27 @@
       "duration_seconds": 0.12
     },
     {
+      "id": "consent_ai",
+      "lang": "en",
+      "text_sha256": "362c558f8f1f44c57d3f7a06c4b1037725dfdce0a618b481de4b40fbbeede63f",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "consent_ai",
+      "lang": "hi",
+      "text_sha256": "a776697757b5bad5a0743582f6993a25373abcb1dd3bce4e81289701f01f6de4",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "consent_ai",
+      "lang": "mr",
+      "text_sha256": "c851a621d161a3d70e22f16da7fe2ca8fe58a99aeb717f926d59eda76875159a",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
       "id": "danger.breathing_difficulty",
       "lang": "en",
       "text_sha256": "003131d090bf64cc4ad1b62e1631127b56e6fbb5e654374457bdcce7ba751975",

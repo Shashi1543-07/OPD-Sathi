@@ -88,6 +88,8 @@ type PatientContext = {
   department_name?: string | null;
   triage?: Triage | null;
   queued_at?: string | null;
+  /** The patient's choice about online AI help for this visit. */
+  ai_help?: "on" | "off" | "withdrawn" | null;
 };
 type TranscriptTurn = {
   turn_index: number;
@@ -329,6 +331,9 @@ export function DoctorConsultation() {
   const [briefDraft, setBriefDraft] = useState<{ visitId: string; text: string } | null>(null);
   const [rejectedShown, setRejectedShown] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  // "Patient asks to stop AI help": confirmed inline, for the visit it was asked on.
+  const [confirmStopAi, setConfirmStopAi] = useState<string | null>(null);
+  const [stoppingAi, setStoppingAi] = useState(false);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const editingBrief = briefDraft?.visitId === visitId ? briefDraft.text : null;
   useEffect(() => {
@@ -500,6 +505,26 @@ export function DoctorConsultation() {
       setError(reason instanceof Error ? reason.message : t("aiReviewFailed"));
     } finally {
       setReviewing(false);
+    }
+  }
+
+  /** Record at the desk that the patient wants no more AI help for this visit. */
+  async function stopAiHelp() {
+    if (!visitId) return;
+    setStoppingAi(true);
+    setError("");
+    try {
+      const response = await staffAuth.request(`/visits/${visitId}/ai-consent/withdraw`, {
+        method: "POST",
+      });
+      // 409: already stopped (perhaps by the patient on their phone).
+      if (!response.ok && response.status !== 409) throw new Error(t("aiHelpStopFailed"));
+      setConfirmStopAi(null);
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("aiHelpStopFailed"));
+    } finally {
+      setStoppingAi(false);
     }
   }
 
@@ -922,6 +947,37 @@ export function DoctorConsultation() {
       )
     : t("aiReviewDraft");
   const hideRejected = review?.status === "rejected" && rejectedShown !== visitId;
+  // Why there may be no AI draft, and the desk's way to stop AI help when it is on.
+  const aiHelp = patient?.ai_help ?? null;
+  const aiHelpNote =
+    aiHelp === "off" || aiHelp === "withdrawn" ? (
+      <p className="cx-panel-note cx-ai-help">
+        {t(aiHelp === "off" ? "aiHelpOff" : "aiHelpWithdrawn")}
+      </p>
+    ) : aiHelp === "on" ? (
+      <div className="cx-ai-help no-print">
+        {confirmStopAi === visitId ? (
+          <>
+            <span>{t("aiHelpStopConfirm")}</span>
+            <button
+              type="button"
+              className="cx-btn"
+              disabled={stoppingAi}
+              onClick={() => void stopAiHelp()}
+            >
+              {t("aiHelpStopYes")}
+            </button>
+            <button type="button" className="cx-btn" onClick={() => setConfirmStopAi(null)}>
+              {t("aiHelpStopNo")}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="cx-link" onClick={() => setConfirmStopAi(visitId)}>
+            {t("aiHelpStop")}
+          </button>
+        )}
+      </div>
+    ) : null;
   const aiCard = summary?.brief_en && (
     <section
       className={`cx-card cx-card--ai${review?.status === "rejected" ? " is-rejected" : ""}`}
@@ -1297,6 +1353,7 @@ export function DoctorConsultation() {
         </div>
         <div className="cx-col">
           {aiCard}
+          {aiHelpNote}
           {workflowCard}
         </div>
       </div>

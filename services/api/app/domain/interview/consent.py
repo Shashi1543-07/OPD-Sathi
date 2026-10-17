@@ -2,11 +2,14 @@
 
 import hashlib
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 from app.domain.interview.bank import REVIEW_STATUS, Language
 
 CONSENT_DIRECTORY = Path(__file__).with_name("consent")
+# "care": the history is collected for the clinic team (required to continue).
+# "ai": online AI services may process the answers, voice and photos (optional).
+ConsentPurpose = Literal["care", "ai"]
 
 
 class ConsentCopy(TypedDict):
@@ -16,8 +19,9 @@ class ConsentCopy(TypedDict):
     text: str
 
 
-def get_consent_copy(language: Language) -> ConsentCopy:
-    raw = (CONSENT_DIRECTORY / f"{language}.md").read_text(encoding="utf-8")
+def get_consent_copy(language: Language, purpose: ConsentPurpose = "care") -> ConsentCopy:
+    name = f"{language}.md" if purpose == "care" else f"{purpose}-{language}.md"
+    raw = (CONSENT_DIRECTORY / name).read_text(encoding="utf-8")
     parts = raw.split("---", maxsplit=2)
     if len(parts) != 3:
         raise ValueError("consent copy must contain front matter")

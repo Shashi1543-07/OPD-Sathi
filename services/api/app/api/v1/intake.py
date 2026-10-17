@@ -24,6 +24,8 @@ from app.ai.question_choice import select_question_id
 from app.ai.readback import build_readback, build_readback_from_answers
 from app.ai.redflag_opinion import combine_redflag_opinions, second_opinion_flags
 from app.ai.triage_review import review_triage
+from app.api.v1.ai_gate import ai_consented as _ai_consented
+from app.api.v1.ai_gate import llm_allowed as _llm_allowed
 from app.core.audit import audit
 from app.core.auth import require_kiosk, require_patient, require_role
 from app.core.errors import ApiProblemError
@@ -252,33 +254,6 @@ async def _hospital_ayurveda_enabled(request: Request, hospital_id: UUID) -> boo
     return enabled is True
 
 
-async def _hospital_llm_enabled(request: Request, hospital_id: UUID) -> bool:
-    """Combine the global kill switch with this tenant's explicit AI opt-in."""
-    if not request.app.state.settings.llm_enabled:
-        return False
-    cached = getattr(request.state, "llm_enablement", None)
-    if isinstance(cached, tuple) and cached[0] == hospital_id:
-        return cached[1] is True
-    enabled = False
-    try:
-        async with request.app.state.engine.begin() as connection:
-            await set_hospital_scope(connection, hospital_id)
-            configured = await connection.scalar(
-                text(
-                    "SELECT llm_enabled FROM hospital_ai_settings WHERE hospital_id = :hospital_id"
-                ),
-                {"hospital_id": hospital_id},
-            )
-            # A hospital without a saved preference uses AI when the operator configured a
-            # key; an administrator can still switch it off explicitly.
-            enabled = configured is not False
-    except Exception:
-        # An unavailable or unmigrated setting store must leave the deterministic path active.
-        enabled = False
-    request.state.llm_enablement = (hospital_id, enabled)
-    return enabled
-
-
 async def _evaluate_visit(
     connection: Any,
     *,
@@ -322,7 +297,7 @@ async def _evaluate_visit(
     # Rules run on every answer instantly; the model's second opinion runs once, at
     # confirmation, where urgency and department are decided.
     tenant_llm_enabled = (
-        await _hospital_llm_enabled(request, hospital_id)
+        await _llm_allowed(request, hospital_id, visit_id)
         if request is not None
         and use_llm
         and request.app.state.settings.llm_enabled
@@ -769,7 +744,7 @@ async def _schedule_case_sheet_enrichment(
     interview_state: InterviewState,
 ) -> None:
     """Start the doctor-facing AI summary after returning the deterministic summary."""
-    if not await _hospital_llm_enabled(request, hospital_id):
+    if not await _llm_allowed(request, hospital_id, visit_id):
         return
     provider = request.app.state.llm_provider
     if getattr(provider, "name", "mock") != "gemini":
@@ -870,6 +845,11 @@ async def _persist_case_sheet_enrichment(
             )
             if saved is None:
                 return
+            choice = await IntakeRepository(connection, request.app.state.settings).ai_consent(
+                hospital_id=hospital_id, visit_id=visit_id
+            )
+            if choice != "granted":
+                return  # The patient stopped AI help while the draft was being written.
             current = saved["data"]
             if any(
                 isinstance(meta, dict) and meta.get("source") in {"nurse", "doctor"}
@@ -977,6 +957,7 @@ async def create_session(
         "patient_access_token": patient_token,
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": copy,
+        "ai_consent": get_consent_copy(payload.language, "ai"),
     }
 
 
@@ -1063,6 +1044,7 @@ async def create_assisted_session(
         "patient_access_token": token,
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": {**consent, "language": payload.language},
+        "ai_consent": get_consent_copy(payload.language, "ai"),
         "assisted": True,
     }
 
@@ -1252,6 +1234,7 @@ async def create_checkin_session(
         "patient_access_token": patient_token,
         "expires_in": settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": get_consent_copy(payload.language),
+        "ai_consent": get_consent_copy(payload.language, "ai"),
         "channel": "mobile",
         "hospital_name": point["hospital_name"],
     }
@@ -1294,7 +1277,11 @@ async def change_language(
         json.dumps(state, separators=(",", ":")),
         ex=request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
     )
-    return {"language": payload.language, "consent": get_consent_copy(payload.language)}
+    return {
+        "language": payload.language,
+        "consent": get_consent_copy(payload.language),
+        "ai_consent": get_consent_copy(payload.language, "ai"),
+    }
 
 
 @router.post("/sessions/{visit_id}/consent")
@@ -1366,6 +1353,64 @@ async def record_consent(
         return {"granted": True, "next": "identity"}
     await request.app.state.redis_state.delete(_session_key(hospital_id, visit_id))
     return {"granted": False, "next": "staff_help", "message": _patient_message(language)}
+
+
+@router.post("/sessions/{visit_id}/consent/ai")
+async def record_ai_consent(
+    visit_id: UUID,
+    payload: ConsentPayload,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_patient())],
+) -> dict[str, Any]:
+    """The patient's separate, optional answer about online AI help; nothing is pre-selected.
+
+    Asked after the care consent, from its own notice (read aloud like the first). Saying no
+    changes nothing about the visit except that it runs on this server alone. The answer can
+    be changed until the summary is confirmed, and a "yes" can be withdrawn later from the
+    patient's status page or at the desk.
+    """
+    hospital_id, context = await _authorized_visit(
+        request, visit_id, principal, consent_required=True
+    )
+    _require_registering(context)
+    language: Language = context["language"]
+    copy = get_consent_copy(language, "ai")
+    if payload.version != copy["version"] or payload.sha256 != copy["sha256"]:
+        raise _error(
+            409,
+            "CONSENT_COPY_MISMATCH",
+            "Consent copy changed",
+            "Reload the information notice and review it again.",
+        )
+    state = _read_state(
+        await request.app.state.redis_state.get(_session_key(hospital_id, visit_id))
+    )
+    assisted = state.get("channel") == "nurse" and state.get("assisted") is True
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await IntakeRepository(connection, request.app.state.settings).record_ai_consent(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            language=language,
+            version=copy["version"],
+            text_sha256=copy["sha256"],
+            granted=payload.granted,
+            channel=(
+                "nurse" if assisted else "mobile" if state.get("channel") == "mobile" else "kiosk"
+            ),
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user" if assisted else "patient",
+            actor_id=UUID(state["nurse_id"]) if assisted else visit_id,
+            action="intake.ai_consent.granted" if payload.granted else "intake.ai_consent.declined",
+            resource_type="visit",
+            resource_id=visit_id,
+            meta={"language": language, "version": copy["version"]},
+        )
+    return {"granted": payload.granted}
 
 
 @router.post("/sessions/{visit_id}/identity")
@@ -1760,6 +1805,11 @@ async def _run_triage_review(
         alerts: list[dict[str, Any]] = []
         async with request.app.state.engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
+            choice = await IntakeRepository(connection, request.app.state.settings).ai_consent(
+                hospital_id=hospital_id, visit_id=visit_id
+            )
+            if choice != "granted":
+                return  # The patient stopped AI help while the check was running.
             await connection.execute(
                 text(
                     "UPDATE visits SET acuity = coalesce(acuity, '{}'::jsonb) || "
@@ -1851,13 +1901,13 @@ async def _forget_followups(
         return
 
 
-async def _followups_enabled(request: Request, hospital_id: UUID) -> bool:
+async def _followups_enabled(request: Request, hospital_id: UUID, visit_id: UUID) -> bool:
     settings = request.app.state.settings
     provider = getattr(request.app.state, "llm_provider", None)
     return bool(
         getattr(settings, "ai_followup_questions", False)
         and getattr(provider, "name", "mock") == "gemini"
-        and await _hospital_llm_enabled(request, hospital_id)
+        and await _llm_allowed(request, hospital_id, visit_id)
     )
 
 
@@ -1956,6 +2006,8 @@ async def _merge_followups(
     """
     if interview_state.ai_followups != "none" or not state.get("followups_requested"):
         return interview_state
+    if not await _llm_allowed(request, hospital_id, visit_id):
+        return interview_state  # AI help was stopped after the draft was requested.
     upcoming = next_question(interview_state)
     if upcoming is None:
         return interview_state  # Interview finished; nothing left to slot in before.
@@ -2028,7 +2080,7 @@ async def _question_response(
             request.app.state.settings.llm_enabled
             and request.app.state.settings.ai_question_choice
             and getattr(request.app.state.llm_provider, "name", "mock") == "gemini"
-            and await _hospital_llm_enabled(request, hospital_id)
+            and await _llm_allowed(request, hospital_id, visit_id)
         ):
             candidate_ids = [
                 question_id for question_id in still_to_ask if question_id in QUESTIONS
@@ -2240,7 +2292,7 @@ async def _save_answer(
         payload.question_id == _FOLLOWUP_TRIGGER
         and isinstance(next_state.answers.get("chief_concern"), str)
         and not state.get("followups_requested")
-        and await _followups_enabled(request, hospital_id)
+        and await _followups_enabled(request, hospital_id, visit_id)
     )
     if draft_followups_now:
         state["followups_requested"] = True
@@ -2462,6 +2514,16 @@ async def generate_readback_audio(
     )
     if state.get("phase") != "summary":
         raise _error(409, "SUMMARY_NOT_READY", "Summary not ready", "Complete the questions first.")
+    # The read-back is the patient's own words: an online voice service needs their consent.
+    if getattr(request.app.state.tts_provider, "name", "mock") != "mock" and not (
+        await _ai_consented(request, hospital_id, visit_id)
+    ):
+        raise _error(
+            503,
+            "TTS_UNAVAILABLE",
+            "Read-back audio unavailable",
+            "Read-back text remains available.",
+        )
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         saved = await CaseSheetRepository(connection, request.app.state.settings).get(
@@ -3032,7 +3094,7 @@ async def _confirm_new_summary(
         opd_card=opd_card,
     )
     if getattr(request.app.state.llm_provider, "name", "mock") == "gemini" and (
-        await _hospital_llm_enabled(request, hospital_id)
+        await _llm_allowed(request, hospital_id, visit_id)
     ):
         _schedule_triage_review(
             request, hospital_id=hospital_id, visit_id=visit_id, interview_state=interview_state

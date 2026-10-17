@@ -173,7 +173,8 @@ async def test_intake_persists_selected_id_and_reuses_it_on_refresh() -> None:
     )
     request = SimpleNamespace(
         app=SimpleNamespace(state=app_state),
-        state=SimpleNamespace(llm_enablement=(hospital_id, True)),
+        # The hospital has AI on and this patient said yes to AI help.
+        state=SimpleNamespace(llm_enablement=(hospital_id, True), ai_consent=(visit_id, True)),
     )
 
     first = await _question_response(

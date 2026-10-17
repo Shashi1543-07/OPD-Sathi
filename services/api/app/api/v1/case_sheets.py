@@ -15,7 +15,12 @@ from starlette.responses import Response as StarletteResponse
 from app.core.audit import audit
 from app.core.auth import require_role
 from app.core.errors import ApiProblemError
-from app.db.repositories import CaseSheetRepository, InterviewTurnRepository, PatientRepository
+from app.db.repositories import (
+    CaseSheetRepository,
+    IntakeRepository,
+    InterviewTurnRepository,
+    PatientRepository,
+)
 from app.db.session import set_hospital_scope
 from app.domain.case_sheet import CaseSheet
 from app.domain.case_sheet_patch import CaseSheetPatchError, apply_case_sheet_patch
@@ -71,6 +76,9 @@ class PatientContext(BaseModel):
     # Staff-only triage score and the reason for every point (never shown to patients).
     triage: dict[str, Any] | None = None
     queued_at: datetime | None = None
+    # The patient's choice about online AI help: "on", "off" (said no, or never asked), or
+    # "withdrawn" (said yes, then stopped it; the AI draft is no longer shown).
+    ai_help: Literal["on", "off", "withdrawn"] | None = None
 
 
 class CaseSheetResponse(BaseModel):
@@ -176,10 +184,14 @@ async def get_case_sheet(
                     text(
                         "SELECT v.age_years, p.sex, v.language, v.token_label AS token, "
                         "v.urgency, v.status, d.name_en AS department_name, "
-                        "v.acuity AS triage, v.queued_at FROM visits v "
+                        "v.acuity AS triage, v.queued_at, "
+                        "CASE WHEN a.withdrawn_at IS NOT NULL THEN 'withdrawn' "
+                        "WHEN a.granted THEN 'on' ELSE 'off' END AS ai_help FROM visits v "
                         "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
                         "LEFT JOIN departments d ON d.hospital_id = v.hospital_id "
                         "AND d.id = v.department_id "
+                        "LEFT JOIN consents a ON a.hospital_id = v.hospital_id "
+                        "AND a.visit_id = v.id AND a.purpose = 'ai' "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},
@@ -208,14 +220,29 @@ async def get_case_sheet(
         )
     version = int(saved["version"])
     response.headers["ETag"] = f'"{version}"'
+    withdrawn = bool(context and context["ai_help"] == "withdrawn")
     return CaseSheetResponse(
         visit_id=visit_id,
         version=version,
-        case_sheet=_with_flag_reasons(saved["data"]),
+        case_sheet=_with_flag_reasons(_without_ai_draft(saved["data"], withdrawn)),
         confirmed_by_patient=saved.get("confirmed_by_patient") is True,
         confirmed_at=saved.get("confirmed_at"),
         patient=PatientContext(**dict(context)) if context else None,
     )
+
+
+def _without_ai_draft(data: dict[str, Any], withdrawn: bool) -> dict[str, Any]:
+    """The sheet as shown once the patient stopped AI help: the AI draft is left out."""
+    return {**data, "ai_summary": None} if withdrawn else data
+
+
+async def _ai_withdrawn(
+    connection: Any, request: Request, *, hospital_id: UUID, visit_id: UUID
+) -> bool:
+    choice = await IntakeRepository(connection, request.app.state.settings).ai_consent(
+        hospital_id=hospital_id, visit_id=visit_id
+    )
+    return choice == "withdrawn"
 
 
 @router.get("/visits/{visit_id}/case-sheet.pdf", response_class=StarletteResponse)
@@ -242,6 +269,9 @@ async def export_case_sheet_pdf(
             raise _problem(
                 404, "NOT_FOUND", "Case sheet not found", "The case sheet is unavailable."
             )
+        withdrawn = await _ai_withdrawn(
+            connection, request, hospital_id=hospital_id, visit_id=visit_id
+        )
         visit = (
             (
                 await connection.execute(
@@ -291,7 +321,7 @@ async def export_case_sheet_pdf(
         part for part in (f"{age} years" if isinstance(age, int) else "", sex) if part
     )
     pdf = render_case_sheet_pdf(
-        saved["data"],
+        _without_ai_draft(saved["data"], withdrawn),
         queue_number=visit["token_label"] or "",
         attention_reasons=reasons,
         patient_line=patient_line,
@@ -335,6 +365,9 @@ async def patch_case_sheet(
             raise _problem(
                 404, "NOT_FOUND", "Case sheet not found", "The case sheet is unavailable."
             )
+        withdrawn = await _ai_withdrawn(
+            connection, request, hospital_id=hospital_id, visit_id=visit_id
+        )
         if int(saved["version"]) != expected_version:
             raise _problem(
                 409,
@@ -383,7 +416,7 @@ async def patch_case_sheet(
     return CaseSheetResponse(
         visit_id=visit_id,
         version=new_version,
-        case_sheet=_with_flag_reasons(updated),
+        case_sheet=_with_flag_reasons(_without_ai_draft(updated, withdrawn)),
         confirmed_by_patient=saved.get("confirmed_by_patient") is True,
         confirmed_at=saved.get("confirmed_at"),
     )
@@ -424,6 +457,13 @@ async def review_ai_summary(
         if saved is None:
             raise _problem(
                 404, "NOT_FOUND", "Case sheet not found", "The case sheet is unavailable."
+            )
+        if await _ai_withdrawn(connection, request, hospital_id=hospital_id, visit_id=visit_id):
+            raise _problem(
+                409,
+                "AI_HELP_WITHDRAWN",
+                "AI help stopped",
+                "The patient stopped AI help for this visit; the AI draft is not used.",
             )
         if int(saved["version"]) != expected_version:
             raise _problem(
@@ -500,6 +540,51 @@ async def review_ai_summary(
     )
 
 
+@router.post("/visits/{visit_id}/ai-consent/withdraw")
+async def withdraw_ai_help_at_desk(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse", "admin"))],
+) -> dict[str, Any]:
+    """Stop online AI help when a patient asks staff to (for example without a phone).
+
+    The same as the patient's own button on their status page: nothing more about the visit
+    goes to AI services, the doctor no longer sees the AI draft, and the staff member who
+    recorded it is in the audit log.
+    """
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _check_visit_department(
+            connection,
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            actor_id=actor_id,
+            role=principal.get("role"),
+        )
+        withdrawn = await IntakeRepository(
+            connection, request.app.state.settings
+        ).withdraw_ai_consent(hospital_id=hospital_id, visit_id=visit_id, by="staff")
+        if withdrawn:
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user",
+                actor_id=actor_id,
+                action="consent.ai_withdrawn",
+                resource_type="visit",
+                resource_id=visit_id,
+                meta={"by": "staff"},
+            )
+    if not withdrawn:
+        raise _problem(
+            409, "AI_HELP_NOT_ON", "AI help is not on", "AI help is not on for this visit."
+        )
+    return {"visit_id": str(visit_id), "ai_help": "withdrawn"}
+
+
 class PreviousVisit(BaseModel):
     """One earlier registered visit, as recorded then. Never edited from here."""
 
@@ -571,7 +656,8 @@ def _previous_visit(row: dict[str, Any]) -> PreviousVisit:
         for flag in sheet.get("red_flags") or []
         if isinstance(flag, dict)
     ]
-    summary = sheet.get("ai_summary") or {}
+    # A visit whose patient stopped AI help shows no AI draft, here as on its own sheet.
+    summary = {} if row.get("ai_withdrawn") else sheet.get("ai_summary") or {}
     return PreviousVisit(
         visit_id=row["visit_id"],
         service_date=row["service_date"],

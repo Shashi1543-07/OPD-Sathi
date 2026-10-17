@@ -77,6 +77,7 @@ VISIT_PROBES = (
         headers={"If-Match": '"1"'},
     ),
     Probe("GET", "/visits/{visit}/history", _STAFF),
+    Probe("POST", "/visits/{visit}/ai-consent/withdraw", _STAFF),
     Probe("GET", "/visits/{visit}/transcript", ("doctor", "admin")),
     Probe("GET", "/visits/{visit}/queue-events", _STAFF),
     Probe("POST", "/queue/{visit}/call", _STAFF),
@@ -130,6 +131,12 @@ SESSION_PROBES = (
         json={"version": "v1", "sha256": "0" * 64, "granted": True},
     ),
     Probe(
+        "POST",
+        "/intake/sessions/{visit}/consent/ai",
+        ("patient",),
+        json={"version": "v1", "sha256": "0" * 64, "granted": True},
+    ),
+    Probe(
         "POST", "/intake/sessions/{visit}/identity", ("patient",), json={"age": 30, "sex": "male"}
     ),
     Probe(
@@ -179,7 +186,12 @@ SESSION_PROBES = (
 )
 # Routes whose record is named by an opaque secret in the path instead of an id; they are
 # covered by the status-page and phone check-in tests.
-_SECRET_ROUTES = {"/status/{token}", "/status/{token}/stream", "/intake/checkin/{code}"}
+_SECRET_ROUTES = {
+    "/status/{token}",
+    "/status/{token}/stream",
+    "/status/{token}/ai-consent/withdraw",
+    "/intake/checkin/{code}",
+}
 _PATIENT_SOCKET = "/ws/intake/{visit_id}/audio"
 
 

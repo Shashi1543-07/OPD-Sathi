@@ -604,6 +604,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/intake/sessions/{visit_id}/consent/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Ai Consent
+         * @description The patient's separate, optional answer about online AI help; nothing is pre-selected.
+         *
+         *     Asked after the care consent, from its own notice (read aloud like the first). Saying no
+         *     changes nothing about the visit except that it runs on this server alone. The answer can
+         *     be changed until the summary is confirmed, and a "yes" can be withdrawn later from the
+         *     patient's status page or at the desk.
+         */
+        post: operations["record_ai_consent_intake_sessions__visit_id__consent_ai_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/identity": {
         parameters: {
             query?: never;
@@ -913,6 +938,30 @@ export interface paths {
         get: operations["patient_status_stream_status__token__stream_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/status/{token}/ai-consent/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Ai Help
+         * @description The patient stops online AI help for their visit, from their own status page.
+         *
+         *     The status link shows it is their visit. It can only stop AI help, never start it, so a
+         *     photographed token slip cannot switch AI on. From then on nothing more about the visit is
+         *     sent to AI services, and the doctor no longer sees the AI draft.
+         */
+        post: operations["withdraw_ai_help_status__token__ai_consent_withdraw_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1334,6 +1383,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/visits/{visit_id}/ai-consent/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Ai Help At Desk
+         * @description Stop online AI help when a patient asks staff to (for example without a phone).
+         *
+         *     The same as the patient's own button on their status page: nothing more about the visit
+         *     goes to AI services, the doctor no longer sees the AI draft, and the staff member who
+         *     recorded it is in the audit log.
+         */
+        post: operations["withdraw_ai_help_at_desk_visits__visit_id__ai_consent_withdraw_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/visits/{visit_id}/history": {
         parameters: {
             query?: never;
@@ -1384,7 +1457,11 @@ export interface paths {
         };
         /**
          * Speech Capabilities
-         * @description Tell the kiosk which speech features the server provides for this deployment.
+         * @description Tell the kiosk which speech and AI features this visit may use.
+         *
+         *     Without the patient's consent to online AI help there is no voice input at all (the
+         *     browser's own recogniser also sends audio online), and the patient taps and types.
+         *     Recorded question audio needs no consent: it is the hospital's text, not the patient's.
          */
         get: operations["speech_capabilities_intake_capabilities_get"];
         put?: never;
@@ -1426,7 +1503,10 @@ export interface paths {
         put?: never;
         /**
          * Speak Prompt
-         * @description Speak approved text only: bank questions, the consent notice, or this read-back.
+         * @description Speak approved text only: bank questions, the consent notices, or this read-back.
+         *
+         *     The read-back and AI-written follow-up questions come from the patient's own answers,
+         *     so an online voice speaks them only with the patient's consent to online AI help.
          */
         post: operations["speak_prompt_intake_sessions__visit_id__speak_post"];
         delete?: never;
@@ -1949,6 +2029,8 @@ export interface components {
             } | null;
             /** Queued At */
             queued_at?: string | null;
+            /** Ai Help */
+            ai_help?: ("on" | "off" | "withdrawn") | null;
         };
         /** PatientHistoryResponse */
         PatientHistoryResponse: {
@@ -2088,7 +2170,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "question" | "consent" | "readback";
+            kind: "question" | "consent" | "consent_ai" | "readback";
             /**
              * Question Id
              * @default
@@ -3419,6 +3501,43 @@ export interface operations {
             };
         };
     };
+    record_ai_consent_intake_sessions__visit_id__consent_ai_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsentPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     save_identity_intake_sessions__visit_id__identity_post: {
         parameters: {
             query?: never;
@@ -3985,6 +4104,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    withdraw_ai_help_status__token__ai_consent_withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -4731,6 +4883,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseSheetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    withdraw_ai_help_at_desk_visits__visit_id__ai_consent_withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

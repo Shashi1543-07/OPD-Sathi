@@ -38,10 +38,11 @@ const durationQuestion = {
   options: [],
 };
 
-async function seedSummary(page: Page) {
+async function seedSummary(page: Page, { online = true }: { online?: boolean } = {}) {
   await page.route("**/healthz", (route) => route.fulfill({ json: { status: "ok" } }));
+  // ``online``: the patient allowed online AI help (their own words may go to a voice service).
   await page.route("**/intake/capabilities", (route) =>
-    route.fulfill({ json: { stt: "browser", tts: "browser", ai: false } }),
+    route.fulfill({ json: { stt: "browser", tts: "browser", ai: false, online } }),
   );
   await page.addInitScript((session) => {
     sessionStorage.setItem("osa.patient.session", JSON.stringify(session));
@@ -141,6 +142,55 @@ test("Listen reads the summary aloud with the browser voice", async ({ page }) =
       ),
     )
     .toContainEqual({ text: "Synthetic fixed-template read-back.", lang: "en-IN" });
+});
+
+test("without AI help the read-back uses only a voice on this device", async ({ page }) => {
+  await seedSummary(page, { online: false });
+  await page.addInitScript(() => {
+    const spoken: Array<{ text: string; voice: string | undefined }> = [];
+    Object.defineProperty(window, "__spokenPrompts", { value: spoken });
+    class Utterance {
+      lang = "";
+      rate = 1;
+      voice: { name: string } | null = null;
+      onend: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(public text: string) {}
+    }
+    Object.defineProperty(window, "SpeechSynthesisUtterance", {
+      configurable: true,
+      value: Utterance,
+    });
+    Object.defineProperty(window, "speechSynthesis", {
+      configurable: true,
+      value: {
+        cancel() {},
+        // An online voice listed first, as Chrome does with its Google voices.
+        getVoices: () => [
+          { name: "Online English", lang: "en-IN", localService: false },
+          { name: "Device English", lang: "en-IN", localService: true },
+        ],
+        speak(utterance: Utterance) {
+          spoken.push({ text: utterance.text, voice: utterance.voice?.name });
+          window.setTimeout(() => utterance.onend?.(), 0);
+        },
+      },
+    });
+  });
+  await page.goto("/kiosk/intake");
+  await expect(page.getByText("Synthetic fixed-template read-back.")).toBeVisible();
+  const listen = page.locator(".intake-readback").getByRole("button", { name: /Listen/ });
+  if (await listen.isVisible()) await listen.click();
+  const spoken = () =>
+    page.evaluate(
+      () =>
+        (window as Window & { __spokenPrompts?: Array<{ text: string; voice?: string }> })
+          .__spokenPrompts,
+    );
+  await expect
+    .poll(spoken)
+    .toContainEqual({ text: "Synthetic fixed-template read-back.", voice: "Device English" });
+  expect((await spoken())?.some((item) => item.voice === "Online English")).toBe(false);
 });
 
 test("a patient idle on the review screen for 90 seconds gets a nurse", async ({ page }) => {

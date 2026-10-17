@@ -16,6 +16,8 @@ type Status = {
   department?: Partial<Record<Language, string>> | null;
   hospital?: string | null;
   language?: Language;
+  /** The patient's online AI help for this visit; "on" can be stopped from this page. */
+  ai_help?: "on" | "off" | "withdrawn";
   updated_at?: string;
 };
 
@@ -34,6 +36,71 @@ const DEMO: Status = {
   department: { en: "General Medicine", hi: "सामान्य चिकित्सा", mr: "सामान्य औषधोपचार" },
   hospital: null,
 };
+
+/** Lets the patient stop online AI help for their visit. It never turns AI help on. */
+function AiHelpControl({ token, onStopped }: { token: string; onStopped: () => void }) {
+  const { t } = useTranslation("status");
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function stop() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const response = await fetch(
+        `${apiOrigin}/status/${encodeURIComponent(token)}/ai-consent/withdraw`,
+        { method: "POST" },
+      );
+      // 409: already stopped (perhaps at the desk); either way it is off now.
+      if (!response.ok && response.status !== 409) throw new Error("not stopped");
+      onStopped();
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <section className="status-ai" aria-label={t("aiStop")}>
+      <p>{t("aiOn")}</p>
+      {confirming ? (
+        <div className="status-ai-confirm">
+          <p>{t("aiStopConfirm")}</p>
+          <div className="status-ai-actions">
+            <button
+              type="button"
+              className="status-ai-button is-stop"
+              disabled={busy}
+              onClick={() => void stop()}
+            >
+              {t("aiStopYes")}
+            </button>
+            <button
+              type="button"
+              className="status-ai-button"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+            >
+              {t("aiStopNo")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="status-ai-button" onClick={() => setConfirming(true)}>
+          {t("aiStop")}
+        </button>
+      )}
+      {failed && (
+        <p className="status-ai-error" role="alert">
+          {t("aiStopFailed")}
+        </p>
+      )}
+    </section>
+  );
+}
 
 /** The patient's phone after scanning the token QR code: live place in the queue. */
 export function PatientStatus() {
@@ -245,6 +312,17 @@ export function PatientStatus() {
               status.state === "called" ||
               status.state === "skipped") && (
               <p className="status-tip">{t("keepOpen", { ns: "status" })}</p>
+            )}
+            {!demo && status.ai_help === "on" && (
+              <AiHelpControl
+                token={token}
+                onStopped={() =>
+                  setStatus((current) => (current ? { ...current, ai_help: "withdrawn" } : current))
+                }
+              />
+            )}
+            {status.ai_help === "withdrawn" && (
+              <p className="status-tip">{t("aiStopped", { ns: "status" })}</p>
             )}
           </>
         )}

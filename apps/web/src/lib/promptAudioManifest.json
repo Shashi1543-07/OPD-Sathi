@@ -1,6 +1,7 @@
 {
   "en": {
     "consent": "/audio/en/mock-tone.wav",
+    "consent_ai": "/audio/en/mock-tone.wav",
     "danger.breathing_difficulty": "/audio/en/mock-tone.wav",
     "danger.chest_pain": "/audio/en/mock-tone.wav",
     "danger.fainting": "/audio/en/mock-tone.wav",
@@ -291,6 +292,7 @@
   },
   "hi": {
     "consent": "/audio/hi/mock-tone.wav",
+    "consent_ai": "/audio/hi/mock-tone.wav",
     "danger.breathing_difficulty": "/audio/hi/mock-tone.wav",
     "danger.chest_pain": "/audio/hi/mock-tone.wav",
     "danger.fainting": "/audio/hi/mock-tone.wav",
@@ -581,6 +583,7 @@
   },
   "mr": {
     "consent": "/audio/mr/mock-tone.wav",
+    "consent_ai": "/audio/mr/mock-tone.wav",
     "danger.breathing_difficulty": "/audio/mr/mock-tone.wav",
     "danger.chest_pain": "/audio/mr/mock-tone.wav",
     "danger.fainting": "/audio/mr/mock-tone.wav",

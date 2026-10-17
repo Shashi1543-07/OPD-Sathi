@@ -23,7 +23,8 @@ class FakeConnection:
         return self
 
     async def scalar(self, *_args, **_kwargs):
-        return next(self.values)
+        # After the two department lookups: no AI-help consent row for this visit.
+        return next(self.values, None)
 
     async def execute(self, *_args, **_kwargs):
         # Patient context lookup (age, sex, token) for the doctor's banner.

@@ -2,6 +2,7 @@
 
 import json
 from datetime import timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -11,6 +12,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.ai.providers.stt.chain import STTProviderChain
 from app.ai.providers.stt.mock import MockSTT
+from app.api.v1 import audio
 from app.api.v1.audio import router
 from app.config import Settings
 from app.core.ratelimit import InMemorySlidingWindow
@@ -36,7 +38,18 @@ class FakeRedis:
         return 1
 
 
-def _socket_app(*, language: str = "en", phase: str = "interview", reserve_result: int = 1):
+def _socket_app(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    language: str = "en",
+    phase: str = "interview",
+    reserve_result: int = 1,
+    consent: str | None = "granted",
+):
+    async def ai_consent(*_args: object, **_kwargs: object) -> str | None:
+        return consent  # The patient's answer about online AI help.
+
+    monkeypatch.setattr(audio, "read_ai_consent", ai_consent)
     settings = Settings(_env_file=None, app_env="test")
     hospital_id, visit_id, kiosk_id = uuid4(), uuid4(), uuid4()
     redis = FakeRedis(
@@ -55,6 +68,7 @@ def _socket_app(*, language: str = "en", phase: str = "interview", reserve_resul
     app = FastAPI()
     app.include_router(router)
     app.state.settings = settings
+    app.state.engine = SimpleNamespace()  # Only passed to read_ai_consent, patched above.
     app.state.redis_state = redis
     app.state.memory_limiter = InMemorySlidingWindow()
     mock = MockSTT(transcripts={"en-IN": ["synthetic spoken answer"]})
@@ -69,8 +83,10 @@ def _socket_app(*, language: str = "en", phase: str = "interview", reserve_resul
     return app, redis, f"/ws/intake/{visit_id}/audio", token
 
 
-def test_audio_socket_authenticates_streams_and_releases_kiosk_slot() -> None:
-    app, redis, path, token = _socket_app()
+def test_audio_socket_authenticates_streams_and_releases_kiosk_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, redis, path, token = _socket_app(monkeypatch)
     with TestClient(app).websocket_connect(path) as websocket:
         websocket.send_json({"type": "auth", "token": token})
         assert websocket.receive_json() == {"type": "ready"}
@@ -82,8 +98,8 @@ def test_audio_socket_authenticates_streams_and_releases_kiosk_slot() -> None:
     assert len(redis.removed) == 1
 
 
-def test_audio_socket_rejects_preconsent_session() -> None:
-    app, _redis, path, token = _socket_app(phase="consent")
+def test_audio_socket_rejects_preconsent_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _redis, path, token = _socket_app(monkeypatch, phase="consent")
     with TestClient(app).websocket_connect(path) as websocket:
         websocket.send_json({"type": "auth", "token": token})
         with pytest.raises(WebSocketDisconnect) as error:
@@ -91,8 +107,24 @@ def test_audio_socket_rejects_preconsent_session() -> None:
         assert error.value.code == 4403
 
 
-def test_audio_socket_enforces_kiosk_concurrency_limit() -> None:
-    app, _redis, path, token = _socket_app(reserve_result=0)
+@pytest.mark.parametrize("consent", ["declined", "withdrawn", None])
+def test_audio_socket_needs_the_patients_yes_to_online_ai_help(
+    monkeypatch: pytest.MonkeyPatch, consent: str | None
+) -> None:
+    app, redis, path, token = _socket_app(monkeypatch, consent=consent)
+    with TestClient(app).websocket_connect(path) as websocket:
+        websocket.send_json({"type": "auth", "token": token})
+        assert websocket.receive_json() == {"type": "error", "code": "STT_UNAVAILABLE"}
+        assert websocket.receive_json() == {"type": "fallback", "mode": "touch"}
+        with pytest.raises(WebSocketDisconnect) as error:
+            websocket.receive_json()
+        assert error.value.code == 4403
+    # No audio slot was ever taken for the kiosk.
+    assert redis.removed == []
+
+
+def test_audio_socket_enforces_kiosk_concurrency_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _redis, path, token = _socket_app(monkeypatch, reserve_result=0)
     with TestClient(app).websocket_connect(path) as websocket:
         websocket.send_json({"type": "auth", "token": token})
         assert websocket.receive_json() == {

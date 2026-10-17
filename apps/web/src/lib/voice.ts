@@ -11,9 +11,12 @@
 
 export type ServerSpeechMode = "sarvam" | "gemini" | "browser";
 export type SpeechCapabilities = {
-  stt: ServerSpeechMode;
+  /** "off": the patient said no to online AI help, so there is no voice input at all. */
+  stt: ServerSpeechMode | "off";
   tts: ServerSpeechMode;
   ai: boolean;
+  /** The patient allowed online AI help (their own words may be sent to a voice service). */
+  online?: boolean;
 };
 
 const locales: Record<string, string> = { en: "en-IN", hi: "hi-IN", mr: "mr-IN" };
@@ -280,8 +283,12 @@ export function sentences(text: string, maxLength = 180): string[] {
   return chunks;
 }
 
-function pickVoice(language: string) {
-  const voices = window.speechSynthesis?.getVoices() ?? [];
+function pickVoice(language: string, localOnly = false) {
+  // Some browser voices are online services; a patient's own words go only to voices on
+  // this device unless the patient allowed online AI help.
+  const voices = (window.speechSynthesis?.getVoices() ?? []).filter(
+    (voice) => !localOnly || voice.localService,
+  );
   const locale = locales[language] ?? "en-IN";
   return (
     voices.find((voice) => voice.lang === locale) ??
@@ -296,10 +303,10 @@ export function browserVoiceAvailable(language: string) {
   return Boolean(window.speechSynthesis) && Boolean(pickVoice(language));
 }
 
-function speakSentence(text: string, language: string): Promise<void> {
+function speakSentence(text: string, language: string, localOnly: boolean): Promise<void> {
   return new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text);
-    const voice = pickVoice(language);
+    const voice = pickVoice(language, localOnly);
     if (voice) utterance.voice = voice;
     utterance.lang = voice?.lang ?? locales[language] ?? "en-IN";
     utterance.rate = 0.92;
@@ -309,28 +316,35 @@ function speakSentence(text: string, language: string): Promise<void> {
   });
 }
 
-async function speakInBrowser(text: string, language: string): Promise<void> {
-  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+async function speakInBrowser(text: string, language: string, localOnly = false): Promise<boolean> {
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+  // Without an on-device voice the text stays on screen rather than going online.
+  if (localOnly && !pickVoice(language, true)) return false;
   window.speechSynthesis.cancel();
   const run = speechRun;
   for (const part of sentences(text)) {
-    if (run !== speechRun) return; // Stopped, or another read started.
-    await speakSentence(part, language);
+    if (run !== speechRun) return true; // Stopped, or another read started.
+    await speakSentence(part, language, localOnly);
   }
+  return true;
 }
 
-/** Play server audio if ``fetchAudio`` succeeds, otherwise use the browser voice. */
+/**
+ * Play server audio if ``fetchAudio`` succeeds, otherwise use the browser voice. ``localOnly``
+ * keeps the browser to voices on this device. Resolves to false when nothing could be read.
+ */
 export async function speak(
   text: string,
   language: string,
   fetchAudio?: () => Promise<Blob>,
-): Promise<void> {
+  { localOnly = false }: { localOnly?: boolean } = {},
+): Promise<boolean> {
   stopSpeaking();
   const run = speechRun;
   if (fetchAudio) {
     try {
       const blob = await fetchAudio();
-      if (run !== speechRun) return; // Stopped while the audio was loading.
+      if (run !== speechRun) return true; // Stopped while the audio was loading.
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       currentAudio = audio;
@@ -341,12 +355,12 @@ export async function speak(
         audio.onerror = () => resolve();
         audio.play().catch(() => resolve());
       });
-      return;
+      return true;
     } catch {
       // Fall through to the browser voice.
     }
   }
-  await speakInBrowser(text, language);
+  return speakInBrowser(text, language, localOnly);
 }
 
 // Some browsers load voices asynchronously.
