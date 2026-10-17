@@ -959,15 +959,15 @@ export function KioskIntake() {
                   : undefined
               }
             />
-            {/* Two equal choices: nothing is pre-selected and either one continues. */}
+            {/* Two equal choices, styled alike so neither is nudged: nothing is pre-selected
+                and either one continues. */}
             <div className="intake-actions intake-actions--stack">
               <button
                 type="button"
-                className="intake-btn intake-btn--primary intake-btn--large"
+                className="intake-btn intake-btn--secondary intake-btn--large"
                 disabled={busy}
                 onClick={() => void answerAi(true)}
               >
-                <Check aria-hidden="true" size={24} />
                 {t("aiYes")}
               </button>
               <button

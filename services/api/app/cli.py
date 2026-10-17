@@ -6,6 +6,7 @@ import getpass
 import os
 import random
 from datetime import UTC, date, datetime, timedelta
+from time import monotonic
 from typing import Any
 from uuid import UUID
 
@@ -17,9 +18,13 @@ from app.config import get_settings
 from app.core.crypto import encrypt_field
 from app.core.ids import stable_uuid7, uuid7
 from app.core.security import create_opaque_secret, digest_secret, hash_password
-from app.db.repositories import CaseSheetRepository
+from app.db.repositories import CaseSheetRepository, DocumentRepository, PatientRepository
 from app.db.session import set_hospital_scope
+from app.demo_papers import prescription_png
+from app.domain.case_sheet import CaseSheet
 from app.domain.checkin import checkin_code, checkin_code_digest
+from app.domain.patients import card_pin
+from app.domain.queue.tokens import token_label
 
 
 async def _create_admin(
@@ -932,6 +937,320 @@ async def _clear_demo_workflow() -> None:
     print(f"Removed the sample workflow visits. Rows removed: {deleted_visits.rowcount}.")
 
 
+# The demo's returning patient: her OPD card joins today's check-in to an earlier visit, so the
+# doctor sees her earlier visit and the prescription she brought to it. Everything is invented.
+_RETURNING_NAME = "Sunita Sample"
+_RETURNING_AGE = 52
+_RETURNING_DAYS_AGO = 21
+
+
+def _demo_returning_ids(hospital_id: UUID) -> tuple[UUID, UUID]:
+    """Her patient record and earlier visit (stable, so seeding again changes nothing)."""
+    return (
+        stable_uuid7(f"{hospital_id}:returning-demo:patient"),
+        stable_uuid7(f"{hospital_id}:returning-demo:visit"),
+    )
+
+
+def _returning_case_sheet() -> dict[str, Any]:
+    """What she reported at the earlier visit, in Marathi with the English beside it."""
+
+    def said(marathi: str, english: str) -> dict[str, str]:
+        return {"text_original": marathi, "text_en": english}
+
+    return CaseSheet.model_validate(
+        {
+            "schema_version": "1.0",
+            "language": "mr",
+            "chief_complaint": said("थकवा आणि खूप तहान लागते", "Tiredness and a lot of thirst"),
+            "hpi": {
+                "onset": said("दोन आठवड्यांपासून", "For two weeks"),
+                "associated_symptoms": [said("वारंवार लघवी", "Passing urine often")],
+            },
+            "past_history": {"conditions": ["Type 2 diabetes", "High blood pressure"]},
+            "medications": [
+                {"name": "Metformin", "dose": "500 mg twice a day", "source": "patient_stated"},
+                {"name": "Amlodipine", "dose": "5 mg at night", "source": "patient_stated"},
+            ],
+            "allergies": [said("पेनिसिलिन", "Penicillin")],
+            "family_history": [said("वडिलांना मधुमेह", "Father has diabetes")],
+            "routing": {
+                "department_code": "GENMED",
+                "confidence": 0.9,
+                "reason_en": "Synthetic demonstration record",
+                "needs_nurse_confirmation": False,
+            },
+            "patient_confirmation": {"confirmed_by_patient": True},
+        }
+    ).model_dump(mode="json")
+
+
+async def _seed_demo_returning(
+    hospital_id: UUID | None = None, *, reset: bool = False
+) -> dict[str, str]:
+    """Create (once) the returning patient, her earlier visit and its paper; print her card.
+
+    ``reset`` also removes visits joined to her record since then (earlier run-throughs), so
+    the next demo again starts from the one earlier visit, with the same OPD card.
+    """
+    settings = get_settings()
+    hospital_id = hospital_id or stable_uuid7("opd-saathi:demo-nagpur-government")
+    patient_id, visit_id = _demo_returning_ids(hospital_id)
+    service_day = date.today() - timedelta(days=_RETURNING_DAYS_AGO)
+    removed = 0
+    engine = create_async_engine(settings.migrations_database_url)
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            if reset:
+                # A follow-up visit points at an earlier one; unlink them before deleting.
+                await connection.execute(
+                    text(
+                        "UPDATE visits SET previous_visit_id = NULL "
+                        "WHERE hospital_id = :hospital_id AND patient_id = :patient_id "
+                        "AND id <> :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "patient_id": patient_id, "visit_id": visit_id},
+                )
+                later = await connection.execute(
+                    text(
+                        "DELETE FROM visits WHERE hospital_id = :hospital_id "
+                        "AND patient_id = :patient_id AND id <> :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "patient_id": patient_id, "visit_id": visit_id},
+                )
+                removed = int(later.rowcount)
+            department = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT id, token_prefix FROM departments "
+                            "WHERE hospital_id = :hospital_id AND code = 'GENMED'"
+                        ),
+                        {"hospital_id": hospital_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if department is None:
+                raise SystemExit("Run `python -m app.cli seed-demo` before seed-demo-returning.")
+            earlier = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT service_date FROM visits "
+                            "WHERE hospital_id = :hospital_id AND id = :visit_id"
+                        ),
+                        {"hospital_id": hospital_id, "visit_id": visit_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            if earlier is not None:
+                service_day = earlier["service_date"]
+            else:
+                await connection.execute(
+                    text(
+                        "INSERT INTO patients (id, hospital_id, name_enc, year_of_birth, sex, "
+                        "preferred_language) VALUES (:id, :hospital_id, :name_enc, :year, "
+                        "'female', 'mr') ON CONFLICT (id) DO NOTHING"
+                    ),
+                    {
+                        "id": patient_id,
+                        "hospital_id": hospital_id,
+                        "name_enc": encrypt_field(
+                            _RETURNING_NAME,
+                            key=settings.app_data_key_bytes,
+                            associated_data=f"patients:name_enc:{patient_id}",
+                        ),
+                        "year": service_day.year - _RETURNING_AGE,
+                    },
+                )
+                token_number = 1 + int(
+                    await connection.scalar(
+                        text(
+                            "SELECT coalesce(max(token_number), 0) FROM visits "
+                            "WHERE hospital_id = :hospital_id AND department_id = :department_id "
+                            "AND service_date = :service_date"
+                        ),
+                        {
+                            "hospital_id": hospital_id,
+                            "department_id": department["id"],
+                            "service_date": service_day,
+                        },
+                    )
+                    or 0
+                )
+                # About ten in the morning in Nagpur.
+                arrived = datetime(
+                    service_day.year, service_day.month, service_day.day, 4, 30, tzinfo=UTC
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO visits (id, hospital_id, patient_id, department_id, status, "
+                        "urgency, token_number, token_label, service_date, language, age_years, "
+                        "registered_at, queued_at, called_at, consult_started_at, "
+                        "consult_ended_at) VALUES (:id, :hospital_id, :patient_id, "
+                        ":department_id, 'done', 'routine', :token_number, :token_label, "
+                        ":service_date, 'mr', :age, :arrived, :arrived, :called, :started, :ended)"
+                    ),
+                    {
+                        "id": visit_id,
+                        "hospital_id": hospital_id,
+                        "patient_id": patient_id,
+                        "department_id": department["id"],
+                        "token_number": token_number,
+                        "token_label": token_label(department["token_prefix"], token_number),
+                        "service_date": service_day,
+                        "age": _RETURNING_AGE,
+                        "arrived": arrived,
+                        "called": arrived + timedelta(minutes=24),
+                        "started": arrived + timedelta(minutes=26),
+                        "ended": arrived + timedelta(minutes=38),
+                    },
+                )
+                await CaseSheetRepository(connection, settings).save(
+                    hospital_id=hospital_id, visit_id=visit_id, data=_returning_case_sheet()
+                )
+                await connection.execute(
+                    text(
+                        "UPDATE case_sheets SET confirmed_by_patient = true, "
+                        "confirmed_at = :confirmed_at "
+                        "WHERE hospital_id = :hospital_id AND visit_id = :visit_id"
+                    ),
+                    {"confirmed_at": arrived, "hospital_id": hospital_id, "visit_id": visit_id},
+                )
+                # She showed her old prescription that day; AI help was not used, so it is a
+                # photo only (the doctor reads it).
+                document_id = await DocumentRepository(connection, settings).add(
+                    hospital_id=hospital_id,
+                    visit_id=visit_id,
+                    kind="prescription",
+                    mime="image/png",
+                    content=prescription_png(),
+                    source="patient",
+                    uploaded_by=None,
+                    ocr_status="skipped",
+                )
+                await connection.execute(
+                    text(
+                        "UPDATE documents SET created_at = :at "
+                        "WHERE hospital_id = :hospital_id AND id = :document_id"
+                    ),
+                    {"at": arrived, "hospital_id": hospital_id, "document_id": document_id},
+                )
+            number, version = await PatientRepository(connection, settings).assign_mrn(
+                hospital_id=hospital_id, patient_id=patient_id, year=service_day.year
+            )
+    finally:
+        await engine.dispose()
+    pin = card_pin(
+        key=settings.app_hmac_key_bytes,
+        hospital_id=hospital_id,
+        patient_id=patient_id,
+        version=version,
+    )
+    if removed:
+        print(f"Removed {removed} later visit(s) of the returning patient (earlier run-throughs).")
+    print(
+        f"Returning patient (fictional): OPD number {number}, PIN {pin}; "
+        f"age {_RETURNING_AGE}, female; earlier visit on {service_day.isoformat()}."
+    )
+    return {"opd_number": number, "pin": pin, "visit_id": str(visit_id)}
+
+
+async def _clear_demo_returning(hospital_id: UUID | None = None) -> int:
+    """Remove the returning patient with every visit joined to her record (rehearsals too)."""
+    settings = get_settings()
+    hospital_id = hospital_id or stable_uuid7("opd-saathi:demo-nagpur-government")
+    patient_id, _ = _demo_returning_ids(hospital_id)
+    engine = create_async_engine(settings.migrations_database_url)
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            # A follow-up visit points at the earlier one; unlink them before deleting.
+            await connection.execute(
+                text(
+                    "UPDATE visits SET previous_visit_id = NULL "
+                    "WHERE hospital_id = :hospital_id AND patient_id = :patient_id"
+                ),
+                {"hospital_id": hospital_id, "patient_id": patient_id},
+            )
+            removed = await connection.execute(
+                text(
+                    "DELETE FROM visits WHERE hospital_id = :hospital_id "
+                    "AND patient_id = :patient_id"
+                ),
+                {"hospital_id": hospital_id, "patient_id": patient_id},
+            )
+            await connection.execute(
+                text("DELETE FROM patients WHERE hospital_id = :hospital_id AND id = :patient_id"),
+                {"hospital_id": hospital_id, "patient_id": patient_id},
+            )
+    finally:
+        await engine.dispose()
+    print(f"Removed the demo's returning patient and {removed.rowcount} visit(s).")
+    return int(removed.rowcount)
+
+
+async def _ai_check() -> int:
+    """Ask the configured AI and voice services for a tiny answer; no patient data is sent.
+
+    Returns how many configured services did not answer (the demo still runs without them:
+    rules, tapping and typing, and the browser's own voices).
+    """
+    from app.ai.providers.llm.factory import build_llm_provider
+    from app.ai.providers.llm.gemini import GeminiProvider
+    from app.ai.speech import SpeechService, SpeechUnavailableError
+
+    settings = get_settings()
+    failures = 0
+    llm = build_llm_provider(settings)
+    try:
+        if not isinstance(llm, GeminiProvider):
+            print(f"AI: off ({getattr(llm, 'name', 'mock')}). The demo runs on the rules.")
+        else:
+            started = monotonic()
+            try:
+                answer = await llm.generate_json(
+                    "Reply with ready set to true.",
+                    {
+                        "type": "object",
+                        "properties": {"ready": {"type": "boolean"}},
+                        "required": ["ready"],
+                    },
+                    timeout=15.0,
+                )
+                answered = answer.get("ready") is True
+            except Exception:
+                answered = False
+            if answered:
+                print(f"AI: Gemini ({llm.model}) answered in {monotonic() - started:.1f} s.")
+            else:
+                failures += 1
+                print("AI: Gemini did not answer. Check the internet connection and the key.")
+        speech = SpeechService(settings, llm)
+        if not speech.server_tts:
+            print("Voice: the browser's own voices (no voice service configured).")
+        else:
+            started = monotonic()
+            try:
+                clip = await speech.synthesize("नमस्कार", language="mr")
+                print(
+                    f"Voice: {speech.tts_mode} answered in {monotonic() - started:.1f} s "
+                    f"({len(clip.content) // 1024} kB of audio)."
+                )
+            except SpeechUnavailableError:
+                failures += 1
+                print(f"Voice: {speech.tts_mode} did not answer; read-aloud uses browser voices.")
+    finally:
+        if isinstance(llm, GeminiProvider):
+            await llm.aclose()
+    return failures
+
+
 async def _demo_history(command: str, days: int = 30) -> None:
     """Seed or remove the believable month of finished OPD days, or clear seed-bulk rows."""
     from app.demo_history import clear_bulk, clear_history, refresh_reports, seed_history
@@ -1000,6 +1319,21 @@ def main() -> None:
     commands.add_parser("seed-demo", help="Create the fictional Nagpur demonstration hospital")
     commands.add_parser("seed-demo-data", help="Create five removable synthetic walkthrough visits")
     commands.add_parser("clear-demo-data", help="Remove only the synthetic walkthrough visits")
+    returning = commands.add_parser(
+        "seed-demo-returning",
+        help="Add the demo's returning patient (an OPD card, an earlier visit, an old paper)",
+    )
+    returning.add_argument(
+        "--reset",
+        action="store_true",
+        help="Also remove visits joined to her record since (earlier run-throughs)",
+    )
+    commands.add_parser(
+        "clear-demo-returning", help="Remove the demo's returning patient and all her visits"
+    )
+    commands.add_parser(
+        "ai-check", help="Ask the AI and voice services for a tiny answer (no patient data)"
+    )
     demo_kiosk = commands.add_parser(
         "demo-kiosk", help="Create a kiosk for the demo hospital and print its activation link"
     )
@@ -1073,6 +1407,14 @@ def main() -> None:
     if args.command == "clear-demo-data":
         asyncio.run(_clear_demo_workflow())
         return
+    if args.command == "seed-demo-returning":
+        asyncio.run(_seed_demo_returning(reset=args.reset))
+        return
+    if args.command == "clear-demo-returning":
+        asyncio.run(_clear_demo_returning())
+        return
+    if args.command == "ai-check":
+        raise SystemExit(1 if asyncio.run(_ai_check()) else 0)
     if args.command == "seed-bulk":
         asyncio.run(_seed_bulk(visits=args.visits))
         return

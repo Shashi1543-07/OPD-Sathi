@@ -395,6 +395,31 @@ describe("Phase 7.2 queue board", () => {
     expect(within(queue).getByRole("button", { name: "Call patient" })).toBeEnabled();
   });
 
+  it("says which danger sign the patient tapped, not its code", async () => {
+    vi.spyOn(staffAuth, "request").mockImplementation(async (path) =>
+      path.startsWith("/alerts")
+        ? response({
+            items: [
+              {
+                id: "alert-1",
+                visit_id: "visit-1",
+                rule_id: "RF_DANGER_TILE",
+                level: "urgent",
+                evidence: "DS_CHEST",
+                reason_en: "Patient selected a danger-sign help tile.",
+                token_label: "MED-003",
+                source: "tile",
+              },
+            ],
+          })
+        : response({ items: [item({})], departments, next_cursor: null, missed: [] }),
+    );
+    renderBoard();
+    const alerts = await screen.findByRole("region", { name: "Unacknowledged staff alerts" });
+    expect(alerts).toHaveTextContent("patient tapped “Chest discomfort”");
+    expect(alerts).not.toHaveTextContent("DS_CHEST");
+  });
+
   it("persists the alert sound preference", async () => {
     vi.spyOn(staffAuth, "request").mockImplementation(async (path) =>
       path.startsWith("/alerts")

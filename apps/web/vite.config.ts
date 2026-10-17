@@ -24,7 +24,11 @@ export default defineConfig({
     tailwindcss(),
     react(),
     VitePWA({
-      registerType: "prompt",
+      // A new build (for example after start-demo.ps1 rebuilds the app) takes over at once and
+      // reloads open pages. With "prompt" and no prompt shown, a kiosk tab that stays open
+      // kept running the old version until every tab closed. A reload resumes a patient's
+      // check-in from session storage, and a doctor's unsaved edit still asks before leaving.
+      registerType: "autoUpdate",
       includeAssets: ["saathi-icon.svg"],
       manifest: {
         name: "OPD Saathi",
