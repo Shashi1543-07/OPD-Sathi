@@ -103,20 +103,52 @@ async def test_retention_dry_run_preserves_rows_then_apply_pseudonymizes_old_vis
                 ),
                 {"id": uuid4(), "hospital_id": hospital_id, "visit_id": visit_id, "old": old},
             )
+            document_id = uuid4()
+            await connection.execute(
+                text(
+                    "INSERT INTO documents (id, hospital_id, visit_id, object_key, mime, size, "
+                    "ocr_status, created_at) VALUES (:id, :hospital_id, :visit_id, :key, "
+                    "'image/jpeg', 4, 'skipped', :old)"
+                ),
+                {
+                    "id": document_id,
+                    "hospital_id": hospital_id,
+                    "visit_id": visit_id,
+                    "key": f"pg:{document_id}",
+                    "old": old,
+                },
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO document_contents (hospital_id, document_id, ciphertext) "
+                    "VALUES (:hospital_id, :document_id, :ciphertext)"
+                ),
+                {
+                    "hospital_id": hospital_id,
+                    "document_id": document_id,
+                    "ciphertext": b"\x01synthetic",
+                },
+            )
 
-        await _run(
+        dry_run = await _run(
             hospital_id=hospital_id,
             apply=False,
             retention_days=30,
             anonymise_days=90,
             settings=settings,
         )
+        assert dry_run["documents"] == 1
         async with engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
             original_name = await connection.scalar(
                 text("SELECT name_enc FROM patients WHERE id = :id"), {"id": patient_id}
             )
             assert original_name == encrypted_name
+            kept_photos = await connection.scalar(
+                text("SELECT count(*) FROM document_contents WHERE document_id = :id"),
+                {"id": document_id},
+            )
+            assert kept_photos == 1
 
         await _run(
             hospital_id=hospital_id,
@@ -132,6 +164,13 @@ async def test_retention_dry_run_preserves_rows_then_apply_pseudonymizes_old_vis
             )
             remaining_sheets = await connection.scalar(
                 text("SELECT count(*) FROM case_sheets WHERE visit_id = :id"), {"id": visit_id}
+            )
+            remaining_papers = await connection.scalar(
+                text("SELECT count(*) FROM documents WHERE visit_id = :id"), {"id": visit_id}
+            )
+            remaining_photos = await connection.scalar(
+                text("SELECT count(*) FROM document_contents WHERE document_id = :id"),
+                {"id": document_id},
             )
             patient = (
                 (
@@ -158,7 +197,7 @@ async def test_retention_dry_run_preserves_rows_then_apply_pseudonymizes_old_vis
                 .mappings()
                 .one()
             )
-            assert remaining_turns == remaining_sheets == 0
+            assert remaining_turns == remaining_sheets == remaining_papers == remaining_photos == 0
             assert (
                 decrypt_field(
                     patient["name_enc"],

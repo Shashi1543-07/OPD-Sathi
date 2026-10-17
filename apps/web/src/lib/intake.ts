@@ -36,6 +36,11 @@ type Session = {
 /** The OPD card a patient brings to the next visit: registration number and PIN. */
 export type OpdCard = { number: string; pin: string };
 
+/** What an old paper is: the patient picks it before taking the photo. */
+export type DocumentKind = "prescription" | "lab_report" | "discharge_summary" | "other";
+/** A photo of an old paper the patient added while checking in (kept for the doctor). */
+export type PatientDocument = { id: string; kind: DocumentKind; size: number; added_at: string };
+
 /** A token issued on this phone: shown again instead of starting a second visit. */
 export type MobileTicket = {
   token: string;
@@ -659,6 +664,17 @@ export const intake = {
       }
     ).medicines;
   },
+  /** Keep a photo of an old paper with this visit; with AI help it is also read for the doctor. */
+  addDocument: (photo: Blob, kind: DocumentKind) =>
+    patientRequest<PatientDocument>(`/documents?kind=${kind}`, {
+      method: "POST",
+      headers: { "Content-Type": photo.type || "image/jpeg" },
+      body: photo,
+    }),
+  documents: () =>
+    patientRequest<{ documents: PatientDocument[]; limit: number }>("/documents"),
+  removeDocument: (documentId: string) =>
+    patientRequest<void>(`/documents/${documentId}`, { method: "DELETE" }),
   changeLanguage: async (language: Language) => {
     const result = await patientRequest<{
       language: Language;

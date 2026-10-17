@@ -95,19 +95,33 @@ const historyResponse = (history: object = emptyHistory) =>
   new Response(JSON.stringify(history), { status: 200 });
 
 const noEvents = { visit_id: "visit-1", events: [] };
+const noPapers = {
+  visit_id: "visit-1",
+  documents: [],
+  earlier: [],
+  earlier_shown: true,
+  limit: 10,
+};
+/** The panels that load on their own: earlier visits, old papers and the queue timeline. */
+const ownRequest = (path: string) =>
+  path.endsWith("/history") ||
+  path.endsWith("/queue-events") ||
+  path.includes("/documents");
 
 /**
- * Answer the consultation's requests in order. The earlier-visits panel and the queue
- * timeline load on their own and get their own answers, so they never take a response
- * meant for the case sheet.
+ * Answer the consultation's requests in order. The earlier-visits panel, the old papers and
+ * the queue timeline load on their own and get their own answers, so they never take a
+ * response meant for the case sheet.
  */
 function mockRequests(
   responses: Response[],
   history: object | (() => Response) = emptyHistory,
   events: object = noEvents,
+  papers: (path: string, init?: RequestInit) => Response = () =>
+    new Response(JSON.stringify(noPapers), { status: 200 }),
 ) {
   const queue = [...responses];
-  const request = vi.spyOn(staffAuth, "request").mockImplementation((path) =>
+  const request = vi.spyOn(staffAuth, "request").mockImplementation((path, init) =>
     Promise.resolve(
       path.endsWith("/history")
         ? typeof history === "function"
@@ -115,13 +129,12 @@ function mockRequests(
           : historyResponse(history)
         : path.endsWith("/queue-events")
           ? new Response(JSON.stringify(events), { status: 200 })
-          : (queue.shift() ?? new Response(null, { status: 500 })),
+          : path.includes("/documents")
+            ? papers(path, init)
+            : (queue.shift() ?? new Response(null, { status: 500 })),
     ),
   );
-  const calls = () =>
-    request.mock.calls.filter(
-      ([path]) => !String(path).endsWith("/history") && !String(path).endsWith("/queue-events"),
-    );
+  const calls = () => request.mock.calls.filter(([path]) => !ownRequest(String(path)));
   return { request, calls };
 }
 

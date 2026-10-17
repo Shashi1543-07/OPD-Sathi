@@ -5,13 +5,14 @@ import re
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, Depends, Header, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import text
 from starlette.responses import Response as StarletteResponse
 
+from app.api.v1.visit_access import check_visit_department as _check_visit_department
+from app.api.v1.visit_access import visit_in_care
 from app.core.audit import audit
 from app.core.auth import require_role
 from app.core.errors import ApiProblemError
@@ -127,37 +128,6 @@ def _parse_if_match(value: str | None) -> int:
             "If-Match must contain one positive case sheet version.",
         )
     return int(candidate)
-
-
-async def _check_visit_department(
-    connection: Any,
-    *,
-    hospital_id: UUID,
-    visit_id: UUID,
-    actor_id: UUID,
-    role: str | None = None,
-) -> None:
-    visit_department = await connection.scalar(
-        text(
-            "SELECT department_id FROM visits WHERE hospital_id = :hospital_id AND id = :visit_id"
-        ),
-        {"hospital_id": hospital_id, "visit_id": visit_id},
-    )
-    if not isinstance(visit_department, UUID):
-        raise _problem(404, "NOT_FOUND", "Visit not found", "The requested visit is unavailable.")
-    if role == "admin":
-        return  # Administrators oversee every department; reads are still audited.
-    assigned_department = await connection.scalar(
-        text(
-            "SELECT department_id FROM users WHERE hospital_id = :hospital_id "
-            "AND id = :actor_id AND is_active = true"
-        ),
-        {"hospital_id": hospital_id, "actor_id": actor_id},
-    )
-    if not isinstance(assigned_department, UUID):
-        raise _problem(403, "FORBIDDEN", "Permission denied", "No staff department is assigned.")
-    if assigned_department != visit_department:
-        raise _problem(404, "NOT_FOUND", "Visit not found", "The requested visit is unavailable.")
 
 
 @router.get("/visits/{visit_id}/case-sheet", response_model=CaseSheetResponse)
@@ -716,38 +686,34 @@ async def get_patient_history(
             actor_id=actor_id,
             role=principal.get("role"),
         )
-        visit = (
-            (
-                await connection.execute(
-                    text(
-                        "SELECT v.patient_id, v.patient_link, v.previous_visit_id, p.mrn, "
-                        "(v.status IN ('registering', 'awaiting_confirmation', 'queued', "
-                        "'called', 'in_consult', 'skipped') OR v.service_date = :today) "
-                        "AS in_care "
-                        "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
-                        "AND p.id = v.patient_id "
-                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
-                    ),
-                    {
-                        "hospital_id": hospital_id,
-                        "visit_id": visit_id,
-                        "today": datetime.now(ZoneInfo("Asia/Kolkata")).date(),
-                    },
-                )
-            )
-            .mappings()
-            .one()
+        patient_id, in_care = await visit_in_care(
+            connection, hospital_id=hospital_id, visit_id=visit_id
         )
-        if not visit["in_care"] and principal.get("role") != "admin":
+        if not in_care and principal.get("role") != "admin":
             raise _problem(
                 403,
                 "HISTORY_CLOSED",
                 "Earlier visits unavailable",
                 "Earlier visits are shown only while the patient is under your care today.",
             )
+        visit = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT v.patient_link, v.previous_visit_id, p.mrn FROM visits v "
+                        "JOIN patients p ON p.hospital_id = v.hospital_id "
+                        "AND p.id = v.patient_id "
+                        "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
+                    ),
+                    {"hospital_id": hospital_id, "visit_id": visit_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
         rows = await PatientRepository(connection, request.app.state.settings).visit_history(
             hospital_id=hospital_id,
-            patient_id=visit["patient_id"],
+            patient_id=patient_id,
             exclude_visit_id=visit_id,
         )
         await audit(

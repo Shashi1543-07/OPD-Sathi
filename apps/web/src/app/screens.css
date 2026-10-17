@@ -8434,6 +8434,195 @@
 }
 
 /* ============================================================
+   Consultation: old papers (photos, and what AI read from them)
+   ============================================================ */
+.dp,
+.dp-group {
+  display: grid;
+  gap: var(--space-3);
+}
+.dp {
+  gap: var(--space-4);
+}
+.dp-group h4 {
+  font-size: var(--font-size-md);
+  margin: 0;
+}
+.dp-list {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dp-paper {
+  align-items: start;
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+}
+.dp-paper.is-expanded {
+  grid-template-columns: minmax(0, 1fr);
+}
+.dp-photo {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: zoom-in;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  width: 100%;
+}
+.dp-paper.is-expanded .dp-photo {
+  cursor: zoom-out;
+}
+.dp-photo img {
+  display: block;
+  height: auto;
+  max-height: 12rem;
+  object-fit: cover;
+  width: 100%;
+}
+.dp-paper.is-expanded .dp-photo img {
+  max-height: none;
+  object-fit: contain;
+}
+.dp-photo-placeholder {
+  align-items: center;
+  color: var(--text-muted);
+  display: flex;
+  font-size: var(--font-size-sm);
+  gap: var(--space-2);
+  justify-content: center;
+  min-height: 7rem;
+}
+.dp-body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.dp-meta,
+.dp-status {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+.dp-status {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+.dp-reading {
+  border-left: 3px solid #c7d2fe;
+  display: grid;
+  gap: var(--space-2);
+  padding-left: var(--space-3);
+}
+.dp-reading--accepted {
+  border-left-color: var(--routine);
+}
+.dp-reading > .cx-ai-chip,
+.dp-reading > .cx-verified-chip {
+  justify-self: start;
+}
+.dp-reading h5 {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.05em;
+  margin: var(--space-1) 0 0;
+  text-transform: uppercase;
+}
+.dp-line {
+  margin: 0;
+}
+.dp-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+.dp-items {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.dp-results-wrap {
+  overflow-x: auto;
+}
+.dp-results {
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  width: 100%;
+}
+.dp-results th,
+.dp-results td {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+.dp-results thead th {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+.dp-results tbody th {
+  font-weight: 600;
+}
+/* Outside the printed range: said in words as well, never by colour alone. */
+.dp-results tr.is-outside td:last-child {
+  color: var(--urgent-ink);
+  font-weight: 700;
+}
+.dp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.dp-add {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.dp-add-kind {
+  align-items: center;
+  display: inline-flex;
+  font-size: var(--font-size-sm);
+  gap: var(--space-2);
+}
+.dp-add-kind select {
+  min-height: 2.5rem;
+}
+.dp-add-status {
+  color: var(--text-muted);
+  flex-basis: 100%;
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+.dp-add-status:empty {
+  display: none;
+}
+.dp-spin {
+  animation: dp-spin 0.9s linear infinite;
+}
+@keyframes dp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp-spin {
+    animation: none;
+  }
+}
+@media (max-width: 36rem) {
+  .dp-paper {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ============================================================
    Phone check-in (/m/<code>): the patient's own phone
    ============================================================ */
 .kiosk-app[data-layout="mobile"] .kiosk-header {

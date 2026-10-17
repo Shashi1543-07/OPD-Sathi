@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui";
 import { EmergencyNotice } from "./EmergencyNotice";
+import { KioskPapers } from "./KioskPapers";
 import {
   intake,
   IntakeRequestError,
@@ -31,6 +32,7 @@ import {
 import { useLanguageStore } from "../languageStore";
 import type { Language } from "../i18n";
 import { useKioskPrefs } from "../lib/kioskPrefs";
+import { shrinkPhoto } from "../lib/photos";
 import {
   browserRecognitionAvailable,
   listenInBrowser,
@@ -80,24 +82,6 @@ const STEPS: { stage: Stage[]; key: string }[] = [
 const RESTART_SECONDS = 60;
 /** A patient idle this long on the review screen gets a nurse sent to them. */
 const SUMMARY_IDLE_MS = 90_000;
-
-/** Downscale a camera photo to a ~1280px JPEG so uploads stay small on slow networks. */
-async function shrinkPhoto(file: File): Promise<Blob> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.82),
-    );
-    return blob ?? file;
-  } catch {
-    return file;
-  }
-}
 
 /** Split a stored answer back into tapped options and free text. */
 function splitAnswer(question: Question, answer: string | number | null) {
@@ -1463,6 +1447,7 @@ export function KioskIntake() {
                 </li>
               ))}
             </ul>
+            <KioskPapers online={capabilities?.online === true} disabled={busy} />
             <div className="intake-actions">
               <span className="intake-actions-spacer" />
               <button

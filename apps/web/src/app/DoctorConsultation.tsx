@@ -47,6 +47,8 @@ import { staffAuth } from "../lib/auth";
 import { ConfidenceChip, Popover } from "../components/ui";
 import { ConsultPatientRailView } from "./ConsultPatientRail";
 import { PreviousVisits, type PatientHistory } from "./PreviousVisits";
+import { DocumentsPanel } from "./DocumentsPanel";
+import { useVisitDocuments } from "./visitDocuments";
 import { AyurvedaPanel } from "./AyurvedaPanel";
 import { useConsultQueue } from "./consultQueue";
 import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
@@ -107,7 +109,7 @@ type CaseSheetResult = {
   patient?: PatientContext | null;
 };
 type Draft = { path: string; value: string; initial: string; label: string };
-type Tab = "overview" | "history" | "previous" | "ayurveda" | "transcript" | "notes";
+type Tab = "overview" | "history" | "previous" | "papers" | "ayurveda" | "transcript" | "notes";
 type StepState = "done" | "active" | "next" | "upcoming";
 
 const emptyText = "—";
@@ -116,6 +118,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "history", label: "tabHistory" },
   // Earlier visits stay apart from today's history so the two are never confused.
   { id: "previous", label: "tabPrevious" },
+  // Photos of old papers the patient brought, with what AI read from them.
+  { id: "papers", label: "tabPapers" },
   // Only on sheets with an Ayurveda section (hospitals that ask the Ayurveda history).
   { id: "ayurveda", label: "tabAyurveda" },
   { id: "transcript", label: "tabTranscript" },
@@ -306,6 +310,11 @@ export function DoctorConsultation() {
     return () => window.clearTimeout(timer);
   }, [loadHistory]);
   const patientHistory = history?.visitId === visitId ? history.data : undefined;
+  // Old papers load on their own too, and refresh while AI is still reading one.
+  const papers = useVisitDocuments(visitId);
+  const paperCount = papers.data
+    ? papers.data.documents.length + papers.data.earlier.length
+    : 0;
 
   // The visit's queue timeline (token, calls, missed calls, recalls); extra information only.
   const [timeline, setTimeline] = useState<{ visitId: string; events: QueueEvent[] }>();
@@ -521,6 +530,8 @@ export function DoctorConsultation() {
       if (!response.ok && response.status !== 409) throw new Error(t("aiHelpStopFailed"));
       setConfirmStopAi(null);
       await load();
+      // What AI read from the patient's papers is hidden from now on, too.
+      void papers.reload();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t("aiHelpStopFailed"));
     } finally {
@@ -1391,7 +1402,20 @@ export function DoctorConsultation() {
         visitId={visitId}
         history={patientHistory}
         failed={historyFailed}
-        onLinked={() => void loadHistory()}
+        onLinked={() => {
+          void loadHistory();
+          // A linked record can bring papers from the patient's earlier visits.
+          void papers.reload();
+        }}
+      />
+    );
+  } else if (tab === "papers") {
+    panel = (
+      <DocumentsPanel
+        visitId={visitId}
+        documents={papers.data}
+        failed={papers.failed}
+        onChanged={() => void papers.reload()}
       />
     );
   } else if (tab === "transcript") {
@@ -1775,6 +1799,9 @@ export function DoctorConsultation() {
                 )}
                 {item.id === "previous" && (patientHistory?.previous_visits.length ?? 0) > 0 && (
                   <span className="cx-tab-badge">{patientHistory?.previous_visits.length}</span>
+                )}
+                {item.id === "papers" && paperCount > 0 && (
+                  <span className="cx-tab-badge">{paperCount}</span>
                 )}
                 {item.id === "history" && dirty && (
                   <span className="cx-tab-dot">

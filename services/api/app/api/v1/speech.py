@@ -19,6 +19,7 @@ from app.core.errors import ApiProblemError
 from app.core.ratelimit import check_rate_limit
 from app.db.repositories import CaseSheetRepository
 from app.db.session import set_hospital_scope
+from app.domain.documents import IMAGE_TYPES, MAX_IMAGE_BYTES, looks_like
 from app.domain.interview.bank import QUESTIONS, Question
 from app.domain.interview.consent import get_consent_copy
 from app.domain.interview.engine import InterviewState
@@ -208,20 +209,6 @@ async def speak_prompt(
     )
 
 
-_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
-# The kiosk sends a ~1280 px JPEG (about 200 kB); the API refuses any request over 1 MiB.
-MAX_IMAGE_BYTES = 1_000_000
-
-
-def _looks_like(content_type: str, image: bytes) -> bool:
-    """Whether the file starts with the signature of the image type it claims to be."""
-    if content_type == "image/jpeg":
-        return image.startswith(b"\xff\xd8\xff")
-    if content_type == "image/png":
-        return image.startswith(b"\x89PNG\r\n\x1a\n")
-    return image[:4] == b"RIFF" and image[8:12] == b"WEBP"
-
-
 @router.post("/sessions/{visit_id}/prescription-photo")
 async def read_prescription_photo(
     visit_id: UUID,
@@ -237,7 +224,7 @@ async def read_prescription_photo(
     if state.get("phase") not in {"interview", "summary"}:
         raise _error(409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Finish the step.")
     content_type = request.headers.get("content-type", "").lower().split(";")[0].strip()
-    if content_type not in _IMAGE_TYPES:
+    if content_type not in IMAGE_TYPES:
         raise _error(
             415, "UNSUPPORTED_IMAGE", "Unsupported photo", "Take a photo of the prescription."
         )
@@ -246,7 +233,7 @@ async def read_prescription_photo(
         raise _error(400, "EMPTY_IMAGE", "No photo", "Take the photo again.")
     if len(image) > MAX_IMAGE_BYTES:
         raise _error(413, "IMAGE_TOO_LARGE", "Photo too large", "Take the photo again.")
-    if not _looks_like(content_type, image):
+    if not looks_like(content_type, image):
         raise _error(
             415, "UNSUPPORTED_IMAGE", "Not a photo", "This file is not a photo. Take a photo."
         )

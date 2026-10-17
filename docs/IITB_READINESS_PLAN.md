@@ -255,6 +255,18 @@ each sentence. The doctor sees source chips that open the answer in the transcri
 The PDF prints who reviewed it and never prints a rejected draft. The background AI step never
 overwrites a reviewed summary. Documents are deferred to Phase 6 (see the checklist).
 
+*As built (Phase 6):* on the review screen the patient taps what a paper is (prescription, test
+report, discharge paper, other) and photographs it; up to five, removable until confirmation. Staff
+can photograph more while the patient is under care (ten per visit in all). Photos are checked
+(JPEG/PNG/WebP whose bytes match the type, at most 1 MB) and stored encrypted, bound to their
+document. With the patient's AI consent, Gemini reads each paper in the background into an
+unconfirmed draft (diagnoses, medicines, results with the printed range, procedures, the printed
+date). The doctor's *Old papers* tab shows each photo beside its draft and records **matches the
+photo** or **does not match**. Results are flagged above/below/within only against the range printed
+on the same paper, by arithmetic in `domain/documents.py`; nothing is flagged from a general range or
+from the model. Earlier visits' papers follow the earlier-visits rule. Without AI consent the photo
+is kept unread.
+
 ### 4.5 Future RAG assistant (Feature 6) — design only
 
 Documented in `docs/RAG_DESIGN.md`: retrieval scoped by patient id and hospital *before* search,
@@ -273,7 +285,8 @@ All changes are additive Alembic migrations with working downgrades; nothing is 
 | 0018 `patient_identity` (done) | Drop unique `uq_patients_hospital_phone_hmac`, add a non-unique index; `patients.mrn` (unique per hospital) and `patients.card_version`; `patient_number_counters` (per hospital and year, RLS); `visits.patient_link` (`card`/`staff`) and `visits.previous_visit_id` (tenant FK) | Returning patients, shared phones (D3) |
 | 0020 `interview_settings` (done) | `hospital_interview_settings.ayurveda_module` (RLS, audited changes) | Ayurveda history per hospital |
 | 0019 `queue_recall` (done) | `visits.status` allows `skipped`; `visits.called_by`, `skipped_at`, `recalled_at`, `skip_count`; `visit_events` table (RLS, insert/select only for the app role, insert for the worker); `hospital_queue_settings.call_grace_seconds` | Missed-patient workflow, audit history |
-| later | `documents` storage fields; consent purposes | Phase 6 (both moved from Phase 4–5) |
+| 0021 `consent_purposes` (done) | `consents.purpose` (`care`/`ai`, one of each per visit), `withdrawn_at`, `withdrawn_by` (`patient`/`staff`) | Optional, revocable AI consent (R9) |
+| 0022 `documents` (done) | `documents.kind`, `source` (`patient`/`staff`, with `uploaded_by`), `document_date`, `review_status`/`reviewed_by`/`reviewed_at`; `ocr_status` gains `skipped`; `document_contents` (the encrypted photo, RLS, cascades with its document); the app role may delete a document (a patient's own, before confirming) | Old papers (R6) |
 
 New/changed endpoints (all server-authorised). Built: `GET /intake/checkin/{code}` and
 `POST /intake/checkin/{code}/sessions` (public, rate-limited), `GET`/`POST /admin/kiosks/{id}/checkin-link`,
@@ -281,7 +294,12 @@ New/changed endpoints (all server-authorised). Built: `GET /intake/checkin/{code
 `GET /visits/{id}/history` (staff, department and open-visit rule), `GET /patients/lookup` (staff),
 `POST /queue/{id}/link-patient` (nurse/admin), `POST /queue/{id}/skip`, `POST /queue/{id}/recall`,
 `POST /queue/{id}/return` (put back after a mistaken call), `POST /queue/call-next` (now serialised
-and idempotent), `GET /visits/{id}/queue-events`, `GET`/`PATCH /admin/queue-settings`. Dropped:
+and idempotent), `GET /visits/{id}/queue-events`, `GET`/`PATCH /admin/queue-settings`,
+`POST /intake/sessions/{id}/consent/ai`, `POST /status/{token}/ai-consent/withdraw` (public, can only
+stop), `POST /visits/{id}/ai-consent/withdraw` (staff), `GET`/`POST /intake/sessions/{id}/documents`
+and `DELETE …/documents/{document_id}` (the patient, while checking in), `GET`/`POST
+/visits/{id}/documents`, `GET …/documents/{document_id}/content` and `POST …/{document_id}/review`
+(staff of the department; review by doctors only). Dropped:
 `GET /system/phone-access` — `scripts/lan-check.ps1` covers it from the host, where the firewall
 and network profile can actually be read.
 
@@ -388,8 +406,11 @@ What each must do, the tests that show it, and the defects they found: `docs/E2E
 - Handwriting OCR in Indian languages — accuracy cannot be validated in 15 days; upload/review flow first.
 - Patient self-service access to past records — needs stronger patient authentication than a printed
   card (OTP/ABHA); the doctor-side history is built now.
-- Drug-interaction checks and abnormal-lab flags — need a licensed, reviewed knowledge base and reference
-  ranges; never shipped as an unreviewed AI judgement.
+- Drug-interaction checks and abnormal-lab flags against general reference ranges — need a licensed,
+  reviewed knowledge base and reference ranges; never shipped as an unreviewed AI judgement. (Phase 6
+  compares a result only with the range printed beside it on the same paper.)
+- A chronological timeline across papers — the papers are listed newest first by the date printed
+  on them; a merged timeline of diagnoses and results needs reviewed readings first.
 - RAG assistant — design document only.
 - Additional regional languages — after native-speaker review of the current three.
 
@@ -451,3 +472,5 @@ against the demo database (failed tests leave synthetic hospitals in the sign-in
 | 5.9 Load smoke | done | `tests/perf/test_load_smoke.py`, `make load-smoke` | On the running stack (Docker Desktop on this PC, gunicorn with 2 workers behind nginx, AI off): 40 patients arriving within 10 s finished in 14.1 s with 0 failed requests and every step's p95 at or under 107 ms (answers 105 ms, confirmation 86 ms). Stress at 150 patients in 10 s: 0 failed requests, every token unique and in order, answers p95 1.7–2.0 s, confirmation p95 3.0 s | A busy OPD sees well under one new patient per second; the smoke runs four a second. Confirmation is the slowest step because token numbers are issued one at a time per department |
 | 5.10 R9 consent purposes | moved to Phase 6 | — | — | Grouped with document upload (R6), which needs its own consent purpose |
 | Phase 5 gate | green | — | API 905 passed / 2 skipped (the load smoke skips without `LOAD_SMOKE_URL`), core+domain coverage 96%; web 81; e2e 139 of 139 with 2 workers; PWA e2e; Lighthouse 89–92 (accessibility 100); ruff, mypy --strict, eslint, tsc, locales (1040 keys), contrast, prompt-audio check, golden interviews, red-flag/routing/extraction/adversarial evaluations unchanged, case-sheet schema unchanged, API types regenerated (endpoint descriptions only), bandit, semgrep (327 rules, 0 findings); 10 of 10 live checks of the fixes on the rebuilt stack | No migration. Entry bundle 446.1 kB (+1.3 kB, three new strings in three languages); staff chunk 156.5 kB. The demo database was still at 0019 and was migrated to 0020 before the rebuilt API went live |
+| 6.1 R9 consent by purpose: AI help optional and revocable | done | `0021_consent_purposes.py`, `consent/ai-{en,hi,mr}.md`, `api/v1/ai_gate.py`, `intake.py` (`/consent/ai`), `speech.py`, `audio.py`, `queue.py` (`/status/{token}/ai-consent/withdraw`), `case_sheets.py` (`/visits/{id}/ai-consent/withdraw`), `KioskIntake.tsx`, `PatientStatus.tsx`, `DoctorConsultation.tsx`, locales | integration `test_consent_purposes.py`, plus scenario, audio-socket and case-sheet tests that count the calls reaching the Gemini stub (none without a "yes"); web unit; e2e `consent-purposes.spec.ts` and the local-voice read-back in `phase-10.spec.ts` | Without a "yes": no language-model call, no online or browser speech recognition, the read-back only with an on-device voice. The status link can only stop AI help, never start it. Withdrawal hides the AI draft (also on earlier-visit summaries) and blocks its review |
+| 6.2 R6 old papers: capture, encrypted storage, AI reading as a draft, the doctor's decision, printed-range flags | done | `0022_documents.py`, `core/crypto.py` (`encrypt_bytes`), `domain/documents.py`, `ai/document_reading.py`, `api/v1/documents.py`, `api/v1/visit_access.py` (department and under-care rules shared with history), `repositories.py` (`DocumentRepository`), `scripts/retention.py`, `KioskPapers.tsx`, `DocumentsPanel.tsx`, `visitDocuments.ts`, `lib/photos.ts`, locales | 37 unit (`test_document_rules.py`: range flags incl. Indian digit grouping, nothing flagged from a guess, printed dates, file signatures, the reading's shape); 8 integration (`test_documents.py`: photo encrypted at rest, limits, invalid files, AI only with consent counted at the stub, review by doctors only and changeable, withdrawal hides the reading, failed and malformed readings, staff photos only while under care, earlier papers and another patient's paper); isolation probes for the 7 new routes; retention deletes papers and photos; 11 web unit; e2e `old-papers.spec.ts` (kiosk capture through the real file chooser, the doctor's review, axe, 390 px) | Without AI consent the photo is kept unread and nothing leaves the server. Results are compared only with the range printed beside them, by arithmetic; text results, censored values and multi-group ranges are never flagged |

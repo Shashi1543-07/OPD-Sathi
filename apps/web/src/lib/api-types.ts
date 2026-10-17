@@ -1448,6 +1448,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/intake/sessions/{visit_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Patient Documents
+         * @description The photos the patient added while checking in (what AI read stays for the doctor).
+         */
+        get: operations["list_patient_documents_intake_sessions__visit_id__documents_get"];
+        put?: never;
+        /**
+         * Add Patient Document
+         * @description Keep a photo of one old paper with this visit, for the doctor to see.
+         *
+         *     Up to five photos while checking in. The photo is encrypted and kept with the visit;
+         *     with the patient's consent to online AI help it is also read for the doctor.
+         */
+        post: operations["add_patient_document_intake_sessions__visit_id__documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/intake/sessions/{visit_id}/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Patient Document
+         * @description Take back a photo before confirming: the photo and anything read from it are deleted.
+         */
+        delete: operations["remove_patient_document_intake_sessions__visit_id__documents__document_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/visits/{visit_id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Visit Documents
+         * @description The visit's papers and, while the patient is under care, papers from earlier visits.
+         *
+         *     Each paper comes with what AI read from it (an unconfirmed draft until a doctor accepts
+         *     it) and its results compared with the reference ranges printed on it. Audited.
+         */
+        get: operations["list_visit_documents_visits__visit_id__documents_get"];
+        put?: never;
+        /**
+         * Add Staff Document
+         * @description A doctor or nurse photographs a paper the patient shows at the desk or in the room.
+         *
+         *     Allowed while the patient is under care, up to ten papers per visit in all.
+         */
+        post: operations["add_staff_document_visits__visit_id__documents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/visits/{visit_id}/documents/{document_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Document Photo
+         * @description The photo itself, for staff who may open the visit (an earlier visit's paper only while
+         *     the patient is under care). Never cached; every view is audited.
+         */
+        get: operations["get_document_photo_visits__visit_id__documents__document_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/visits/{visit_id}/documents/{document_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Document Reading
+         * @description The doctor accepts or rejects what AI read, after comparing it with the photo.
+         *
+         *     Until then the reading is shown as an unconfirmed AI draft. A decision can be changed;
+         *     each one is audited.
+         */
+        post: operations["review_document_reading_visits__visit_id__documents__document_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/capabilities": {
         parameters: {
             query?: never;
@@ -1882,6 +2002,27 @@ export interface components {
             /** Visits */
             visits: number;
         };
+        /** LabResult */
+        LabResult: {
+            /** Test */
+            test: string;
+            /** Value */
+            value: string;
+            /**
+             * Unit
+             * @default
+             */
+            unit: string;
+            /**
+             * Reference Range
+             * @default
+             */
+            reference_range: string;
+            /** Printed Flag */
+            printed_flag?: ("high" | "low") | null;
+            /** Range Flag */
+            range_flag?: ("above" | "below" | "within") | null;
+        };
         /** LanguagePayload */
         LanguagePayload: {
             /**
@@ -1918,6 +2059,26 @@ export interface components {
              * @enum {string}
              */
             source: "patient_stated" | "document" | "nurse" | "doctor";
+        };
+        /** Medicine */
+        Medicine: {
+            /** Name */
+            name: string;
+            /**
+             * Dose
+             * @default
+             */
+            dose: string;
+            /**
+             * How Often
+             * @default
+             */
+            how_often: string;
+            /**
+             * Duration
+             * @default
+             */
+            duration: string;
         };
         /** OfflineSubmissionPayload */
         OfflineSubmissionPayload: {
@@ -2032,6 +2193,36 @@ export interface components {
             /** Ai Help */
             ai_help?: ("on" | "off" | "withdrawn") | null;
         };
+        /** PatientDocument */
+        PatientDocument: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "prescription" | "lab_report" | "discharge_summary" | "other";
+            /** Size */
+            size: number;
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+        };
+        /** PatientDocumentsResponse */
+        PatientDocumentsResponse: {
+            /** Documents */
+            documents: components["schemas"]["PatientDocument"][];
+            /**
+             * Limit
+             * @default 5
+             */
+            limit: number;
+        };
         /** PatientHistoryResponse */
         PatientHistoryResponse: {
             /**
@@ -2107,6 +2298,34 @@ export interface components {
             /** Call Grace Seconds */
             call_grace_seconds: number;
         };
+        /**
+         * Reading
+         * @description What AI read from the paper: an unconfirmed draft until a doctor accepts it.
+         */
+        Reading: {
+            /** Readable */
+            readable: boolean;
+            /** Document Type */
+            document_type: string;
+            /**
+             * Document Date
+             * @default
+             */
+            document_date: string;
+            /**
+             * Facility
+             * @default
+             */
+            facility: string;
+            /** Diagnoses */
+            diagnoses?: string[];
+            /** Medicines */
+            medicines?: components["schemas"]["Medicine"][];
+            /** Lab Results */
+            lab_results?: components["schemas"]["LabResult"][];
+            /** Procedures */
+            procedures?: string[];
+        };
         /** RedFlag */
         RedFlag: {
             /** Id */
@@ -2140,6 +2359,14 @@ export interface components {
         ReportSettingsPatch: {
             /** Minutes Saved Per Visit */
             minutes_saved_per_visit: number;
+        };
+        /** ReviewPayload */
+        ReviewPayload: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "accepted" | "rejected";
         };
         /** RouteConfirmPayload */
         RouteConfirmPayload: {
@@ -2176,6 +2403,65 @@ export interface components {
              * @default
              */
             question_id: string;
+        };
+        /** StaffDocument */
+        StaffDocument: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /**
+             * Service Date
+             * Format: date
+             */
+            service_date: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "prescription" | "lab_report" | "discharge_summary" | "other";
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "patient" | "staff";
+            /** Added By */
+            added_by?: string | null;
+            /**
+             * Added At
+             * Format: date-time
+             */
+            added_at: string;
+            /** Size */
+            size: number;
+            /** Document Date */
+            document_date?: string | null;
+            /**
+             * Reading Status
+             * @enum {string}
+             */
+            reading_status: "pending" | "complete" | "failed" | "skipped";
+            reading?: components["schemas"]["Reading"] | null;
+            /**
+             * Ai Withdrawn
+             * @default false
+             */
+            ai_withdrawn: boolean;
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "unreviewed" | "accepted" | "rejected";
+            /** Reviewed By */
+            reviewed_by?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
         };
         /**
          * SummaryReview
@@ -2308,6 +2594,25 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VisitDocumentsResponse */
+        VisitDocumentsResponse: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /** Documents */
+            documents: components["schemas"]["StaffDocument"][];
+            /** Earlier */
+            earlier: components["schemas"]["StaffDocument"][];
+            /** Earlier Shown */
+            earlier_shown: boolean;
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
         };
         /** WomenHealth */
         WomenHealth: {
@@ -4978,6 +5283,230 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscriptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_patient_documents_intake_sessions__visit_id__documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientDocumentsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_patient_document_intake_sessions__visit_id__documents_post: {
+        parameters: {
+            query?: {
+                kind?: "prescription" | "lab_report" | "discharge_summary" | "other";
+            };
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatientDocument"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_patient_document_intake_sessions__visit_id__documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_visit_documents_visits__visit_id__documents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VisitDocumentsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_staff_document_visits__visit_id__documents_post: {
+        parameters: {
+            query?: {
+                kind?: "prescription" | "lab_report" | "discharge_summary" | "other";
+            };
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDocument"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_photo_visits__visit_id__documents__document_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_document_reading_visits__visit_id__documents__document_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDocument"];
                 };
             };
             /** @description Validation Error */

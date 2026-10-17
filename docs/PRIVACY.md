@@ -20,7 +20,8 @@ This document describes the local MVP data model. It is an engineering inventory
 | Audit events | PostgreSQL `audit_log` | Append-only application role, tenant-scoped. Metadata must not contain patient answers or credentials. |
 | Notification delivery status | PostgreSQL `notifications` | Does not store the destination phone number; provider delivery remains disabled by default. |
 | Offline kiosk form | Browser IndexedDB | AES-GCM encrypted at rest with a non-extractable key stored in the same browser database. Records are removed after confirmed sync. Device access controls and browser-profile protection remain necessary. |
-| Uploaded documents | PostgreSQL `documents` metadata schema exists | Upload and object storage are not enabled in the current offline phase. |
+| Photos of old papers | PostgreSQL `documents` (details) and `document_contents` (the photo) | The photo is encrypted at application level (AES-GCM, bound to its document, so a photo copied onto another record cannot be decrypted); listing papers never loads a photo. What AI read from a paper is stored encrypted in `documents.extracted` as an unconfirmed draft. Tenant-scoped. Shown only to staff of the visit's department (papers from earlier visits only while the patient is under care), sent with `Cache-Control: no-store`, and every view of a photo is audited. See "Old papers" below. |
+| Prescription scan | Not stored | The older one-tap scan that reads medicine names into the medication answer processes the photo in memory and keeps only the names the patient confirms. |
 
 ## Consent by purpose
 
@@ -32,6 +33,16 @@ Each check-in asks two separate questions, each with its own short notice that i
 With no "yes" (declined, withdrawn, or never asked), the visit runs on this server alone, and the API enforces it, not the screen: no language-model call (follow-up questions, translation, the doctor's draft, second opinions, department suggestion, photo reading), no speech recognition by an online service or by the browser's own recogniser, and the read-back of the patient's own words only with a voice installed on the device. Recorded question audio is the hospital's text and is played either way. The patient taps and types, and the doctor gets the rule-based case sheet with the answers in the patient's own words. The hospital administrator's AI switch can turn language-model features off for everyone; it can never turn them on for a patient who said no.
 
 A "yes" can be changed until the summary is confirmed, and withdrawn afterwards: by the patient with **Stop AI help** on their status page (the status link can only stop AI help, never start it, so a photographed token slip cannot switch it on), or by staff at the desk. From then on nothing more about the visit is sent to AI services, work already running is not saved, the doctor no longer sees the AI draft (also on earlier-visit summaries and the PDF), and the draft cannot be reviewed. Processing done before the withdrawal is not undone.
+
+## Old papers
+
+On the review screen the patient can photograph up to five old papers (prescriptions, test reports, discharge papers), choosing what each one is first, and remove a photo until they confirm. A doctor or nurse can add more while the patient is under care, up to ten per visit. The API accepts only JPEG, PNG or WebP photos whose contents match their type, at most 1 MB each; the kiosk sends a JPEG of about 1280 pixels.
+
+- **Without consent to online AI help** the photo is kept unread and the doctor reads it. Nothing is sent to an AI service.
+- **With consent** Gemini reads each paper in the background into a draft: diagnoses and medicines as written, test results with the value, unit and reference range printed beside them, and procedures. The model is told to copy what is clearly written and not to interpret. The doctor sees the draft beside the photo, labelled as AI, and accepts or rejects it; a rejected reading is no longer shown. If the patient stops AI help, readings are hidden and cannot be reviewed, and a reading still running is not saved.
+- **Flags come from arithmetic, not from AI.** A result is marked above, below or within the range printed beside it on the same paper, and a high or low mark printed by the laboratory is shown as printed. A value or range that does not parse (a text result, several ranges for different groups, a value such as "< 0.5") is not flagged, and no general reference range is ever applied, because ranges differ between laboratories, methods, ages and sexes.
+
+Viewing the list of papers (`documents.read`) and each photo (`document.photo_viewed`), adding and removing papers, and each review decision are audited. Earlier visits' papers follow the same rule as earlier visits: shown through a visit that is open or took place today, to staff of its department, and to administrators.
 
 ## Returning patients and record linking
 
@@ -48,7 +59,7 @@ Not built yet: re-issuing a lost OPD card (changing `card_version` invalidates t
 
 ## Retention configuration and current enforcement
 
-`.env.example` includes `RETENTION_DAYS=30` and `ANONYMISE_DAYS=90` as defaults for `services/api/scripts/retention.py`. The command requires one `--hospital-id`, runs as a tenant-scoped dry run by default, and requires `--apply` before it deletes interview turns older than the retention cutoff, removes old summaries/red-flag events, and pseudonymizes direct patient identifiers when all of that patient's visits are older than the anonymization cutoff. A PostgreSQL integration test verifies both dry-run and apply behavior on a synthetic tenant.
+`.env.example` includes `RETENTION_DAYS=30` and `ANONYMISE_DAYS=90` as defaults for `services/api/scripts/retention.py`. The command requires one `--hospital-id`, runs as a tenant-scoped dry run by default, and requires `--apply` before it deletes interview turns older than the retention cutoff, removes old summaries, red-flag events and photos of old papers (with what AI read from them), and pseudonymizes direct patient identifiers when all of that patient's visits are older than the anonymization cutoff. A PostgreSQL integration test verifies both dry-run and apply behavior on a synthetic tenant.
 
 The command is not scheduled, and retained visits, consent/audit history, and stable patient UUIDs remain. This is pseudonymization, not guaranteed anonymization. Until the clinic approves the schedule and an operator runs the command under an audited process, the configured values do not cause automatic deletion. Do not claim the defaults satisfy a statutory or clinical record-retention requirement.
 
@@ -57,7 +68,7 @@ Backup directories contain encrypted records and Redis state snapshots, are crea
 ## Access, transfer, and secrets
 
 - PostgreSQL uses per-hospital row-level security for tenant tables. Application encryption keys and HMAC keys must remain stable and must be backed up separately from database snapshots.
-- Every API route that names a record (a visit, an alert, a staff account, a department, a kiosk or a patient session) answers "not found" to staff of another hospital, staff of another department and other patients' sessions, and changes nothing. `services/api/tests/integration/test_access_isolation.py` checks each such route and fails when a new one is added without a check.
+- Every API route that names a record (a visit, an alert, a paper, a staff account, a department, a kiosk or a patient session) answers "not found" to staff of another hospital, staff of another department and other patients' sessions, and changes nothing. `services/api/tests/integration/test_access_isolation.py` checks each such route and fails when a new one is added without a check.
 - A patient's kiosk or phone session can change its visit only until the token is issued: it cannot cancel a queued visit, change confirmed answers, or call staff once the visit has finished. A staff screen's live connection closes when the sign-in expires or the account is deactivated.
 - Redis state uses AOF persistence and contains queue, session, rate-limit, and idempotency data. It must be treated as sensitive. The separate Redis cache is bounded and evictable.
 - External LLM, speech, SMS, and WhatsApp providers are optional and must remain disabled until the clinic approves the data flow, notices, contracts, and geographic processing region. Even when enabled, language-model and online speech processing of a patient's data happens only with that patient's consent to online AI help (see "Consent by purpose").
