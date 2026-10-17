@@ -2,7 +2,7 @@
 
 ## Scope
 
-Implement consent-based queue notifications and tenant-scoped operational analytics, with an admin reports dashboard. Follow the Phase 11 gates in `OPD_Saathi_Agent_Playbook.md` and commit each numbered step after its checks pass.
+Implement consent-based queue notifications and tenant-scoped operational analytics, with an admin reports dashboard. Follow the Phase 11 gates in `AGENT_PLAYBOOK.md` and commit each numbered step after its checks pass.
 
 ## Build sequence
 
