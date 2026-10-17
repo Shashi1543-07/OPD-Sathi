@@ -1,6 +1,6 @@
 # OPD Saathi — Project TODO
 
-This is the execution checklist derived from [OPD Saathi Agent Build Playbook](OPD_Saathi_Agent_Playbook.md) (Version 1.0, 5 October 2026). The playbook remains the detailed source of truth for designs, schemas, exact test commands, thresholds, and manual test instructions.
+This is the execution checklist derived from [OPD Saathi Agent Build Playbook](AGENT_PLAYBOOK.md) (Version 1.0, 5 October 2026). The playbook remains the detailed source of truth for designs, schemas, exact test commands, thresholds, and manual test instructions.
 
 ## How to use this list
 
