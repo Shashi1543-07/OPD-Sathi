@@ -75,6 +75,7 @@ def integration_settings() -> Settings:
             # CI has no .env; use fixed test-only key material when none is configured.
             "app_data_key": base.app_data_key or base64.b64encode(b"d" * 32).decode(),
             "app_hmac_key": base.app_hmac_key or base64.b64encode(b"h" * 32).decode(),
+            "notify_key": base.notify_key or base64.b64encode(b"n" * 32).decode(),
             # Integration tests never call live AI or speech providers.
             "gemini_api_key": "",
             "sarvam_api_key": "",
@@ -231,6 +232,8 @@ class PatientSession:
     consent: dict[str, Any]
     # The separate notice about online AI help, from the session's start.
     ai_consent: dict[str, Any] | None = None
+    # The notice beside the optional SMS box.
+    sms_consent: dict[str, Any] | None = None
 
     def headers(self, *, idempotent: bool = False) -> dict[str, str]:
         headers = {"Authorization": f"Bearer {self.token}"}
@@ -267,8 +270,24 @@ class PatientSession:
             },
         )
 
-    def identity(self, *, age: int = 34, sex: str = "female", phone: str | None = None) -> Any:
-        return self.post("/identity", {"age": age, "sex": sex, "phone": phone})
+    def identity(
+        self,
+        *,
+        age: int = 34,
+        sex: str = "female",
+        phone: str | None = None,
+        sms_opt_in: bool = False,
+    ) -> Any:
+        payload: dict[str, Any] = {"age": age, "sex": sex, "phone": phone}
+        if sms_opt_in:
+            # The patient ticked the box beside this notice themselves.
+            assert self.sms_consent is not None, "the session was started without its SMS notice"
+            payload["sms_opt_in"] = True
+            payload["sms_consent"] = {
+                "version": self.sms_consent["version"],
+                "sha256": self.sms_consent["sha256"],
+            }
+        return self.post("/identity", payload)
 
     def danger_signs(self, tiles: tuple[str, ...] = ()) -> None:
         response = self.post("/danger-signs", {"tile_ids": list(tiles)})
@@ -388,6 +407,7 @@ def start_kiosk_session(
         token=body["patient_access_token"],
         consent=body["consent"],
         ai_consent=body["ai_consent"],
+        sms_consent=body.get("sms_consent"),
     )
 
 
@@ -401,6 +421,7 @@ def complete_intake(
     tiles: tuple[str, ...] = (),
     answers: dict[str, str | int] | None = None,
     allow_ai: bool | None = None,
+    sms_opt_in: bool = False,
 ) -> dict[str, Any]:
     """Consent, identity, danger signs and the interview, ending at the summary.
 
@@ -410,7 +431,7 @@ def complete_intake(
     if allow_ai is not None:
         answered = session.allow_ai(allow_ai)
         assert answered.status_code == 200, answered.text
-    identity = session.identity(age=age, sex=sex, phone=phone)
+    identity = session.identity(age=age, sex=sex, phone=phone, sms_opt_in=sms_opt_in)
     assert identity.status_code == 200, identity.text
     session.danger_signs(tiles)
     return session.answer_all({"chief_concern": complaint, **(answers or {})})

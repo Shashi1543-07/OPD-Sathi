@@ -13,7 +13,7 @@ down:
 	$(COMPOSE) down
 
 api:
-	cd $(API_DIR) && $(PYTHON) -m gunicorn app.main:app --worker-class uvicorn_worker.UvicornWorker --bind 0.0.0.0:8000 --workers 2
+	cd $(API_DIR) && $(PYTHON) -m gunicorn --config gunicorn.conf.py app.main:app
 
 worker:
 	cd $(API_DIR) && $(PYTHON) -m app.workers.main

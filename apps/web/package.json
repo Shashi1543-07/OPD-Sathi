@@ -12,7 +12,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test",
+    "e2e": "playwright test --grep-invert @timing && playwright test --grep @timing --workers=1",
     "e2e:pwa": "playwright test --config playwright.pwa.config.ts",
     "screenshots": "node scripts/capture-screenshots.mjs",
     "lighthouse:ci": "node scripts/check-lighthouse.mjs",

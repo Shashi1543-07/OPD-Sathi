@@ -433,6 +433,9 @@ async def test_identity_and_danger_sign_routes_advance_only_in_order(
         async def update_identity(self, **kwargs: object) -> None:
             updates.append(kwargs)
 
+        async def has_consent_row(self, **_kwargs: object) -> bool:
+            return False
+
         async def record_danger_tiles(self, **kwargs: object) -> None:
             updates.append(kwargs)
 

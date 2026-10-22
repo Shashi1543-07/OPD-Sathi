@@ -164,11 +164,15 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
                     text(
                         "SELECT d.name_en, d.name_hi, d.name_mr, h.name AS hospital, v.language, "
                         "CASE WHEN a.withdrawn_at IS NOT NULL THEN 'withdrawn' "
-                        "WHEN a.granted THEN 'on' ELSE 'off' END AS ai_help "
+                        "WHEN a.granted THEN 'on' ELSE 'off' END AS ai_help, "
+                        "CASE WHEN s.withdrawn_at IS NOT NULL THEN 'stopped' "
+                        "WHEN s.granted AND v.sms_opt_in THEN 'on' ELSE 'off' END AS sms "
                         "FROM visits v JOIN departments d ON d.hospital_id = v.hospital_id "
                         "AND d.id = v.department_id JOIN hospitals h ON h.id = v.hospital_id "
                         "LEFT JOIN consents a ON a.hospital_id = v.hospital_id "
                         "AND a.visit_id = v.id AND a.purpose = 'ai' "
+                        "LEFT JOIN consents s ON s.hospital_id = v.hospital_id "
+                        "AND s.visit_id = v.id AND s.purpose = 'sms' "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
                     {"hospital_id": visit["hospital_id"], "visit_id": visit["visit_id"]},
@@ -232,6 +236,8 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         "hospital": place["hospital"] if place else None,
         "language": place["language"] if place else "en",
         "ai_help": place["ai_help"] if place else "off",
+        # Queue messages by SMS: "on" can be stopped from the status page, never started.
+        "sms": place["sms"] if place else "off",
         "updated_at": datetime.now(UTC).isoformat(),
     }
 
@@ -1665,3 +1671,68 @@ async def staff_queue_socket(
             await pubsub.aclose()
     except (WebSocketDisconnect, TimeoutError):
         return
+
+
+@router.post("/status/{token}/sms/stop")
+async def stop_sms(token: str, request: Request) -> dict[str, Any]:
+    """The patient stops queue messages from their own status page.
+
+    Like stopping AI help, the link can only switch messages off, never on. The consent is
+    marked withdrawn, the number kept for messages is erased and anything not yet sent is
+    cancelled.
+    """
+    unavailable = _problem(
+        404, "NOT_FOUND", "Status unavailable", "This status link is unavailable."
+    )
+    if len(token) != 43 or not set(token) <= _STATUS_TOKEN_CHARACTERS:
+        raise unavailable
+    digest = status_token_digest(token)
+    settings = request.app.state.settings
+    limit = await check_rate_limit(
+        request.app.state.redis_state,
+        request.app.state.memory_limiter,
+        key=f"osa:{settings.app_env}:rl:sms-stop:{digest}",
+        limit=10,
+        window_seconds=600,
+        fail_closed=False,
+    )
+    if limit is not None and not limit.allowed:
+        raise ApiProblemError(
+            status=429,
+            code="RATE_LIMITED",
+            title="Too many requests",
+            detail="Please wait a moment and try again.",
+            headers={"Retry-After": str(limit.retry_after)},
+        )
+    async with request.app.state.engine.begin() as connection:
+        await set_secret_lookup_scope(
+            connection, setting="app.status_token_hash", secret_hash=digest
+        )
+        visit = await QueueRepository(connection, settings).visit_status_by_hash(digest)
+        if visit is None:
+            raise unavailable
+        await set_hospital_scope(connection, visit["hospital_id"])
+        stopped = await IntakeRepository(connection, settings).withdraw_sms_consent(
+            hospital_id=visit["hospital_id"], visit_id=visit["visit_id"], by="patient"
+        )
+        if stopped:
+            await audit(
+                connection,
+                request,
+                hospital_id=visit["hospital_id"],
+                actor_type="patient",
+                actor_id=visit["visit_id"],
+                action="consent.sms_withdrawn",
+                resource_type="visit",
+                resource_id=visit["visit_id"],
+                meta={"by": "patient"},
+            )
+    if not stopped:
+        raise _problem(409, "SMS_NOT_ON", "SMS is not on", "Queue messages are not on.")
+    try:
+        await request.app.state.redis_state.delete(
+            f"osa:{settings.app_env}:status-cache:{digest}"
+        )
+    except RedisError:
+        pass  # The cached status expires within two seconds.
+    return {"sms": "stopped"}

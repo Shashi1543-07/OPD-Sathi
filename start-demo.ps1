@@ -42,7 +42,7 @@ if (-not (Test-Path ".env")) {
   foreach ($name in "POSTGRES_PASSWORD","OSA_APP_PASSWORD","OSA_MIGRATOR_PASSWORD","OSA_WORKER_PASSWORD","REDIS_PASSWORD","GRAFANA_ADMIN_PASSWORD") {
     $text = $text -replace "(?m)^$name=.*$", "$name=$(New-Hex)"
   }
-  foreach ($name in "APP_DATA_KEY","APP_HMAC_KEY","CURSOR_HMAC_KEY") {
+  foreach ($name in "APP_DATA_KEY","APP_HMAC_KEY","CURSOR_HMAC_KEY","NOTIFY_KEY") {
     $text = $text -replace "(?m)^$name=.*$", "$name=$(New-Base64Key)"
   }
   $text = $text -replace "(?m)^JWT_SECRET=.*$", "JWT_SECRET=$(New-Hex)"
@@ -60,7 +60,7 @@ if ($adminPassword.Length -lt 12 -or $adminPassword -like "replace-*") { $adminP
 if ($staffPassword.Length -lt 12 -or $staffPassword -like "replace-*") { $staffPassword = "Saathi-$(New-Hex)"; Add-Content .env "DEMO_STAFF_PASSWORD=$staffPassword" }
 # Token-signing keys must never fall back to the public defaults in docker-compose.yml
 # (anyone with the repo could forge a sign-in). Older .env files may lack them.
-foreach ($name in "JWT_SECRET","CURSOR_HMAC_KEY") {
+foreach ($name in "JWT_SECRET","CURSOR_HMAC_KEY","NOTIFY_KEY") {
   $value = Get-EnvValue $envLines $name
   if ($value.Length -lt 32 -or $value -like "*development-only*" -or $value -like "replace-*") {
     $fresh = if ($name -eq "JWT_SECRET") { New-Hex } else { New-Base64Key }

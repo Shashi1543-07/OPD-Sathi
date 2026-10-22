@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 import sys
 
-
 TESTS = (
     "services/api/tests/unit/test_ratelimit.py",
     "services/api/tests/unit/test_queue_api.py",

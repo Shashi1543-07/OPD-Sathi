@@ -303,7 +303,9 @@ async def analytics_export(
         yield output.getvalue()
         output.seek(0)
         output.truncate(0)
-        async with request.app.state.engine.begin() as connection:
+        # The export is a pure read: it may come from the read replica (DATABASE_READ_URL).
+        engine = getattr(request.app.state, "read_engine", request.app.state.engine)
+        async with engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
             result = await connection.stream(
                 text(_ROLLUP_RANGE_SQL),

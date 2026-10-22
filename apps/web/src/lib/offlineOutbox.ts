@@ -117,7 +117,11 @@ export async function queueOfflineSubmission(
   }
 }
 
-export async function pendingOfflineSubmissions(): Promise<Array<{
+/**
+ * Submissions due for another try. ``ignoreBackoff`` returns every one: used when the network
+ * has just come back, which is what the backoff was waiting for.
+ */
+export async function pendingOfflineSubmissions({ ignoreBackoff = false } = {}): Promise<Array<{
   record: StoredSubmission;
   submission: OfflineSubmission;
 }>> {
@@ -129,7 +133,7 @@ export async function pendingOfflineSubmissions(): Promise<Array<{
     const now = Date.now();
     const pending: Array<{ record: StoredSubmission; submission: OfflineSubmission }> = [];
     for (const record of stored) {
-      if (record.nextAttemptAt > now) continue;
+      if (!ignoreBackoff && record.nextAttemptAt > now) continue;
       const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: record.iv }, key, record.ciphertext);
       pending.push({ record, submission: JSON.parse(new TextDecoder().decode(plaintext)) as OfflineSubmission });
     }

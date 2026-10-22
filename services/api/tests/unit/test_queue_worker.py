@@ -27,6 +27,20 @@ class FakeResult:
         return self.rows[0] if self.rows else None
 
 
+class FakeSavepoint:
+    """One outbox event's savepoint: an error inside it is counted, then propagates."""
+
+    def __init__(self, connection: "FakeConnection") -> None:
+        self.connection = connection
+
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(self, exc_type: object, _exc: object, _tb: object) -> None:
+        if exc_type is not None:
+            self.connection.rolled_back += 1
+
+
 class FakeConnection:
     def __init__(
         self,
@@ -41,6 +55,10 @@ class FakeConnection:
         self.processed = False
         self.attempts = 0
         self.statements: list[str] = []
+        self.rolled_back = 0
+
+    def begin_nested(self) -> "FakeSavepoint":
+        return FakeSavepoint(self)
 
     async def execute(self, statement: object, _params: object = None) -> FakeResult:
         sql = str(statement)

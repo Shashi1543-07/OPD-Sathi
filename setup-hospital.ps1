@@ -62,10 +62,10 @@ foreach ($name in "POSTGRES_PASSWORD","OSA_APP_PASSWORD","OSA_MIGRATOR_PASSWORD"
     Set-EnvValue $name (New-Hex)
   }
 }
-foreach ($name in "APP_DATA_KEY","APP_HMAC_KEY","CURSOR_HMAC_KEY") {
+foreach ($name in "APP_DATA_KEY","APP_HMAC_KEY","CURSOR_HMAC_KEY","NOTIFY_KEY") {
   $value = Get-EnvValue $name
   if ($value.Length -lt 32 -or $value -like "replace-*" -or $value -like "*development-only*") {
-    if ($name -ne "CURSOR_HMAC_KEY" -and -not $firstInstall -and $value) {
+    if ($name -notin "CURSOR_HMAC_KEY","NOTIFY_KEY" -and -not $firstInstall -and $value) {
       # Patient data is encrypted with these keys; replacing them would make it unreadable.
       throw "$name in .env looks invalid. Restore it from the hospital's backup instead of replacing it."
     }

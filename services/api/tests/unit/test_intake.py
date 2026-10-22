@@ -394,12 +394,18 @@ def test_sms_opt_in_requires_valid_phone_and_defaults_to_off() -> None:
     assert payload.sms_opt_in is False
     with pytest.raises(ValueError):
         intake.IdentityPayload.model_validate({"age": 42, "sex": "unknown", "sms_opt_in": True})
+    # A tick without the notice it was given beside is not consent.
+    with pytest.raises(ValueError):
+        intake.IdentityPayload.model_validate(
+            {"age": 42, "sex": "unknown", "phone": "9876543210", "sms_opt_in": True}
+        )
     opted_in = intake.IdentityPayload.model_validate(
         {
             "age": 42,
             "sex": "unknown",
             "phone": "9876543210",
             "sms_opt_in": True,
+            "sms_consent": {"version": "sms-consent-1.0", "sha256": "a" * 64},
         }
     )
     assert opted_in.sms_opt_in is True

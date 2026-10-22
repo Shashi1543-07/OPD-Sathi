@@ -1325,6 +1325,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/status/{token}/sms/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Sms
+         * @description The patient stops queue messages from their own status page.
+         *
+         *     Like stopping AI help, the link can only switch messages off, never on. The consent is
+         *     marked withdrawn, the number kept for messages is erased and anything not yet sent is
+         *     cancelled.
+         */
+        post: operations["stop_sms_status__token__sms_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/visits/{visit_id}/case-sheet": {
         parameters: {
             query?: never;
@@ -1825,6 +1849,16 @@ export interface components {
              */
             language: "en" | "hi" | "mr";
         };
+        /**
+         * ConsentNoticeRef
+         * @description The exact notice a patient agreed to: its version and the hash of its text.
+         */
+        ConsentNoticeRef: {
+            /** Version */
+            version: string;
+            /** Sha256 */
+            sha256: string;
+        };
         /** ConsentPayload */
         ConsentPayload: {
             /** Version */
@@ -1953,6 +1987,7 @@ export interface components {
              * @default false
              */
             sms_opt_in: boolean;
+            sms_consent?: components["schemas"]["ConsentNoticeRef"] | null;
         };
         /** InterviewSettingsPatch */
         InterviewSettingsPatch: {
@@ -5044,6 +5079,39 @@ export interface operations {
                 "application/json": components["schemas"]["OverridePayload"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_sms_status__token__sms_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

@@ -152,7 +152,8 @@ async def _process_hospital(
         await connection.execute(
             text(
                 "UPDATE visits SET age_years = NULL, pregnant = NULL, "
-                "urgency_reasons = '[]'::jsonb "
+                "urgency_reasons = '[]'::jsonb, sms_opt_in = false, sms_opt_in_at = NULL, "
+                "notify_phone_enc = NULL, notify_phone_hmac = NULL "
                 "WHERE hospital_id = :hospital_id AND created_at < :cutoff"
             ),
             {"hospital_id": hospital_id, "cutoff": anonymise_cutoff},

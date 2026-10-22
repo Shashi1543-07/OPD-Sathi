@@ -196,17 +196,28 @@ class RequestBodyLimitMiddleware(BaseHTTPMiddleware):
 def create_app(
     settings: Settings | None = None,
     *,
-    engine_factory: Callable[[str], AsyncEngine] = create_engine,
+    engine_factory: Callable[[str], AsyncEngine] | None = None,
     redis_factory: Callable[..., redis.Redis] = redis.from_url,
 ) -> FastAPI:
     """Create the API with injectable connections for isolated tests."""
     configured = settings or get_settings()
     configure_logging(configured.log_level)
 
+    def pooled_engine(url: str) -> AsyncEngine:
+        return create_engine(url, pool_min=configured.db_pool_min, pool_max=configured.db_pool_max)
+
+    make_engine = engine_factory or pooled_engine
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await asyncio.to_thread(warm_pdf_renderer)
-        app.state.engine = engine_factory(configured.database_url)
+        app.state.engine = make_engine(configured.database_url)
+        # Report exports may read from a replica; everything else uses the primary.
+        app.state.read_engine = (
+            make_engine(configured.database_read_url)
+            if configured.database_read_url
+            else app.state.engine
+        )
         app.state.redis_state = redis_factory(configured.redis_state_url, decode_responses=True)
         app.state.redis_cache = redis_factory(configured.redis_cache_url, decode_responses=True)
         app.state.llm_provider = build_llm_provider(configured, redis=app.state.redis_cache)
@@ -264,6 +275,8 @@ def create_app(
                 await asyncio.gather(*llm_tasks, return_exceptions=True)
             if isinstance(app.state.llm_provider, GeminiProvider):
                 await app.state.llm_provider.aclose()
+            if app.state.read_engine is not app.state.engine:
+                await app.state.read_engine.dispose()
             await app.state.engine.dispose()
             directory_engine = getattr(app.state, "directory_engine", None)
             if directory_engine is not None:
@@ -335,21 +348,23 @@ def create_app(
 
     @app.get("/readyz", include_in_schema=False, response_model=None)
     async def readyz(request: Request) -> Response:
-        failures: list[str] = []
-        try:
-            await asyncio.wait_for(
+        # Both dependencies are checked at once, so the answer comes within one timeout.
+        results = await asyncio.gather(
+            asyncio.wait_for(
                 ping_database(request.app.state.engine),
                 timeout=_READINESS_DEPENDENCY_TIMEOUT_SECONDS,
-            )
-        except Exception:
-            failures.append("postgres")
-        try:
-            await asyncio.wait_for(
+            ),
+            asyncio.wait_for(
                 request.app.state.redis_state.ping(),
                 timeout=_READINESS_DEPENDENCY_TIMEOUT_SECONDS,
-            )
-        except Exception:
-            failures.append("redis")
+            ),
+            return_exceptions=True,
+        )
+        failures = [
+            name
+            for name, result in zip(("postgres", "redis"), results, strict=True)
+            if isinstance(result, BaseException)
+        ]
         if failures:
             return problem(
                 request,

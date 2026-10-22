@@ -18,6 +18,8 @@ type Status = {
   language?: Language;
   /** The patient's online AI help for this visit; "on" can be stopped from this page. */
   ai_help?: "on" | "off" | "withdrawn";
+  /** Queue messages by SMS, which the patient ticked for themselves; "on" can be stopped. */
+  sms?: "on" | "off" | "stopped";
   updated_at?: string;
 };
 
@@ -37,21 +39,32 @@ const DEMO: Status = {
   hospital: null,
 };
 
-/** Lets the patient stop online AI help for their visit. It never turns AI help on. */
-function AiHelpControl({ token, onStopped }: { token: string; onStopped: () => void }) {
+/**
+ * Lets the patient stop something they agreed to for this visit: online AI help or queue
+ * messages by SMS. It never turns either on, so a photographed token slip cannot.
+ */
+function StopControl({
+  token,
+  kind,
+  onStopped,
+}: {
+  token: string;
+  kind: "ai" | "sms";
+  onStopped: () => void;
+}) {
   const { t } = useTranslation("status");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const path = kind === "ai" ? "ai-consent/withdraw" : "sms/stop";
 
   async function stop() {
     setBusy(true);
     setFailed(false);
     try {
-      const response = await fetch(
-        `${apiOrigin}/status/${encodeURIComponent(token)}/ai-consent/withdraw`,
-        { method: "POST" },
-      );
+      const response = await fetch(`${apiOrigin}/status/${encodeURIComponent(token)}/${path}`, {
+        method: "POST",
+      });
       // 409: already stopped (perhaps at the desk); either way it is off now.
       if (!response.ok && response.status !== 409) throw new Error("not stopped");
       onStopped();
@@ -64,11 +77,11 @@ function AiHelpControl({ token, onStopped }: { token: string; onStopped: () => v
   }
 
   return (
-    <section className="status-ai" aria-label={t("aiStop")}>
-      <p>{t("aiOn")}</p>
+    <section className="status-ai" aria-label={t(`${kind}Stop`)}>
+      <p>{t(`${kind}On`)}</p>
       {confirming ? (
         <div className="status-ai-confirm">
-          <p>{t("aiStopConfirm")}</p>
+          <p>{t(`${kind}StopConfirm`)}</p>
           <div className="status-ai-actions">
             <button
               type="button"
@@ -76,7 +89,7 @@ function AiHelpControl({ token, onStopped }: { token: string; onStopped: () => v
               disabled={busy}
               onClick={() => void stop()}
             >
-              {t("aiStopYes")}
+              {t(`${kind}StopYes`)}
             </button>
             <button
               type="button"
@@ -84,18 +97,18 @@ function AiHelpControl({ token, onStopped }: { token: string; onStopped: () => v
               disabled={busy}
               onClick={() => setConfirming(false)}
             >
-              {t("aiStopNo")}
+              {t(`${kind}StopNo`)}
             </button>
           </div>
         </div>
       ) : (
         <button type="button" className="status-ai-button" onClick={() => setConfirming(true)}>
-          {t("aiStop")}
+          {t(`${kind}Stop`)}
         </button>
       )}
       {failed && (
         <p className="status-ai-error" role="alert">
-          {t("aiStopFailed")}
+          {t(`${kind}StopFailed`)}
         </p>
       )}
     </section>
@@ -314,8 +327,9 @@ export function PatientStatus() {
               <p className="status-tip">{t("keepOpen", { ns: "status" })}</p>
             )}
             {!demo && status.ai_help === "on" && (
-              <AiHelpControl
+              <StopControl
                 token={token}
+                kind="ai"
                 onStopped={() =>
                   setStatus((current) => (current ? { ...current, ai_help: "withdrawn" } : current))
                 }
@@ -323,6 +337,18 @@ export function PatientStatus() {
             )}
             {status.ai_help === "withdrawn" && (
               <p className="status-tip">{t("aiStopped", { ns: "status" })}</p>
+            )}
+            {!demo && status.sms === "on" && (
+              <StopControl
+                token={token}
+                kind="sms"
+                onStopped={() =>
+                  setStatus((current) => (current ? { ...current, sms: "stopped" } : current))
+                }
+              />
+            )}
+            {status.sms === "stopped" && (
+              <p className="status-tip">{t("smsStopped", { ns: "status" })}</p>
             )}
           </>
         )}
