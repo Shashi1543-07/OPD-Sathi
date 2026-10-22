@@ -76,7 +76,7 @@ foreach ($adapter in $adapters) {
 }
 
 Write-Step "3. Is the web app reachable from the network?"
-$binding = (docker port $webContainer 80 2>$null) | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+:\d+$' } |
+$binding = (docker port $webContainer 8080 2>$null) | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+:\d+$' } |
   Select-Object -First 1
 if (-not $binding) { throw "Could not read the web container's port. Is it running?" }
 $boundAddress, $boundPort = $binding -split ":"

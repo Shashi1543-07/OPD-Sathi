@@ -1,0 +1,250 @@
+# Production overlay (Phase 7, tasks 7.1.1, 7.2.1, 7.2.3 and 7.3.7). Always used with the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# scripts/setup-hospital.sh (Linux) and setup-hospital.ps1 -Production (Windows) do this.
+# What it changes from the development stack:
+#   - APP_ENV=production: development keys and the API docs are refused.
+#   - Secrets come from files in ${OSA_SECRETS_DIR} (one file per secret, the directory readable
+#     by root only), never from environment variables, so `docker inspect` and `ps` show none.
+#   - Only the web server is published: 443 (HTTPS) and 80 (redirect to HTTPS).
+#     PostgreSQL, Redis and the API are reachable only inside the Docker network.
+#   - Every container: restart always, memory and CPU limits, rotated logs, no new privileges,
+#     all Linux capabilities dropped except the few an image needs, read-only root filesystem.
+#   - Health checks for the worker and the web server.
+
+x-hardened: &hardened
+  restart: always
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "10" }
+
+# Secrets the API and worker read through <NAME>_FILE (app/config.py). The plain variables are
+# blanked so no value from .env can reach the container's environment.
+x-app-secret-env: &app_secret_env
+  APP_ENV: production
+  PROVIDER_MODE: standard
+  # The API trusts X-Forwarded-For only from the web container (task 7.2.3).
+  FORWARDED_ALLOW_IPS: ${WEB_PROXY_IP:-172.30.0.10}
+  DATABASE_URL: ""
+  DATABASE_URL_FILE: /run/secrets/database_url
+  WORKER_DATABASE_URL: ""
+  WORKER_DATABASE_URL_FILE: /run/secrets/worker_database_url
+  MIGRATIONS_DATABASE_URL: ""
+  MIGRATIONS_DATABASE_URL_FILE: /run/secrets/migrations_database_url
+  REDIS_STATE_URL: ""
+  REDIS_STATE_URL_FILE: /run/secrets/redis_state_url
+  REDIS_CACHE_URL: ""
+  REDIS_CACHE_URL_FILE: /run/secrets/redis_cache_url
+  JWT_SECRET: ""
+  JWT_SECRET_FILE: /run/secrets/jwt_secret
+  CURSOR_HMAC_KEY: ""
+  CURSOR_HMAC_KEY_FILE: /run/secrets/cursor_hmac_key
+  NOTIFY_KEY: ""
+  NOTIFY_KEY_FILE: /run/secrets/notify_key
+  GEMINI_API_KEY: ""
+  GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
+  SARVAM_API_KEY: ""
+  SARVAM_API_KEY_FILE: /run/secrets/sarvam_api_key
+  TWILIO_AUTH_TOKEN: ""
+  TWILIO_AUTH_TOKEN_FILE: /run/secrets/twilio_auth_token
+  WHATSAPP_ACCESS_TOKEN: ""
+  WHATSAPP_ACCESS_TOKEN_FILE: /run/secrets/whatsapp_access_token
+
+services:
+  postgres:
+    <<: *hardened
+    ports: !reset []
+    environment:
+      POSTGRES_PASSWORD: ""
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      OSA_APP_PASSWORD: ""
+      OSA_APP_PASSWORD_FILE: /run/secrets/osa_app_password
+      OSA_MIGRATOR_PASSWORD: ""
+      OSA_MIGRATOR_PASSWORD_FILE: /run/secrets/osa_migrator_password
+      OSA_WORKER_PASSWORD: ""
+      OSA_WORKER_PASSWORD_FILE: /run/secrets/osa_worker_password
+    secrets: [postgres_password, osa_app_password, osa_migrator_password, osa_worker_password]
+    # The entrypoint starts as root, prepares the data directory, then drops to "postgres".
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    tmpfs: ["/run/postgresql:mode=0775,uid=999,gid=999", "/tmp"]
+    shm_size: 256m
+    deploy:
+      resources:
+        limits: { cpus: "${POSTGRES_CPUS:-2}", memory: "${POSTGRES_MEMORY:-2g}" }
+
+  redis:
+    <<: *hardened
+    ports: !reset []
+    # Runs as the image's redis user (the entrypoint only drops root for a bare redis-server).
+    user: "999:1000"
+    # The password goes into a config file on a private tmpfs, never onto the command line.
+    command:
+      - sh
+      - -c
+      - >-
+        umask 077 &&
+        printf 'requirepass %s\n' "$$(cat /run/secrets/redis_password)" > /tmp/redis.conf &&
+        exec redis-server /tmp/redis.conf --appendonly yes --appendfsync everysec
+        --maxmemory-policy noeviction
+    environment:
+      REDIS_PASSWORD: ""
+    secrets: [redis_password]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping | grep -q PONG"]
+    tmpfs: ["/tmp:mode=0700,uid=999,gid=1000"]
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: "${REDIS_MEMORY:-1g}" }
+
+  redis-cache:
+    <<: *hardened
+    ports: !reset []
+    # Runs as the image's redis user (the entrypoint only drops root for a bare redis-server).
+    user: "999:1000"
+    command:
+      - sh
+      - -c
+      - >-
+        umask 077 &&
+        printf 'requirepass %s\n' "$$(cat /run/secrets/redis_password)" > /tmp/redis.conf &&
+        exec redis-server /tmp/redis.conf --save '' --appendonly no
+        --maxmemory "$$REDIS_CACHE_MAXMEMORY" --maxmemory-policy allkeys-lru
+    environment:
+      REDIS_PASSWORD: ""
+    secrets: [redis_password]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/redis_password)\" redis-cli ping | grep -q PONG"]
+    tmpfs: ["/tmp:mode=0700,uid=999,gid=1000"]
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: "512m" }
+
+  worker-role-bootstrap:
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    environment:
+      POSTGRES_ADMIN_PASSWORD: ""
+      POSTGRES_ADMIN_PASSWORD_FILE: /run/secrets/postgres_password
+      OSA_WORKER_PASSWORD: ""
+      OSA_WORKER_PASSWORD_FILE: /run/secrets/osa_worker_password
+    secrets: [postgres_password, osa_worker_password]
+    tmpfs: ["/tmp"]
+
+  api:
+    <<: *hardened
+    ports: !reset []
+    environment:
+      <<: *app_secret_env
+      APP_DATA_KEY: ""
+      APP_DATA_KEY_FILE: /run/secrets/app_data_key
+      APP_HMAC_KEY: ""
+      APP_HMAC_KEY_FILE: /run/secrets/app_hmac_key
+      # Read-only root filesystem: font and PDF caches go to the private tmpfs.
+      XDG_CACHE_HOME: /tmp/cache
+    secrets:
+      - database_url
+      - worker_database_url
+      - migrations_database_url
+      - redis_state_url
+      - redis_cache_url
+      - jwt_secret
+      - cursor_hmac_key
+      - app_data_key
+      - app_hmac_key
+      - notify_key
+      - gemini_api_key
+      - sarvam_api_key
+      - twilio_auth_token
+      - whatsapp_access_token
+    tmpfs: ["/tmp"]
+    networks:
+      default: {}
+    deploy:
+      resources:
+        limits: { cpus: "${API_CPUS:-2}", memory: "${API_MEMORY:-2g}" }
+
+  # The worker gets NOTIFY_KEY and never APP_DATA_KEY or APP_HMAC_KEY (task 7.0.1).
+  worker:
+    <<: *hardened
+    environment:
+      <<: *app_secret_env
+      PROCESS_ROLE: worker
+      APP_DATA_KEY: ""
+      APP_HMAC_KEY: ""
+    secrets:
+      - database_url
+      - worker_database_url
+      - migrations_database_url
+      - redis_state_url
+      - redis_cache_url
+      - jwt_secret
+      - cursor_hmac_key
+      - notify_key
+      - gemini_api_key
+      - sarvam_api_key
+      - twilio_auth_token
+      - whatsapp_access_token
+    tmpfs: ["/tmp"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.workers.health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: "1g" }
+
+  web:
+    <<: *hardened
+    ports: !override
+      - "${WEB_BIND:-0.0.0.0}:443:8443"
+      - "${WEB_BIND:-0.0.0.0}:80:8080"
+    volumes:
+      - ./infra/web/nginx.tls.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${OSA_CERTS_DIR:-/etc/opd-saathi/certs}:/etc/nginx/certs:ro
+    tmpfs: ["/tmp", "/var/cache/nginx"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+    networks:
+      default:
+        ipv4_address: ${WEB_PROXY_IP:-172.30.0.10}
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: "256m" }
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${OSA_SUBNET:-172.30.0.0/24}
+
+secrets:
+  postgres_password: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/postgres_password" }
+  osa_app_password: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/osa_app_password" }
+  osa_migrator_password: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/osa_migrator_password" }
+  osa_worker_password: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/osa_worker_password" }
+  redis_password: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/redis_password" }
+  database_url: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/database_url" }
+  worker_database_url: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/worker_database_url" }
+  migrations_database_url: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/migrations_database_url" }
+  redis_state_url: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/redis_state_url" }
+  redis_cache_url: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/redis_cache_url" }
+  jwt_secret: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/jwt_secret" }
+  cursor_hmac_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/cursor_hmac_key" }
+  app_data_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/app_data_key" }
+  app_hmac_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/app_hmac_key" }
+  notify_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/notify_key" }
+  gemini_api_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/gemini_api_key" }
+  sarvam_api_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/sarvam_api_key" }
+  twilio_auth_token: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/twilio_auth_token" }
+  whatsapp_access_token: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/whatsapp_access_token" }

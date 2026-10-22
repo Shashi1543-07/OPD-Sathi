@@ -115,6 +115,20 @@ jobs:
       - run: git diff --exit-code -- apps/web/src/lib/api-types.ts
         working-directory: .
 
+  # The stack exactly as a hospital runs it: production overlay, secrets as files, HTTPS.
+  # Drives one kiosk check-in and a doctor's call, and checks that no secret leaks (task 7.1.2).
+  production-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/api/requirements.lock.txt
+      - run: pip install --require-hashes -r services/api/requirements.lock.txt
+      - run: bash scripts/prod_smoke.sh
+
   security:
     runs-on: ubuntu-latest
     steps:

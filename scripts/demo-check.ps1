@@ -43,7 +43,7 @@ foreach ($service in "postgres", "redis", "redis-cache", "api", "worker", "web")
 Write-Step "2. Web app and API"
 $webContainer = (docker compose ps --format "{{.Name}}" web 2>$null) | Select-Object -First 1
 $binding = if ($webContainer) {
-  (docker port $webContainer 80 2>$null) | Where-Object { $_ -match ':\d+$' } | Select-Object -First 1
+  (docker port $webContainer 8080 2>$null) | Where-Object { $_ -match ':\d+$' } | Select-Object -First 1
 }
 $port = if ($binding) { ($binding -split ":")[-1] } else { "5173" }
 $base = "http://127.0.0.1:$port"
