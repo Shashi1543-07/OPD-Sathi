@@ -1,0 +1,24 @@
+# Who must approve a change before it can merge (Phase 7, tasks 7.4.7 and 7.6.4).
+# Branch protection on `main` requires an approving review from the owners below.
+#
+# Clinical content: a change to what patients are asked, what counts as a danger sign, how
+# urgency is weighed, or what a consent notice says needs a clinician's approval, a passing
+# evaluation and an updated golden set (CONTRIBUTING.md, "Clinical change control").
+# TODO before go-live: add the clinical reviewers' GitHub team, for example
+#   @opd-saathi/clinical-reviewers, after the owner on each clinical line below.
+
+*                                                   @Shashi1543-07
+
+# Clinical content and its evaluation sets
+/services/api/app/domain/redflags/rules.yaml        @Shashi1543-07
+/services/api/app/domain/triage/weights.yaml        @Shashi1543-07
+/services/api/app/domain/interview/bank/            @Shashi1543-07
+/services/api/app/domain/interview/consent/         @Shashi1543-07
+/services/api/app/domain/routing/                   @Shashi1543-07
+/eval/                                              @Shashi1543-07
+
+# Security-sensitive code
+/services/api/app/core/                             @Shashi1543-07
+/services/api/migrations/                           @Shashi1543-07
+/infra/                                             @Shashi1543-07
+/.github/                                           @Shashi1543-07
