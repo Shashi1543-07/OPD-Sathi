@@ -107,7 +107,7 @@ class PatientRepository:
             "hospital_id": hospital_id,
             "name_enc": encrypt_field(
                 name,
-                key=self.settings.app_data_key_bytes,
+                key=self.settings.app_data_keyring,
                 associated_data=f"patients:name_enc:{patient_id}",
             ),
             "phone_enc": None,
@@ -121,7 +121,7 @@ class PatientRepository:
             normalized_phone = phone.strip()
             values["phone_enc"] = encrypt_field(
                 normalized_phone,
-                key=self.settings.app_data_key_bytes,
+                key=self.settings.app_data_keyring,
                 associated_data=f"patients:phone_enc:{patient_id}",
             )
             values["phone_hmac"] = lookup_digest(
@@ -130,7 +130,7 @@ class PatientRepository:
         if abha:
             values["abha_enc"] = encrypt_field(
                 abha,
-                key=self.settings.app_data_key_bytes,
+                key=self.settings.app_data_keyring,
                 associated_data=f"patients:abha_enc:{patient_id}",
             )
         await self.connection.execute(
@@ -167,7 +167,7 @@ class PatientRepository:
             patient[encrypted_column.removesuffix("_enc")] = (
                 decrypt_field(
                     encrypted,
-                    key=self.settings.app_data_key_bytes,
+                    key=self.settings.app_data_keyring,
                     associated_data=f"patients:{encrypted_column}:{patient_id}",
                 )
                 if encrypted
@@ -303,7 +303,7 @@ class PatientRepository:
                 {
                     "phone_enc": encrypt_field(
                         phone,
-                        key=self.settings.app_data_key_bytes,
+                        key=self.settings.app_data_keyring,
                         associated_data=f"patients:phone_enc:{patient_id}",
                     ),
                     "phone_hmac": lookup_digest(phone, key=self.settings.app_hmac_key_bytes),
@@ -392,7 +392,7 @@ class PatientRepository:
                 patient[encrypted_column.removesuffix("_enc")] = (
                     decrypt_field(
                         encrypted,
-                        key=self.settings.app_data_key_bytes,
+                        key=self.settings.app_data_keyring,
                         associated_data=f"patients:{encrypted_column}:{patient_id}",
                     )
                     if encrypted
@@ -1063,7 +1063,7 @@ def decrypt_case_sheet(stored: Any, visit_id: UUID, settings: Settings) -> dict[
     try:
         plaintext = decrypt_field(
             ciphertext,
-            key=settings.app_data_key_bytes,
+            key=settings.app_data_keyring,
             associated_data=f"case_sheets:data:{visit_id}",
         )
         value = json.loads(plaintext)
@@ -1088,7 +1088,7 @@ class CaseSheetRepository:
         row_id = uuid7()
         encrypted_data = encrypt_field(
             json.dumps(data, separators=(",", ":")),
-            key=self.settings.app_data_key_bytes,
+            key=self.settings.app_data_keyring,
             associated_data=f"case_sheets:data:{visit_id}",
         )
         await self.connection.execute(
@@ -1151,7 +1151,7 @@ class CaseSheetRepository:
             raise ValueError("case sheet ciphertext is missing")
         plaintext = decrypt_field(
             ciphertext,
-            key=self.settings.app_data_key_bytes,
+            key=self.settings.app_data_keyring,
             associated_data=f"case_sheets:data:{visit_id}",
         )
         return {
@@ -1173,7 +1173,7 @@ class CaseSheetRepository:
     ) -> int | None:
         encrypted_data = encrypt_field(
             json.dumps(data, separators=(",", ":")),
-            key=self.settings.app_data_key_bytes,
+            key=self.settings.app_data_keyring,
             associated_data=f"case_sheets:data:{visit_id}",
         )
         result = await self.connection.execute(
@@ -1242,7 +1242,7 @@ class InterviewTurnRepository:
                     "text_original": (
                         decrypt_field(
                             original,
-                            key=self.settings.app_data_key_bytes,
+                            key=self.settings.app_data_keyring,
                             associated_data=f"interview_turns:text_original:{turn_id}",
                         )
                         if isinstance(original, str)
@@ -1251,7 +1251,7 @@ class InterviewTurnRepository:
                     "text_english": (
                         decrypt_field(
                             english,
-                            key=self.settings.app_data_key_bytes,
+                            key=self.settings.app_data_keyring,
                             associated_data=f"interview_turns:text_english:{turn_id}",
                         )
                         if isinstance(english, str)
@@ -1298,7 +1298,7 @@ class InterviewTurnRepository:
         encrypted_original = (
             encrypt_field(
                 text_original,
-                key=self.settings.app_data_key_bytes,
+                key=self.settings.app_data_keyring,
                 associated_data=f"interview_turns:text_original:{turn_id}",
             )
             if text_original is not None
@@ -1307,7 +1307,7 @@ class InterviewTurnRepository:
         encrypted_english = (
             encrypt_field(
                 text_english,
-                key=self.settings.app_data_key_bytes,
+                key=self.settings.app_data_keyring,
                 associated_data=f"interview_turns:text_english:{turn_id}",
             )
             if text_english is not None
@@ -1821,7 +1821,7 @@ class IntakeRepository:
         name_enc = (
             encrypt_field(
                 name,
-                key=self.settings.app_data_key_bytes,
+                key=self.settings.app_data_keyring,
                 associated_data=f"patients:name_enc:{patient_id}",
             )
             if name
@@ -1830,7 +1830,7 @@ class IntakeRepository:
         phone_enc = (
             encrypt_field(
                 phone,
-                key=self.settings.app_data_key_bytes,
+                key=self.settings.app_data_keyring,
                 associated_data=f"patients:phone_enc:{patient_id}",
             )
             if phone
@@ -1996,7 +1996,7 @@ class DocumentRepository:
                 "document_id": document_id,
                 "ciphertext": encrypt_bytes(
                     content,
-                    key=self.settings.app_data_key_bytes,
+                    key=self.settings.app_data_keyring,
                     associated_data=f"documents:content:{document_id}",
                 ),
             },
@@ -2040,7 +2040,7 @@ class DocumentRepository:
                 value = json.loads(
                     decrypt_field(
                         stored["ciphertext"],
-                        key=self.settings.app_data_key_bytes,
+                        key=self.settings.app_data_keyring,
                         associated_data=f"documents:extracted:{row['id']}",
                     )
                 )
@@ -2157,7 +2157,7 @@ class DocumentRepository:
             return None
         photo = decrypt_bytes(
             bytes(row["ciphertext"]),
-            key=self.settings.app_data_key_bytes,
+            key=self.settings.app_data_keyring,
             associated_data=f"documents:content:{document_id}",
         )
         return str(row["mime"]), photo
@@ -2185,7 +2185,7 @@ class DocumentRepository:
                     {
                         "ciphertext": encrypt_field(
                             json.dumps(reading, separators=(",", ":"), ensure_ascii=False),
-                            key=self.settings.app_data_key_bytes,
+                            key=self.settings.app_data_keyring,
                             associated_data=f"documents:extracted:{document_id}",
                         )
                     }
@@ -2286,7 +2286,19 @@ class AdminRepository:
             "is_active",
             "created_at",
         ),
-        "users": ("id", "role", "name", "email", "department_id", "is_active", "created_at"),
+        "users": (
+            "id",
+            "role",
+            "name",
+            "email",
+            "department_id",
+            "is_active",
+            "created_at",
+            # So administrators see who is locked out, enrolled or waiting to change a password.
+            "locked_until",
+            "mfa_enabled_at",
+            "must_change_password",
+        ),
         "kiosks": ("id", "label", "kind", "is_active", "last_seen_at", "paired_at", "created_at"),
     }
     # Visits in these states are still being looked after by their department.
@@ -2381,10 +2393,15 @@ class AdminRepository:
             await self.connection.execute(
                 text(
                     "INSERT INTO users (id, hospital_id, role, name, email, password_hash, "
-                    "department_id) VALUES (:id, :hospital_id, :role, :name, :email, "
-                    ":password_hash, :department_id)"
+                    "department_id, must_change_password) VALUES (:id, :hospital_id, :role, "
+                    ":name, :email, :password_hash, :department_id, :must_change_password)"
                 ),
-                {"id": resource_id, "hospital_id": hospital_id, **values},
+                {
+                    "id": resource_id,
+                    "hospital_id": hospital_id,
+                    "must_change_password": False,
+                    **values,
+                },
             )
             return {
                 "id": str(resource_id),
@@ -2393,6 +2410,7 @@ class AdminRepository:
                 "email": values["email"],
                 "department_id": values["department_id"],
                 "is_active": True,
+                "must_change_password": bool(values.get("must_change_password", False)),
             }
         if resource == "kiosks" and values.get("kind") == "mobile":
             # A phone check-in point: no device to pair, only its check-in code's digest.

@@ -10,6 +10,9 @@ import {
   EyeOff,
   KeyRound,
   Link2,
+  LockOpen,
+  LogOut,
+  Pencil,
   Monitor,
   MoreHorizontal,
   Network,
@@ -18,6 +21,7 @@ import {
   QrCode,
   RefreshCw,
   Search,
+  ShieldOff,
   Smartphone,
   Trash2,
   UserRound,
@@ -47,7 +51,11 @@ type StaffRecord = {
   email: string;
   department_id: string | null;
   is_active: boolean;
+  locked_until?: string | null;
+  mfa_enabled_at?: string | null;
+  must_change_password?: boolean;
 };
+type StaffAction = "password-reset" | "unlock" | "mfa-reset" | "sessions/end";
 type Kiosk = {
   id: string;
   label: string;
@@ -94,6 +102,10 @@ function connectionOf(kiosk: Kiosk, now: number): Connection {
 const MAX_PAGES = 20;
 const cap = (value: string) => `${value[0].toUpperCase()}${value.slice(1)}`;
 
+function isLocked(item: { locked_until?: string | null }) {
+  return Boolean(item.locked_until && new Date(item.locked_until).getTime() > Date.now());
+}
+
 function initials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
   const last = words.at(-1) ?? "";
@@ -127,6 +139,9 @@ export function AdminConsole() {
     departments: NO_FILTERS,
   });
   const [pending, setPending] = useState<Pending | null>(null);
+  // A temporary password is shown once, right after the reset.
+  const [temporary, setTemporary] = useState<{ name: string; password: string } | null>(null);
+  const [editing, setEditing] = useState<StaffRecord | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState<"code" | "link" | "checkin" | null>(null);
   const baseId = useId();
@@ -276,6 +291,71 @@ export function AdminConsole() {
         body: JSON.stringify({ is_active: !item.is_active }),
       });
       await load(target);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("adminRequestError"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** Account help for a staff member: reset password, unlock, reset two-step, sign out. */
+  async function staffAction(item: StaffRecord, action: StaffAction) {
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = (await request(`/admin/users/${item.id}/${action}`, {
+        method: "POST",
+        headers: { "Idempotency-Key": newRequestId() },
+      })) as { temporary_password?: string };
+      if (result?.temporary_password) {
+        setTemporary({ name: item.name, password: result.temporary_password });
+      } else {
+        setNotice(
+          t(
+            action === "unlock"
+              ? "staffUnlocked"
+              : action === "mfa-reset"
+                ? "staffMfaReset"
+                : "staffSignedOut",
+            { name: item.name },
+          ),
+        );
+      }
+      await load("users");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("adminRequestError"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveEdit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    const form = new FormData(event.currentTarget);
+    const changes: Record<string, string | null> = {};
+    const name = String(form.get("name") ?? "").trim();
+    const email = String(form.get("email") ?? "").trim();
+    const department = String(form.get("department_id") ?? "");
+    if (name && name !== editing.name) changes.name = name;
+    if (email && email !== editing.email) changes.email = email;
+    if ((department || null) !== editing.department_id) changes.department_id = department || null;
+    if (Object.keys(changes).length === 0) {
+      setEditing(null);
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await request(`/admin/users/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": newRequestId() },
+        body: JSON.stringify(changes),
+      });
+      setNotice(t("staffUpdated", { name: name || editing.name }));
+      setEditing(null);
+      await load("users");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("adminRequestError"));
     } finally {
@@ -483,7 +563,7 @@ export function AdminConsole() {
   const rowActions = (
     item: { id: string; is_active: boolean },
     name: string,
-    options: { self?: boolean; kiosk?: Kiosk } = {},
+    options: { self?: boolean; kiosk?: Kiosk; staff?: StaffRecord } = {},
   ) => (
     <span className="adm-actions">
       {toggleButton(item, name, options.self)}
@@ -518,6 +598,68 @@ export function AdminConsole() {
                 >
                   <RefreshCw aria-hidden="true" size={15} /> {t("replaceCheckinQr")}
                 </button>
+              </>
+            )}
+            {options.staff && (
+              <>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    close();
+                    setEditing(options.staff ?? null);
+                  }}
+                >
+                  <Pencil aria-hidden="true" size={15} /> {t("editStaff")}
+                </button>
+                {!options.self && (
+                  <button
+                    type="button"
+                    disabled={saving || !item.is_active}
+                    onClick={() => {
+                      close();
+                      void staffAction(options.staff as StaffRecord, "password-reset");
+                    }}
+                  >
+                    <KeyRound aria-hidden="true" size={15} /> {t("resetPassword")}
+                  </button>
+                )}
+                {isLocked(options.staff) && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      close();
+                      void staffAction(options.staff as StaffRecord, "unlock");
+                    }}
+                  >
+                    <LockOpen aria-hidden="true" size={15} /> {t("unlockAccount")}
+                  </button>
+                )}
+                {options.staff.mfa_enabled_at && !options.self && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      close();
+                      void staffAction(options.staff as StaffRecord, "mfa-reset");
+                    }}
+                  >
+                    <ShieldOff aria-hidden="true" size={15} /> {t("resetMfa")}
+                  </button>
+                )}
+                {!options.self && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      close();
+                      void staffAction(options.staff as StaffRecord, "sessions/end");
+                    }}
+                  >
+                    <LogOut aria-hidden="true" size={15} /> {t("signOutEverywhere")}
+                  </button>
+                )}
               </>
             )}
             {options.kiosk && options.kiosk.kind !== "mobile" && (
@@ -585,8 +727,15 @@ export function AdminConsole() {
           <td data-label={t("department")}>
             {item.department_id ? departmentLabel(departmentById.get(item.department_id)) : t("noDepartment")}
           </td>
-          <td data-label={t("statusColumn")}>{statusPill(item.is_active)}</td>
-          <td className="adm-col-action">{rowActions(item, item.name, { self })}</td>
+          <td data-label={t("statusColumn")}>
+            {statusPill(item.is_active)}
+            {isLocked(item) && <span className="adm-status adm-flag">{t("lockedFlag")}</span>}
+            {item.mfa_enabled_at && <span className="adm-status adm-flag">{t("mfaFlag")}</span>}
+            {item.must_change_password && (
+              <span className="adm-status adm-flag">{t("mustChangeFlag")}</span>
+            )}
+          </td>
+          <td className="adm-col-action">{rowActions(item, item.name, { self, staff: item })}</td>
         </tr>
       );
     });
@@ -1063,6 +1212,81 @@ export function AdminConsole() {
           </div>
         </section>
       </div>
+
+      {temporary && (
+        <div className="rp-dialog-backdrop">
+          <section
+            className="rp-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={`${baseId}-temporary`}
+          >
+            <h3 id={`${baseId}-temporary`}>{t("temporaryPasswordTitle", { name: temporary.name })}</h3>
+            <p>{t("temporaryPasswordHint")}</p>
+            <p className="adm-code">
+              <code>{temporary.password}</code>
+            </p>
+            <div className="rp-dialog-actions">
+              <button type="button" autoFocus onClick={() => setTemporary(null)}>
+                {t("temporaryPasswordDone")}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {editing && (
+        <div
+          className="rp-dialog-backdrop"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setEditing(null);
+          }}
+        >
+          <section
+            className="rp-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${baseId}-edit`}
+          >
+            <h3 id={`${baseId}-edit`}>{t("editStaffTitle", { name: editing.name })}</h3>
+            <form className="acct-form" onSubmit={saveEdit}>
+              <label htmlFor={`${baseId}-edit-name`}>{t("staffName")}</label>
+              <input id={`${baseId}-edit-name`} name="name" required defaultValue={editing.name} />
+              <label htmlFor={`${baseId}-edit-email`}>{t("email")}</label>
+              <input
+                id={`${baseId}-edit-email`}
+                name="email"
+                type="email"
+                required
+                defaultValue={editing.email}
+              />
+              <label htmlFor={`${baseId}-edit-department`}>{t("department")}</label>
+              <select
+                id={`${baseId}-edit-department`}
+                name="department_id"
+                defaultValue={editing.department_id ?? ""}
+              >
+                <option value="">{t("noDepartment")}</option>
+                {departments
+                  .filter((department) => department.is_active || department.id === editing.department_id)
+                  .map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {departmentLabel(department)}
+                    </option>
+                  ))}
+              </select>
+              <div className="rp-dialog-actions">
+                <button type="button" onClick={() => setEditing(null)}>
+                  {t("cancelEdit")}
+                </button>
+                <button type="submit" className="is-primary" disabled={saving}>
+                  {t("saveChanges")}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
 
       {pending && (
         <div

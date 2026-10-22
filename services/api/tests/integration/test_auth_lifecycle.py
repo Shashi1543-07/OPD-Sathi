@@ -54,6 +54,8 @@ def _database_settings() -> Settings:
         update={
             "database_url": app_url,
             "migrations_database_url": migrator_url,
+            # These flows predate two-step sign-in; test_staff_accounts.py covers it.
+            "mfa_required_roles": "",
         }
     )
 

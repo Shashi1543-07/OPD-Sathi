@@ -128,6 +128,14 @@ export const router = createBrowserRouter([
           };
         },
       },
+      {
+        // Every staff member's own password, two-step sign-in and sessions.
+        path: "account",
+        lazy: async () => {
+          const { MyAccount } = await import("./MyAccount");
+          return { Component: MyAccount };
+        },
+      },
     ],
   },
   {

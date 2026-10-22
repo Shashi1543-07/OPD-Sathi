@@ -26,6 +26,10 @@ bandit
 pip-audit
 PyJWT
 argon2-cffi
+# TOTP second sign-in step (ADR 008)
+pyotp
+# Multi-process-safe Prometheus metrics (ADR 010)
+prometheus-client
 cryptography
 weasyprint>=70,<71
 pypdf

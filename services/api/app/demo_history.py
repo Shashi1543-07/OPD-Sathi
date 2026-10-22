@@ -462,7 +462,7 @@ async def seed_history(
     connection: AsyncConnection, settings: Settings, *, hospital_id: UUID, days: int
 ) -> tuple[int, int]:
     """Fill each missing day of the last ``days`` days (not today). Returns (days, visits)."""
-    key = settings.app_data_key_bytes
+    key = settings.app_data_keyring
     departments = {
         row["code"]: row
         for row in (

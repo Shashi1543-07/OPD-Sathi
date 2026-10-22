@@ -8,14 +8,27 @@ export type StaffUser = {
   email: string;
   role: StaffRole;
   hospital_id: string;
+  mfa_enabled?: boolean;
 };
 
-type AuthResponse = {
+/**
+ * What a signed-in person must do before anything else: choose a new password (after a
+ * reset or on a new account), or set up two-step sign-in (required for their role).
+ */
+export type Restriction = "password_change" | "mfa_setup";
+
+export type AuthResponse = {
   access_token: string;
   token_type: "bearer";
   expires_in: number;
+  restrictions?: Restriction[];
   user: StaffUser;
 };
+
+/** The password was right; the session waits for a one-time code (or a recovery code). */
+export type MfaChallenge = { mfaToken: string };
+
+type LoginResponse = AuthResponse | { mfa_required: true; mfa_token: string };
 
 type Problem = { code?: string; detail?: string };
 
@@ -27,6 +40,7 @@ const getResponseCache = new Map<
 const getRequestFlights = new Map<string, Promise<Response>>();
 let accessToken: string | null = null;
 let currentUser: StaffUser | null = null;
+let restrictions: Restriction[] = [];
 let refreshFlight: Promise<StaffUser | null> | null = null;
 const listeners = new Set<(user: StaffUser | null) => void>();
 
@@ -107,13 +121,21 @@ async function authRequest(path: string, body?: unknown): Promise<Response> {
   });
 }
 
-async function parseAuth(response: Response): Promise<AuthResponse> {
-  const payload = (await response.json()) as AuthResponse | Problem;
+async function parseAuth<T = AuthResponse>(response: Response): Promise<T> {
+  const payload = (await response.json().catch(() => ({}))) as T | Problem;
   if (!response.ok) {
     const problem = payload as Problem;
     throw new Error(problem.code ?? "SIGN_IN_FAILED");
   }
-  return payload as AuthResponse;
+  return payload as T;
+}
+
+/** Take the tokens of a new or renewed session and tell every listener. */
+function adoptSession(auth: AuthResponse) {
+  accessToken = auth.access_token;
+  restrictions = auth.restrictions ?? [];
+  rememberAccount(auth.user.id);
+  publish(auth.user);
 }
 
 export const staffAuth = {
@@ -123,23 +145,45 @@ export const staffAuth = {
   get user() {
     return currentUser;
   },
+  /** Steps the signed-in person must finish first; empty for a normal session. */
+  get restrictions() {
+    return restrictions;
+  },
+  /**
+   * Use the session a server response carries: after a password change, or after turning
+   * two-step sign-in on or off (each returns fresh tokens without the old restriction).
+   */
+  adopt(auth: AuthResponse) {
+    adoptSession(auth);
+  },
   subscribe(listener: (user: StaffUser | null) => void) {
     listeners.add(listener);
     return () => {
       listeners.delete(listener);
     };
   },
-  async login(hospitalId: string, email: string, password: string) {
-    const auth = await parseAuth(
+  /** Sign in; returns a challenge when the account uses two-step sign-in. */
+  async login(hospitalId: string, email: string, password: string): Promise<MfaChallenge | null> {
+    const auth = await parseAuth<LoginResponse>(
       await authRequest("/auth/login", {
         hospital_id: hospitalId,
         email,
         password,
       }),
     );
-    accessToken = auth.access_token;
-    rememberAccount(auth.user.id);
-    publish(auth.user);
+    if ("mfa_required" in auth) return { mfaToken: auth.mfa_token };
+    adoptSession(auth);
+    return null;
+  },
+  /** The second step: a code from the authenticator app, or one recovery code. */
+  async verifyMfa(challenge: MfaChallenge, answer: { code: string } | { recoveryCode: string }) {
+    const auth = await parseAuth(
+      await authRequest("/auth/mfa/verify", {
+        mfa_token: challenge.mfaToken,
+        ...("code" in answer ? { code: answer.code } : { recovery_code: answer.recoveryCode }),
+      }),
+    );
+    adoptSession(auth);
   },
   refresh(): Promise<StaffUser | null> {
     if (refreshFlight) return refreshFlight;
@@ -152,15 +196,14 @@ export const staffAuth = {
         );
         // A tab never silently turns into someone else.
         if (currentUser && auth.user.id !== currentUser.id) throw new Error("ACCOUNT_CHANGED");
-        accessToken = auth.access_token;
-        rememberAccount(auth.user.id);
-        publish(auth.user);
+        adoptSession(auth);
         return auth.user;
       } catch (cause) {
         if (cause instanceof Error && ["UNAUTHENTICATED", "ACCOUNT_CHANGED"].includes(cause.message)) {
           forgetAccount(account);
         }
         accessToken = null;
+        restrictions = [];
         publish(null);
         return null;
       } finally {
@@ -180,6 +223,7 @@ export const staffAuth = {
       // Without tab storage the next reload simply returns to the last account.
     }
     accessToken = null;
+    restrictions = [];
     publish(null);
   },
   async logout() {
@@ -189,6 +233,7 @@ export const staffAuth = {
     } finally {
       forgetAccount(account);
       accessToken = null;
+      restrictions = [];
       publish(null);
     }
   },

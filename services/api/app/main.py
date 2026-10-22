@@ -25,6 +25,7 @@ from app.ai.providers.llm.mock import MockLLM
 from app.ai.providers.stt.factory import build_stt_provider
 from app.ai.providers.tts.factory import build_tts_provider
 from app.ai.speech import SpeechService
+from app.api.v1 import account as account_api
 from app.api.v1 import admin as admin_api
 from app.api.v1 import analytics as analytics_api
 from app.api.v1 import audio as audio_api
@@ -332,6 +333,7 @@ def create_app(
     app.add_exception_handler(ApiProblemError, cast(handler_type, api_problem_exception_handler))
 
     app.include_router(auth_api.router)
+    app.include_router(account_api.router)
     app.include_router(audit_api.router)
     app.include_router(admin_api.router)
     app.include_router(analytics_api.router)
