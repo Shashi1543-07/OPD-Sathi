@@ -37,7 +37,7 @@ jobs:
         run: KEEP=1 SMOKE_STATE_FILE="$RUNNER_TEMP/smoke-state.json" bash scripts/prod_smoke.sh
       - name: ZAP and Schemathesis
         run: SMOKE_STATE="$RUNNER_TEMP/smoke-state.json" bash scripts/dast.sh https://localhost:8443 services/api/openapi.json dast-reports
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: dast-reports
