@@ -54,14 +54,16 @@ echo "  restoring to restore point $TARGET"
 
 step "Restoring into a throwaway volume"
 docker volume create "$VOLUME" >/dev/null
-"${C[@]}" run --rm --no-deps -T --user 0 -v "$VOLUME:/restore" --entrypoint sh postgres -c \
-  "chown postgres:postgres /restore && chmod 0700 /restore &&
-   exec with-backup-secrets gosu postgres pgbackrest --stanza=osa --pg1-path=/restore \
-     --type=name --target='$TARGET' --target-action=promote restore"
+# The image runs as postgres; an empty volume mounted at /var/lib/postgresql/restore takes the
+# owner of that directory in the image, so no root step is needed.
+RESTORED=/var/lib/postgresql/restore
+"${C[@]}" run --rm --no-deps -T -v "$VOLUME:$RESTORED" postgres \
+  pgbackrest --stanza=osa --pg1-path="$RESTORED" --type=name --target="$TARGET" \
+  --target-action=promote restore
 
 step "Starting PostgreSQL on the restored copy"
 # Port 5433 and a private socket directory: nothing can mistake it for the live database.
-"${C[@]}" run -d --no-deps --name "$DRILL" -v "$VOLUME:/restore" -e PGDATA=/restore postgres \
+"${C[@]}" run -d --no-deps --name "$DRILL" -v "$VOLUME:$RESTORED" -e PGDATA="$RESTORED" postgres \
   postgres -c archive_mode=off -c port=5433 -c unix_socket_directories=/tmp >/dev/null
 drill_sql() { docker exec "$DRILL" psql -h /tmp -p 5433 -U postgres -d "$DB" -qAt -c "$1"; }
 for _ in $(seq 1 120); do

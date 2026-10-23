@@ -65,9 +65,8 @@ the clinical lead and write it down first.
 2. Restore in place to the chosen time (IST shown here), keeping files that already match:
 
    ```sh
-   $C run --rm --no-deps --user 0 --entrypoint sh postgres -c \
-     "exec with-backup-secrets gosu postgres pgbackrest --stanza=osa --delta \
-        --type=time --target='2026-11-20 10:42:00+05:30' --target-action=promote restore"
+   $C run --rm --no-deps postgres pgbackrest --stanza=osa --delta \
+     --type=time --target="2026-11-20 10:42:00+05:30" --target-action=promote restore
    ```
 
    To go back to the last moment before a known event instead, use the latest backup with
@@ -102,8 +101,7 @@ the clinical lead and write it down first.
    above:
 
    ```sh
-   $C run --rm --no-deps --user 0 --entrypoint sh postgres -c \
-     "exec with-backup-secrets gosu postgres pgbackrest --stanza=osa --repo=2 --delta restore"
+   $C run --rm --no-deps postgres pgbackrest --stanza=osa --repo=2 --delta restore
    ```
 
 ## Restore drill

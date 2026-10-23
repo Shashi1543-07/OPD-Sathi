@@ -116,8 +116,7 @@ services:
       - pgbackrest_repo2_cipher_pass
       - pgbackrest_repo2_s3_key
       - pgbackrest_repo2_s3_key_secret
-    # The entrypoint starts as root, prepares the data directory, then drops to "postgres".
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    # Runs as the postgres user from the start (the image's USER): no added capabilities.
     volumes:
       - pgbackrest-repo:/var/lib/pgbackrest
       # The socket directory is shared with the backup service.
