@@ -1,6 +1,6 @@
 # Runbook: renew or replace the HTTPS certificate
 
-**Alert:** `CertificateExpiresSoon` (fewer than 21 days left) · **Owner:** hospital IT ·
+**Alert:** `CertificateExpiring` (fewer than 21 days left) · **Owner:** hospital IT ·
 **Time:** 15 minutes · **Impact while doing it:** none (nginx reloads without dropping connections)
 
 ## Why it matters

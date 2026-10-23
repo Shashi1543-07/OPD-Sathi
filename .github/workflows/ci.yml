@@ -160,10 +160,11 @@ jobs:
       - uses: actions/checkout@v7
       - run: docker build -q -t opd-saathi-api:ci -f services/api/Dockerfile .
       - run: docker build -q -t opd-saathi-web:ci -f apps/web/Dockerfile .
+      - run: docker build -q -t opd-saathi-postgres:ci -f infra/postgres/Dockerfile .
       - name: Scan and describe the images
         run: |
           mkdir -p sbom
-          for image in api web; do
+          for image in api web postgres; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out"               aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c image --quiet --exit-code 1 --ignore-unfixed               --severity HIGH,CRITICAL --ignorefile /out/.trivyignore opd-saathi-$image:ci
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out"               aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c image --quiet --format cyclonedx               --output /out/sbom/opd-saathi-$image.cdx.json opd-saathi-$image:ci
           done

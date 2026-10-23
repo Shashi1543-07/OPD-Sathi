@@ -129,21 +129,41 @@ Without `app_data_key`, encrypted records can never be read again.
 
 ## 7. Running it
 
+From `/opt/opd-saathi`, with `C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"`:
+
 | Task | How |
 |---|---|
 | Status | `docker compose -f docker-compose.yml -f docker-compose.prod.yml ps` |
 | Logs (no patient data by design) | `... logs --tail 200 api worker web` |
 | Restart | `sudo systemctl restart opd-saathi` |
-| Back up now | `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml BACKUP_DIR=/var/backups/opd-saathi scripts/backup.sh` |
+| Back up now | `$C exec backup backup-loop run full` (and a logical dump: `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml BACKUP_DIR=/var/backups/opd-saathi scripts/backup.sh`) |
+| Restore | `docs/runbooks/restore.md` |
 | Account help | Settings → Users: reset password, unlock, reset two-step sign-in, sign out everywhere |
 | Investigation | Settings → Audit log (`docs/runbooks/audit-investigation.md`) |
 | Key rotation | `docs/runbooks/key-rotation.md` |
 | Server down in OPD hours | `docs/runbooks/server-down.md` (paper fallback) |
 
-Runbooks for each failure are in `docs/runbooks/`. **Backups:** until the scheduled, encrypted,
-off-site backups of Phase 7 G2 are installed (pgBackRest, task 7.7), schedule `scripts/backup.sh`
-nightly with a systemd timer or cron, copy `/var/backups/opd-saathi` off the server, and keep the
-copies encrypted.
+Runbooks for each failure are in `docs/runbooks/`.
+
+**Backups** (ADR 011; `docs/runbooks/restore.md`) run by themselves: every database change is
+archived within 5 minutes and a backup is taken every night at 01:30 IST, encrypted. Check them
+with `$C exec backup with-backup-secrets pgbackrest --stanza=osa info`, and run
+`sudo scripts/restore-drill.sh` every quarter. **Keep a copy off the server** (a fire or theft
+takes the server and its disks): set a second repository in `.env` and restart the stack, either
+an S3-compatible bucket in India
+
+```sh
+PGBACKREST_REPO2_TYPE=s3
+PGBACKREST_REPO2_PATH=/opd-saathi
+PGBACKREST_REPO2_S3_BUCKET=hospital-backups
+PGBACKREST_REPO2_S3_ENDPOINT=s3.example-indian-cloud.in
+PGBACKREST_REPO2_S3_REGION=ap-south-1
+# keys in secrets/pgbackrest_repo2_s3_key and pgbackrest_repo2_s3_key_secret
+```
+
+or a NAS in another building mounted on the server (`PGBACKREST_REPO2_TYPE=posix`,
+`PGBACKREST_REPO2_PATH=/mnt/offsite`, `PGBACKREST_REPO2_HOST_PATH=/mnt/nas/opd-saathi`). Then
+`$C exec backup backup-loop run full` and confirm `info` lists both repositories.
 
 ## 8. Monitoring and alerts
 

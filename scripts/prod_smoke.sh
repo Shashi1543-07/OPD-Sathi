@@ -30,12 +30,13 @@ b64() { openssl rand -base64 32 | tr -d '\r\n'; }
 put() { printf '%s' "$2" > "$SECRETS/$1"; chmod 0644 "$SECRETS/$1"; }
 
 for name in postgres_password osa_app_password osa_migrator_password osa_worker_password \
-  redis_password jwt_secret; do
+  redis_password jwt_secret pgbackrest_cipher_pass; do
   put "$name" "$(hex)"
 done
 for name in app_data_key app_hmac_key cursor_hmac_key notify_key; do put "$name" "$(b64)"; done
 for name in gemini_api_key sarvam_api_key twilio_auth_token whatsapp_access_token smtp_password \
-  telegram_bot_token; do put "$name" ""; done
+  telegram_bot_token pgbackrest_repo2_cipher_pass pgbackrest_repo2_s3_key \
+  pgbackrest_repo2_s3_key_secret; do put "$name" ""; done
 read_secret() { cat "$SECRETS/$1"; }
 put database_url "postgresql+asyncpg://osa_app:$(read_secret osa_app_password)@postgres:5432/osa"
 put worker_database_url "postgresql+asyncpg://osa_worker:$(read_secret osa_worker_password)@postgres:5432/osa"
@@ -92,10 +93,10 @@ trap cleanup EXIT
 echo "==> Building and starting the production stack"
 # A stack left by an earlier KEEP=1 run has a database made with other passwords; start clean.
 "${C[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
-"${C[@]}" build --quiet api worker web
+"${C[@]}" build --quiet api worker web postgres backup
 "${C[@]}" up -d postgres redis redis-cache worker-role-bootstrap
 "${C[@]}" run --rm api alembic -c /app/alembic.ini upgrade head
-"${C[@]}" up -d api worker web prometheus alertmanager
+"${C[@]}" up -d api worker web prometheus alertmanager backup
 
 echo "==> Refusing development values"
 # The stack must not start in production with a development signing key.
@@ -193,6 +194,34 @@ print(result[0]['value'][1] if result else '')
   if [[ -n "$value" && "$value" != "0" ]]; then echo "ok   worker reports $metric"; else
     echo "FAIL worker does not report $metric: ${raw:0:300}"; leaks=1; fi
 done
+echo "==> Backups"
+# The backup service takes a first full backup at once; WAL archiving runs from the start.
+for _ in $(seq 1 60); do
+  info="$("${C[@]}" exec -T backup with-backup-secrets pgbackrest --stanza=osa --output=json info 2>/dev/null || true)"
+  grep -q '"type":"full"' <<<"$info" && break
+  sleep 3
+done
+if grep -q '"type":"full"' <<<"$info"; then echo "ok   first full backup in the encrypted repository"; else
+  echo "FAIL no full backup: $("${C[@]}" logs --tail 20 backup 2>&1)"; leaks=1; fi
+grep -q '"cipher":"aes-256-cbc"' <<<"$info" && echo "ok   backup repository encrypted" ||
+  { echo "FAIL backup repository not encrypted"; leaks=1; }
+"${C[@]}" exec -T postgres psql -U postgres -d osa -qtAc "SELECT pg_switch_wal()" >/dev/null
+if "${C[@]}" exec -T backup with-backup-secrets pgbackrest --stanza=osa check >/dev/null 2>&1; then
+  echo "ok   WAL archiving works"; else echo "FAIL WAL archiving"; leaks=1; fi
+for _ in $(seq 1 30); do
+  backup_gauge="$(query 'backup_last_success_timestamp_seconds{job="worker"}' || true)"
+  grep -q '"value"' <<<"$backup_gauge" && break
+  sleep 2
+done
+grep -q '"value"' <<<"$backup_gauge" && echo "ok   monitoring sees the last backup" ||
+  { echo "FAIL monitoring does not see the backup: ${backup_gauge:0:200}"; leaks=1; }
+# Restore the backup to a restore point, compare every table and decrypt every value (7.7.5).
+if OSA_COMPOSE="${C[*]}" bash scripts/restore-drill.sh > "$WORK/restore-drill.log" 2>&1; then
+  echo "ok   restore drill: $(tail -1 "$WORK/restore-drill.log")"
+else
+  echo "FAIL restore drill:"; tail -25 "$WORK/restore-drill.log"; leaks=1
+fi
+
 rules="$(prom rules || true)"
 grep -q '"name":"ApiDown"' <<<"$rules" && grep -q '"name":"UrgentAlertUnacknowledged"' <<<"$rules" \
   && echo "ok   alert rules loaded" || { echo "FAIL alert rules not loaded"; leaks=1; }

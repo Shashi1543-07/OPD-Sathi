@@ -85,6 +85,12 @@ done
 for name in app_data_key app_hmac_key cursor_hmac_key notify_key; do
   new_secret "$name" b64key
 done
+# The backup encryption passphrase (ADR 011): separate from the data keys, escrowed with them
+# (docs/runbooks/key-escrow.md). Off-site repository credentials stay empty until configured.
+new_secret pgbackrest_cipher_pass hex32
+for name in pgbackrest_repo2_cipher_pass pgbackrest_repo2_s3_key pgbackrest_repo2_s3_key_secret; do
+  new_secret "$name" empty
+done
 # Optional provider keys: empty until a contract is signed (task 7.5.9).
 for name in gemini_api_key sarvam_api_key twilio_auth_token whatsapp_access_token; do
   new_secret "$name" empty
@@ -181,6 +187,9 @@ step "Starting the database and caches"
 step "Backing up before migrating"
 if "${COMPOSE[@]}" exec -T postgres pg_isready -q 2>/dev/null &&
    [[ -x scripts/backup.sh ]] && [[ "$("${COMPOSE[@]}" exec -T postgres sh -c 'psql -U postgres -d osa -tAc "select count(*) from alembic_version"' 2>/dev/null || echo 0)" != "0" ]]; then
+  # A full pgBackRest backup (restorable to the minute) and a logical dump as a second copy.
+  "${COMPOSE[@]}" run --rm $BUILD backup backup-loop run full ||
+    fail "Backup failed; not migrating (docs/runbooks/restore.md)."
   COMPOSE_FILE="docker-compose.yml:docker-compose.prod.yml" BACKUP_DIR=/var/backups/opd-saathi \
     ./scripts/backup.sh || fail "Backup failed; not migrating."
 else
@@ -191,7 +200,7 @@ step "Applying database migrations"
 "${COMPOSE[@]}" run --rm $BUILD api alembic -c /app/alembic.ini upgrade head
 
 step "Starting the API, worker and web server"
-"${COMPOSE[@]}" up -d $BUILD api worker web prometheus alertmanager
+"${COMPOSE[@]}" up -d $BUILD api worker web prometheus alertmanager backup
 
 if [[ ! -f "$CONFIG_DIR/.onboarded" || $ADD_HOSPITAL -eq 1 ]]; then
   step "Onboarding the hospital"
