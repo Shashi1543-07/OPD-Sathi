@@ -89,7 +89,8 @@ cleanup() {
   else
     echo "Stack left running: docker compose -p $PROJECT ... (secrets in $WORK)"
     # For scripts that continue with the running stack (scripts/load-test.sh).
-    [[ -n "${SMOKE_COMPOSE_FILE:-}" ]] && printf '%s\n' "${C[*]}" > "$SMOKE_COMPOSE_FILE"
+    # (an if, not "test && ...": a false test would become the script's exit status)
+    if [[ -n "${SMOKE_COMPOSE_FILE:-}" ]]; then printf '%s\n' "${C[*]}" > "$SMOKE_COMPOSE_FILE"; fi
   fi
 }
 trap cleanup EXIT

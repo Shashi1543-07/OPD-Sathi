@@ -40,3 +40,7 @@ def child_exit(server: object, worker: object) -> None:
     from prometheus_client import multiprocess
 
     multiprocess.mark_process_dead(worker.pid)  # type: ignore[attr-defined]
+
+# Gunicorn's control socket defaults to the home directory, which is read-only in production
+# (read_only containers); the private tmpfs is writable.
+control_socket = "/tmp/gunicorn.ctl"

@@ -11,6 +11,7 @@ RUN apt-get update && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -o postgres -g postgres -m 0750 /var/lib/pgbackrest /var/spool/pgbackrest \
     && install -d -o postgres -g postgres -m 0700 /var/lib/postgresql/restore \
+    && install -d -o postgres -g postgres -m 0755 /var/lib/osa-backup \
     && install -d -m 0755 /etc/pgbackrest \
     && rm -f /usr/local/bin/gosu
 
