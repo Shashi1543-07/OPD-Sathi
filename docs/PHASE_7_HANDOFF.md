@@ -52,6 +52,24 @@ Most of that is owned by people outside engineering; the engineering work is:
 - **Cut the first release**: `VERSION` is 0.7.0 and `CHANGELOG.md` has its notes; tag `v0.7.0`
   on `main` to run `.github/workflows/release.yml` for the first time (`docs/RELEASES.md`).
 
+## Dependabot queue to triage first (open on 24 Oct 2026)
+
+Dependabot opens up to five pull requests per ecosystem each week. Triage them together on one
+branch (as #36 did), never by merging them one by one: each runs the full CI, and several need
+companions or are majors.
+
+| PR | Update | Suggested |
+|---|---|---|
+| #37 | Development images: PostgreSQL 16.14, Prometheus 3.15, Grafana 12.4 (development only) | Take; its checks passed after a rerun (a Playwright download had timed out) |
+| #40 | react-dom 19 | Take with the React 19 upgrade (left over from G2) |
+| #41 | jsdom 25 → 30 (test environment) | Major: try with the web tests |
+| #42 | semgrep 1.179 → 1.181 (CI-only lock) | Take if the security job passes |
+| #43 | @testing-library/user-event patch | Take |
+| #44 | opentelemetry-proto 1.45 (Semgrep lock) | Close: Semgrep pins 1.37 (ADR 006; now ignored in dependabot.yml) |
+| #45 | click 8.5 | Take if the security job passes |
+| #46 | @playwright/test 1.64 | Take; the e2e jobs verify it |
+| #47 | TypeScript 5.7 → 7.0 | Major (the Go-based compiler): its own pass with typecheck, lint and build |
+
 ## Held back on purpose (do not take as routine updates)
 
 PostgreSQL 18 (needs `pg_upgrade` or dump and restore: a planned upgrade), Redis 8 (licence
