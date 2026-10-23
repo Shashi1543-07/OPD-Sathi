@@ -1,4 +1,4 @@
-FROM python:3.12.15-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70 AS builder
+FROM python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 VIRTUAL_ENV=/opt/venv
 RUN python -m venv "$VIRTUAL_ENV"
@@ -9,7 +9,7 @@ COPY services/api/requirements-runtime.lock.txt ./requirements.lock.txt
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock.txt \
     && pip uninstall --yes pip
 
-FROM python:3.12.15-slim-bookworm@sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70 AS runtime
+FROM python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:$PATH"
 # Debian security updates published since the base image was built, then the PDF libraries.
 # Nothing installs packages at run time, so pip, setuptools and their bundled wheels go (they
