@@ -8,9 +8,9 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domain.redflags.normalize import normalize_text, tokens
+from app.domain.review import check_review
 
 RULE_PATH = Path(__file__).with_name("rules.yaml")
-REVIEW_STATUS = "draft_needs_clinician_review"
 LANGUAGES = ("en", "hi", "mr", "hinglish")
 NEGATIONS = {
     "no",
@@ -34,8 +34,9 @@ class RuleModel(BaseModel):
 
     id: str = Field(pattern=r"^[A-Z0-9_]+$")
     level: Literal["priority", "urgent"]
-    status: Literal["draft_needs_clinician_review"]
-    reviewed_by: str | None
+    status: Literal["draft_needs_clinician_review", "approved"]
+    # Required when approved: reviewed_by, reviewed_on, content_version (app/domain/review.py).
+    review: dict[str, Any] | None = None
     reason_en: str = Field(min_length=1, max_length=300)
     all_groups: list[dict[str, dict[str, list[str]]]] = Field(default_factory=list)
     conditions: dict[str, Any] = Field(default_factory=dict)
@@ -76,6 +77,9 @@ def load_rules(path: Path = RULE_PATH) -> list[RuleModel]:
     if not isinstance(raw, list) or not raw:
         raise ValueError("red-flag rules must be a non-empty YAML list")
     rules = [RuleModel.model_validate(item) for item in raw]
+    for rule in rules:
+        # Each rule is signed off on its own (false negatives first).
+        check_review(f"redflags/{rule.id}", rule.status, rule.review)
     ids = [rule.id for rule in rules]
     if len(set(ids)) != len(ids):
         raise ValueError("red-flag rule ids must be unique")

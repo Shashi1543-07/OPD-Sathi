@@ -135,6 +135,9 @@ class Settings(BaseSettings):
 
     # Roles that must use two-step sign-in (ADR 008); doctors and nurses may opt in.
     mfa_required_roles: str = "admin"
+    # Before live patients: refuse to start while any clinical content is still a draft
+    # (task 7.6.1; docs/CLINICIAN_REVIEW.md, docs/GO_LIVE_CHECKLIST.md).
+    clinical_content_approval_required: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

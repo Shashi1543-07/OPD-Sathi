@@ -48,6 +48,7 @@ from app.core.errors import (
 from app.core.logging import configure_logging
 from app.core.ratelimit import InMemorySlidingWindow
 from app.db.session import create_engine, ping_database
+from app.domain.content_status import require_approved_content
 from app.pdf import warm_pdf_renderer
 
 logger = structlog.get_logger(__name__)
@@ -203,6 +204,8 @@ def create_app(
     """Create the API with injectable connections for isolated tests."""
     configured = settings or get_settings()
     configure_logging(configured.log_level)
+    if configured.clinical_content_approval_required:
+        require_approved_content()
 
     def pooled_engine(url: str) -> AsyncEngine:
         return create_engine(url, pool_min=configured.db_pool_min, pool_max=configured.db_pool_max)

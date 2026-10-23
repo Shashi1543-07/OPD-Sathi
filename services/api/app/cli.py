@@ -1451,6 +1451,10 @@ def main() -> None:
     reencrypt.add_argument("--hospital-id", type=UUID)
     reencrypt.add_argument("--apply", action="store_true", help="Write the re-sealed values")
     reencrypt.add_argument("--batch", type=int, default=500)
+    commands.add_parser(
+        "content-status",
+        help="List each clinical content file and whether it is approved or still a draft",
+    )
     reset_mfa = commands.add_parser(
         "reset-mfa",
         help="Break-glass: remove a staff member's two-step sign-in (audited)",
@@ -1506,6 +1510,15 @@ def main() -> None:
         "clear-bulk", help="Remove seed-bulk load-test visits from the demo hospital"
     )
     args = parser.parse_args()
+    if args.command == "content-status":
+        from app.domain.content_status import content_status
+
+        statuses = content_status()
+        for source, status in statuses.items():
+            print(f"{status:<30} {source}")
+        drafts = sum(status != "approved" for status in statuses.values())
+        print(f"{len(statuses) - drafts} approved, {drafts} awaiting clinical sign-off")
+        return
     if args.command == "queue-rebuild":
         import redis.asyncio as redis
 

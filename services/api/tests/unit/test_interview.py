@@ -6,7 +6,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from app.domain.case_sheet import CaseSheet
-from app.domain.interview.bank import BANK_DIRECTORY, REVIEW_STATUS, validate_question_bank
+from app.domain.interview.bank import BANK_DIRECTORY, validate_question_bank
 from app.domain.interview.consent import get_consent_copy
 from app.domain.interview.engine import (
     MAX_QUESTIONS,
@@ -17,6 +17,7 @@ from app.domain.interview.engine import (
     next_question,
     start,
 )
+from app.domain.review import DRAFT
 
 
 def _run(language: str, complaint: str, answers: list[str | None]) -> tuple[list[str], dict]:
@@ -48,7 +49,7 @@ def test_question_bank_and_consent_are_valid_draft_content() -> None:
         *sorted((BANK_DIRECTORY / "modules").glob("*.json")),
     ]:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["review_status"] == REVIEW_STATUS
+        assert payload["review_status"] == DRAFT
         for question in payload["questions"]:
             assert all("????" not in question["prompt"][lang] for lang in ("hi", "mr"))
             for option in question.get("options", []):

@@ -103,7 +103,6 @@ def test_structured_conditions_require_each_supplied_constraint() -> None:
         id="RF_TEST_CONDITIONS",
         level="priority",
         status="draft_needs_clinician_review",
-        reviewed_by=None,
         reason_en="Test structured conditions.",
         all_groups=[{"any": phrases}],
         conditions={
