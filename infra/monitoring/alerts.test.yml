@@ -1,0 +1,143 @@
+# Unit tests for alerts.yml (promtool test rules; run in CI). Each alert fires on the
+# condition it promises and stays quiet otherwise. Times are minutes from 00:00 UTC.
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: down services and dependencies
+    interval: 1m
+    input_series:
+      - series: 'up{job="api"}'
+        values: "1 1 0 0 0 0"
+      - series: 'up{job="worker"}'
+        values: "1 1 1 1 1 1"
+      - series: 'dependency_up{job="worker",dependency="postgres"}'
+        values: "1 0 0 0 0 0"
+    alert_rule_test:
+      - alertname: ApiDown
+        eval_time: 3m
+        exp_alerts: []
+      - alertname: ApiDown
+        eval_time: 5m
+        exp_alerts:
+          - exp_labels: {severity: critical, job: api}
+            exp_annotations:
+              summary: The API is not answering; kiosks and staff screens cannot work.
+              runbook: docs/runbooks/server-down.md
+      - alertname: WorkerDown
+        eval_time: 5m
+        exp_alerts: []
+      - alertname: DatabaseDown
+        eval_time: 3m
+        exp_alerts:
+          - exp_labels: {severity: critical, dependency: postgres, job: worker}
+            exp_annotations:
+              summary: PostgreSQL cannot be reached.
+              runbook: docs/runbooks/database-down.md
+
+  - name: an urgent alert waits more than five minutes
+    interval: 1m
+    input_series:
+      - series: 'urgent_alerts_oldest_unacknowledged_age_seconds{job="worker"}'
+        values: "0 60 120 180 240 300 360"
+    alert_rule_test:
+      - alertname: UrgentAlertUnacknowledged
+        eval_time: 5m
+        exp_alerts: []
+      - alertname: UrgentAlertUnacknowledged
+        eval_time: 6m
+        exp_alerts:
+          - exp_labels: {severity: critical, job: worker}
+            exp_annotations:
+              summary: A danger-sign alert has waited more than 5 minutes for a nurse.
+              runbook: docs/runbooks/alerts.md
+
+  - name: a silent kiosk alerts only during OPD hours
+    interval: 1m
+    input_series:
+      # One kiosk silent all day (00:00 to 23:59 UTC).
+      - series: 'kiosks_silent{job="worker",hospital="h1"}'
+        values: "1x1439"
+    alert_rule_test:
+      - alertname: KioskSilent
+        eval_time: 60m     # 06:30 IST: before OPD hours
+        exp_alerts: []
+      - alertname: KioskSilent
+        eval_time: 240m    # 09:30 IST
+        exp_alerts:
+          - exp_labels: {severity: warning, hospital: h1, job: worker}
+            exp_annotations:
+              summary: "1 kiosk(s) stopped checking in during OPD hours."
+              runbook: docs/runbooks/alerts.md
+      - alertname: KioskSilent
+        eval_time: 600m    # 15:30 IST: after OPD hours
+        exp_alerts: []
+
+  - name: disk space
+    interval: 1m
+    input_series:
+      - series: 'data_disk_free_ratio{job="worker"}'
+        values: "0.5x60 0.05x60"
+    alert_rule_test:
+      - alertname: DiskSpaceLow
+        eval_time: 65m
+        exp_alerts: []
+      - alertname: DiskSpaceLow
+        eval_time: 75m
+        exp_alerts:
+          - exp_labels: {severity: warning, job: worker}
+            exp_annotations:
+              summary: The data disk is more than 80% full.
+              runbook: docs/runbooks/disk-full.md
+      - alertname: DiskSpaceCritical
+        eval_time: 75m
+        exp_alerts:
+          - exp_labels: {severity: critical, job: worker}
+            exp_annotations:
+              summary: The data disk is more than 90% full; the database will stop accepting writes.
+              runbook: docs/runbooks/disk-full.md
+
+  - name: backups and certificate
+    interval: 1h
+    input_series:
+      - series: 'backup_last_success_timestamp_seconds{job="worker"}'
+        values: "0x300"
+      - series: 'tls_certificate_expiry_timestamp_seconds{job="worker"}'
+        values: "2592000x300"   # 30 days after the epoch
+    alert_rule_test:
+      - alertname: BackupMissing
+        eval_time: 25h
+        exp_alerts: []
+      - alertname: BackupMissing
+        eval_time: 27h
+        exp_alerts:
+          - exp_labels: {severity: critical, job: worker}
+            exp_annotations:
+              summary: No successful database backup for 26 hours.
+              runbook: docs/runbooks/restore.md
+      - alertname: CertificateExpiring
+        eval_time: 1h
+        exp_alerts: []
+      - alertname: CertificateExpiring
+        eval_time: 10d
+        exp_alerts:
+          - exp_labels: {severity: warning, job: worker}
+            exp_annotations:
+              summary: The HTTPS certificate expires in less than 21 days.
+              runbook: docs/runbooks/certificate.md
+
+  - name: queue updates stuck
+    interval: 1m
+    input_series:
+      - series: 'outbox_oldest_pending_age_seconds{job="worker"}'
+        values: "0 10 40 100 160"
+    alert_rule_test:
+      - alertname: QueueUpdatesStuck
+        eval_time: 4m
+        exp_alerts:
+          - exp_labels: {severity: critical, job: worker}
+            exp_annotations:
+              summary: Queue changes are not reaching the live boards (oldest waiting over 30 s).
+              runbook: docs/runbooks/alerts.md

@@ -19,6 +19,9 @@
 #   3. Checks that the clock is synchronised (NTP; CERT-In asks for NIC or NPL time servers).
 #   4. Builds and starts the production stack, applies migrations, onboards the hospital.
 #   5. Installs a systemd unit so the stack starts at boot.
+#   Alerts (task 7.9.2) go to ALERT_EMAIL through the hospital's mail server (SMTP_FROM,
+#   SMTP_HOST, SMTP_USER; password in secrets/smtp_password) and, with TELEGRAM_CHAT_ID, to a
+#   Telegram group (bot token in secrets/telegram_bot_token). Asked for on the first run.
 #
 # Follow docs/DEPLOYMENT.md; read it before running this on a hospital server.
 
@@ -86,6 +89,8 @@ done
 for name in gemini_api_key sarvam_api_key twilio_auth_token whatsapp_access_token; do
   new_secret "$name" empty
 done
+# Alert delivery: filled in by hospital IT (the mail account's password, a Telegram bot token).
+for name in smtp_password telegram_bot_token; do new_secret "$name" empty; done
 read_secret() { tr -d '\r\n' < "$SECRETS/$1"; }
 DB=osa
 url_secret() {  # name, value
@@ -148,6 +153,27 @@ if command -v timedatectl >/dev/null; then
     echo "  synchronised"
   fi
 fi
+
+step "Alerts to hospital IT"
+ALERTMANAGER_CONFIG=/etc/opd-saathi/alertmanager.yml
+if [[ ! -s "$ALERTMANAGER_CONFIG" ]]; then
+  if [[ -z "${ALERT_EMAIL:-}" && -t 0 ]]; then
+    read -r -p "  Email address that receives alerts (hospital IT): " ALERT_EMAIL
+    read -r -p "  Sender address for alerts: " SMTP_FROM
+    read -r -p "  Mail server (host:port, for example smtp.hospital.in:587): " SMTP_HOST
+    read -r -p "  Mail account user name [$SMTP_FROM]: " SMTP_USER
+    read -r -p "  Telegram group chat id (empty for email only): " TELEGRAM_CHAT_ID
+  fi
+  [[ -n "${ALERT_EMAIL:-}" ]] ||
+    fail "Set ALERT_EMAIL, SMTP_FROM and SMTP_HOST (docs/DEPLOYMENT.md, 'Alerts'); without them no one hears about a failure."
+  ALERT_EMAIL="$ALERT_EMAIL" SMTP_FROM="${SMTP_FROM:-}" SMTP_HOST="${SMTP_HOST:-}" \
+    SMTP_USER="${SMTP_USER:-}" TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}" \
+    scripts/alertmanager-config.sh "$ALERTMANAGER_CONFIG"
+  echo "  alerts go to $ALERT_EMAIL; put the mail password in $SECRETS/smtp_password"
+else
+  echo "  keeping $ALERTMANAGER_CONFIG"
+fi
+set_env OSA_ALERTMANAGER_CONFIG "$ALERTMANAGER_CONFIG"
 
 step "Starting the database and caches"
 "${COMPOSE[@]}" up -d $BUILD postgres redis redis-cache worker-role-bootstrap

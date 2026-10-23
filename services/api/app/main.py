@@ -3,7 +3,6 @@
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from threading import Lock
 from time import monotonic
 from typing import cast
 from uuid import uuid4
@@ -37,6 +36,7 @@ from app.api.v1 import intake as intake_api
 from app.api.v1 import queue as queue_api
 from app.api.v1 import speech as speech_api
 from app.config import Settings, get_settings
+from app.core import metrics
 from app.core.auth import AuthenticationGateMiddleware
 from app.core.errors import (
     ApiProblemError,
@@ -55,55 +55,6 @@ logger = structlog.get_logger(__name__)
 _READINESS_DEPENDENCY_TIMEOUT_SECONDS = 1.0
 
 
-class HttpMetrics:
-    """Small process-local Prometheus exporter with bounded, non-sensitive labels."""
-
-    _buckets = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
-
-    def __init__(self) -> None:
-        self._lock = Lock()
-        self._counts: dict[tuple[str, str, int], int] = {}
-        self._buckets_seen: dict[tuple[str, str, int], list[int]] = {}
-        self._duration_sums: dict[tuple[str, str, int], float] = {}
-
-    def observe(self, method: str, route: str, status: int, seconds: float) -> None:
-        key = (method, route, status)
-        with self._lock:
-            self._counts[key] = self._counts.get(key, 0) + 1
-            seen = self._buckets_seen.setdefault(key, [0] * len(self._buckets))
-            for index, boundary in enumerate(self._buckets):
-                if seconds <= boundary:
-                    seen[index] += 1
-            self._duration_sums[key] = self._duration_sums.get(key, 0.0) + seconds
-
-    def render(self) -> str:
-        """Render Prometheus text; route templates prevent patient IDs becoming labels."""
-        lines = [
-            "# HELP http_requests_total Completed HTTP requests.",
-            "# TYPE http_requests_total counter",
-            "# HELP http_request_duration_seconds HTTP request duration in seconds.",
-            "# TYPE http_request_duration_seconds histogram",
-        ]
-        with self._lock:
-            counts = dict(self._counts)
-            buckets_seen = {key: tuple(values) for key, values in self._buckets_seen.items()}
-            duration_sums = dict(self._duration_sums)
-        for (method, route, status), count in sorted(counts.items()):
-            labels = f'method="{method}",route="{route}",status="{status}"'
-            lines.append(f"http_requests_total{{{labels}}} {count}")
-            seen = buckets_seen[(method, route, status)]
-            for index, bucket in enumerate(self._buckets):
-                cumulative = seen[index]
-                lines.append(
-                    f'http_request_duration_seconds_bucket{{{labels},le="{bucket:g}"}} {cumulative}'
-                )
-            lines.append(f'http_request_duration_seconds_bucket{{{labels},le="+Inf"}} {count}')
-            lines.append(f"http_request_duration_seconds_count{{{labels}}} {count}")
-            duration_sum = duration_sums[(method, route, status)]
-            lines.append(f"http_request_duration_seconds_sum{{{labels}}} {duration_sum:.9f}")
-        return "\n".join(lines) + "\n"
-
-
 class HttpMetricsMiddleware(BaseHTTPMiddleware):
     """Record timings and status against route templates, never raw request paths."""
 
@@ -111,9 +62,9 @@ class HttpMetricsMiddleware(BaseHTTPMiddleware):
         started = monotonic()
         response = await call_next(request)
         route = getattr(request.scope.get("route"), "path", "unmatched")
-        request.app.state.http_metrics.observe(
-            request.method, route, response.status_code, monotonic() - started
-        )
+        labels = (request.method, route, str(response.status_code))
+        metrics.HTTP_REQUESTS.labels(*labels).inc()
+        metrics.HTTP_DURATION.labels(*labels).observe(monotonic() - started)
         return response
 
 
@@ -298,7 +249,6 @@ def create_app(
     )
     app.state.settings = configured
     app.state.llm_background_tasks = set()
-    app.state.http_metrics = HttpMetrics()
     app.state.stt_provider = build_stt_provider(configured)
     app.state.llm_provider = MockLLM()
     app.state.tts_provider = build_tts_provider(configured)
@@ -382,14 +332,12 @@ def create_app(
         return JSONResponse({"status": "ready"})
 
     @app.get("/metrics", include_in_schema=False, response_class=PlainTextResponse)
-    async def metrics(request: Request) -> PlainTextResponse:
-        """Expose process-local HTTP metrics for private-network Prometheus scraping."""
+    async def metrics_page() -> Response:
+        """Metrics for Prometheus on the private network (nginx never forwards /metrics)."""
         if not configured.metrics_enabled:
             return PlainTextResponse("Not found", status_code=404)
-        return PlainTextResponse(
-            request.app.state.http_metrics.render(),
-            media_type="text/plain; version=0.0.4; charset=utf-8",
-        )
+        body, content_type = metrics.render()
+        return Response(body, media_type=content_type)
 
     return app
 

@@ -21,3 +21,22 @@ max_requests = 2000
 max_requests_jitter = 200
 # Structured application logs already record every request; no separate access log.
 accesslog = None
+
+# Metrics from every worker process add up on /metrics (app.core.metrics; ADR 010). The
+# directory is on the container's private tmpfs and is emptied when Gunicorn starts, so a
+# restart never mixes in the previous run's samples.
+os.environ.setdefault("PROMETHEUS_MULTIPROC_DIR", "/tmp/osa-metrics")
+
+
+def on_starting(server: object) -> None:
+    import shutil
+
+    directory = os.environ["PROMETHEUS_MULTIPROC_DIR"]
+    shutil.rmtree(directory, ignore_errors=True)
+    os.makedirs(directory, exist_ok=True)
+
+
+def child_exit(server: object, worker: object) -> None:
+    from prometheus_client import multiprocess
+
+    multiprocess.mark_process_dead(worker.pid)  # type: ignore[attr-defined]

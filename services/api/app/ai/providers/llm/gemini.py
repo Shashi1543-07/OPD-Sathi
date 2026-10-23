@@ -19,6 +19,7 @@ from app.ai.providers.llm.base import (
     SessionCallBudget,
 )
 from app.ai.providers.llm.redaction import redact_pii
+from app.core import metrics as prometheus
 
 # Interactive callers pass their own small budgets; background summaries may wait longer.
 MAX_TIMEOUT_SECONDS = 20.0
@@ -227,6 +228,7 @@ class GeminiProvider:
             self._record_failure()
             raise LLMUnavailableError("language model is unavailable") from None
         failure_recorded = False
+        outcome = "failed"
         try:
             from jsonschema import Draft202012Validator
 
@@ -268,6 +270,7 @@ class GeminiProvider:
                     self.metrics.prompt_tokens += prompt_tokens
                     self.metrics.response_tokens += response_tokens
                     self._record_success()
+                    outcome = "succeeded"
                     return value
                 except Exception as exc:
                     # Log only the error class and status; never prompt or output content.
@@ -287,7 +290,10 @@ class GeminiProvider:
                 self.metrics.failures += 1
             raise
         finally:
-            self.metrics.latencies_ms.append((monotonic() - started) * 1000)
+            elapsed = monotonic() - started
+            self.metrics.latencies_ms.append(elapsed * 1000)
+            prometheus.AI_CALLS.labels("gemini", outcome).inc()
+            prometheus.AI_DURATION.labels("gemini").observe(elapsed)
 
     async def transcribe(
         self,

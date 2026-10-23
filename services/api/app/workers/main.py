@@ -1,7 +1,9 @@
 """Queue outbox relay and Redis read-model repair worker."""
 
 import asyncio
+import functools
 import time
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
@@ -11,6 +13,7 @@ import structlog
 from arq import cron
 from arq.connections import RedisSettings
 from arq.worker import run_worker
+from prometheus_client import start_http_server
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -20,7 +23,9 @@ from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
 from app.notifications.providers import build_notification_provider
 from app.notifications.queue import deliver_pending_once, record_queue_event_intents
+from app.workers import monitoring
 from app.workers.health import STALE_AFTER_SECONDS, heartbeat_key
+from app.workers.metrics import worker_metrics
 
 logger = structlog.get_logger(__name__)
 
@@ -251,6 +256,9 @@ async def rebuild_all(connection: AsyncConnection, client: Any, *, settings: Any
 
 async def on_startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
+    if settings.metrics_enabled:
+        # Scraped by Prometheus on the private network only; nothing publishes this port.
+        start_http_server(settings.worker_metrics_port)
     database_url = settings.worker_database_url or settings.database_url
     engine = create_engine(database_url)
     client = redis.from_url(  # type: ignore[no-untyped-call]
@@ -287,6 +295,106 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
     await ctx["engine"].dispose()
 
 
+def _measured(job: Callable[[dict[str, Any]], Awaitable[None]]) -> Any:
+    """Count each run of a worker job by outcome and record its last success."""
+
+    @functools.wraps(job)
+    async def run(ctx: dict[str, Any]) -> None:
+        try:
+            await job(ctx)
+        except Exception:
+            worker_metrics().jobs.labels(job.__name__, "failed").inc()
+            raise
+        worker_metrics().jobs.labels(job.__name__, "succeeded").inc()
+        worker_metrics().last_success.labels(job.__name__).set_to_current_time()
+
+    return run
+
+
+async def collect_operational_metrics(connection: AsyncConnection) -> None:
+    """Gauges for the alerts: patients waiting, a stuck outbox, unsent messages, urgent
+    alerts no one has acknowledged. Counts and ages only, never patient data."""
+    waiting = (
+        await connection.execute(
+            text(
+                "SELECT v.hospital_id::text AS hospital, d.code AS department, count(*) AS n "
+                "FROM visits v JOIN departments d "
+                "ON d.hospital_id = v.hospital_id AND d.id = v.department_id "
+                "WHERE v.status = 'queued' "
+                "AND v.service_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date "
+                "GROUP BY 1, 2"
+            )
+        )
+    ).mappings()
+    worker_metrics().queue_waiting.clear()
+    for row in waiting:
+        worker_metrics().queue_waiting.labels(row["hospital"], row["department"]).set(row["n"])
+    outbox_age = await connection.scalar(
+        text(
+            "SELECT coalesce(extract(epoch FROM now() - min(created_at)), 0) FROM outbox "
+            "WHERE topic = 'queue.changed' AND processed_at IS NULL"
+        )
+    )
+    worker_metrics().outbox_oldest_age.set(float(outbox_age or 0))
+    pending = await connection.scalar(
+        text("SELECT count(*) FROM notifications WHERE status = 'pending'")
+    )
+    worker_metrics().notifications_pending.set(float(pending or 0))
+    alert_age = await connection.scalar(
+        text(
+            "SELECT coalesce(extract(epoch FROM now() - min(created_at)), 0) "
+            "FROM red_flag_events WHERE level = 'urgent' AND acknowledged_at IS NULL "
+            "AND (created_at AT TIME ZONE 'Asia/Kolkata')::date "
+            ">= (now() AT TIME ZONE 'Asia/Kolkata')::date"
+        )
+    )
+    worker_metrics().urgent_alerts_open_age.set(float(alert_age or 0))
+    # Paired kiosks (not phone check-in posters) silent for 10 minutes; the kiosk app
+    # checks in every minute while it is open.
+    silent = (
+        await connection.execute(
+            text(
+                "SELECT hospital_id::text AS hospital, count(*) FILTER ("
+                "WHERE last_seen_at IS NULL OR last_seen_at < now() - interval '10 minutes'"
+                ") AS n FROM kiosks WHERE kind = 'device' AND is_active "
+                "AND paired_at IS NOT NULL AND deleted_at IS NULL GROUP BY 1"
+            )
+        )
+    ).mappings()
+    worker_metrics().kiosks_silent.clear()
+    for row in silent:
+        worker_metrics().kiosks_silent.labels(row["hospital"]).set(row["n"])
+
+
+@_measured
+async def refresh_operational_metrics(ctx: dict[str, Any]) -> None:
+    settings = ctx["settings"]
+    try:
+        await ctx["redis"].ping()
+        worker_metrics().dependency_up.labels("redis").set(1)
+    except Exception:
+        worker_metrics().dependency_up.labels("redis").set(0)
+    gauges = worker_metrics()
+    probes: list[tuple[str, Any, Callable[[str], float | None]]] = [
+        (settings.monitor_disk_path, gauges.disk_free_ratio, monitoring.disk_free_ratio),
+        (settings.monitor_tls_address, gauges.tls_cert_expiry, monitoring.certificate_expiry),
+        (settings.backup_status_file, gauges.backup_last_success, monitoring.backup_last_success),
+    ]
+    for target, gauge, probe in probes:
+        if target:
+            value = await asyncio.to_thread(probe, target)
+            if value is not None:
+                gauge.set(value)
+    try:
+        async with ctx["engine"].begin() as connection:
+            await collect_operational_metrics(connection)
+    except Exception:
+        worker_metrics().dependency_up.labels("postgres").set(0)
+        raise
+    worker_metrics().dependency_up.labels("postgres").set(1)
+
+
+@_measured
 async def relay_queue_outbox(ctx: dict[str, Any]) -> None:
     try:
         async with ctx["engine"].begin() as connection:
@@ -306,9 +414,12 @@ async def relay_queue_outbox(ctx: dict[str, Any]) -> None:
     if count:
         logger.info("queue_outbox_processed", count=count)
     if sent or failed:
+        worker_metrics().notifications.labels("sent").inc(sent)
+        worker_metrics().notifications.labels("failed").inc(failed)
         logger.info("notifications_processed", sent=sent, failed=failed)
 
 
+@_measured
 async def refresh_analytics(ctx: dict[str, Any]) -> None:
     """Refresh the daily materialized rollup owned by the restricted worker schema."""
     async with ctx["engine"].begin() as connection:
@@ -320,6 +431,7 @@ async def refresh_analytics(ctx: dict[str, Any]) -> None:
     logger.info("analytics_materialized_view_refreshed")
 
 
+@_measured
 async def close_out_previous_days(ctx: dict[str, Any]) -> None:
     """Periodic close-out so the queue resets after midnight without a restart."""
     async with ctx["engine"].begin() as connection:
@@ -337,6 +449,7 @@ class WorkerSettings:
         cron(relay_queue_outbox, second=set(range(0, 60, 2))),
         cron(refresh_analytics, minute=set(range(0, 60, 5))),
         cron(close_out_previous_days, minute={1, 16, 31, 46}),
+        cron(refresh_operational_metrics, second={15, 45}),
     ]
     on_startup = on_startup
     on_shutdown = on_shutdown

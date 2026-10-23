@@ -1,0 +1,143 @@
+# Alerts to hospital IT (Phase 7, task 7.9.2). Each alert names its runbook in
+# docs/runbooks/; every rule must fire once in a drill before go-live (docs/runbooks/alerts.md).
+# Worker metrics are selected with job="worker" (the API never reports them).
+# Times in the expressions are UTC: OPD hours 08:00-14:00 IST are 02:30-08:30 UTC.
+groups:
+  - name: availability
+    rules:
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: The API is not answering; kiosks and staff screens cannot work.
+          runbook: docs/runbooks/server-down.md
+      - alert: WebDown
+        expr: up{job="web"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: The web server (HTTPS) is not answering.
+          runbook: docs/runbooks/server-down.md
+      - alert: WorkerDown
+        expr: up{job="worker"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: The worker is down; live boards, SMS and the end-of-day close-out stop.
+          runbook: docs/runbooks/server-down.md
+      - alert: DatabaseDown
+        expr: dependency_up{job="worker",dependency="postgres"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: PostgreSQL cannot be reached.
+          runbook: docs/runbooks/database-down.md
+      - alert: RedisDown
+        expr: dependency_up{job="worker",dependency="redis"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: Redis cannot be reached; queues and sign-in sessions are affected.
+          runbook: docs/runbooks/redis-loss.md
+
+  - name: service-quality
+    rules:
+      - alert: ApiErrorRateHigh
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(http_requests_total[5m])), 0.001) > 0.02
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: More than 2% of API requests are failing.
+          runbook: docs/runbooks/alerts.md
+      - alert: ApiSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket{route!="/status/{token}/stream"}[5m]))
+          ) > 1.5
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: The slowest 5% of API requests take more than 1.5 seconds.
+          runbook: docs/runbooks/alerts.md
+      - alert: WorkerJobFailing
+        expr: increase(worker_job_runs_total{job="worker",outcome="failed"}[10m]) > 3
+        labels: {severity: critical}
+        annotations:
+          summary: "Worker job {{ $labels.job }} keeps failing."
+          runbook: docs/runbooks/alerts.md
+      - alert: QueueUpdatesStuck
+        expr: outbox_oldest_pending_age_seconds{job="worker"} > 30
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Queue changes are not reaching the live boards (oldest waiting over 30 s).
+          runbook: docs/runbooks/alerts.md
+      - alert: SmsBacklog
+        expr: notifications_pending{job="worker"} > 50
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: Queue messages to patients are piling up unsent.
+          runbook: docs/runbooks/alerts.md
+
+  - name: patient-safety
+    rules:
+      - alert: UrgentAlertUnacknowledged
+        expr: urgent_alerts_oldest_unacknowledged_age_seconds{job="worker"} > 300
+        labels: {severity: critical}
+        annotations:
+          summary: A danger-sign alert has waited more than 5 minutes for a nurse.
+          runbook: docs/runbooks/alerts.md
+      - alert: KioskSilent
+        expr: |
+          kiosks_silent{job="worker"} > 0
+            and on() (hour() * 60 + minute() >= 150 and hour() * 60 + minute() < 510)
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} kiosk(s) stopped checking in during OPD hours."
+          runbook: docs/runbooks/alerts.md
+
+  - name: server
+    rules:
+      - alert: DiskSpaceLow
+        expr: data_disk_free_ratio{job="worker"} < 0.20
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: The data disk is more than 80% full.
+          runbook: docs/runbooks/disk-full.md
+      - alert: DiskSpaceCritical
+        expr: data_disk_free_ratio{job="worker"} < 0.10
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: The data disk is more than 90% full; the database will stop accepting writes.
+          runbook: docs/runbooks/disk-full.md
+      - alert: BackupMissing
+        expr: time() - backup_last_success_timestamp_seconds{job="worker"} > 26 * 3600
+        labels: {severity: critical}
+        annotations:
+          summary: No successful database backup for 26 hours.
+          runbook: docs/runbooks/restore.md
+      - alert: BackupNeverReported
+        expr: absent(backup_last_success_timestamp_seconds{job="worker"})
+        for: 30m
+        labels: {severity: warning}
+        annotations:
+          summary: The backup job has never reported a success to monitoring.
+          runbook: docs/runbooks/restore.md
+      - alert: CertificateExpiring
+        expr: tls_certificate_expiry_timestamp_seconds{job="worker"} - time() < 21 * 86400
+        labels: {severity: warning}
+        annotations:
+          summary: The HTTPS certificate expires in less than 21 days.
+          runbook: docs/runbooks/certificate.md
+      - alert: AlertingSelfCheck
+        expr: vector(1)
+        labels: {severity: none}
+        annotations:
+          summary: Always firing; Alertmanager routes it nowhere. Proves the pipeline runs.

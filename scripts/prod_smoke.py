@@ -60,6 +60,7 @@ check(page.headers.get("cross-origin-embedder-policy") == "require-corp"
 check(page.headers.get("server", "").lower() == "nginx", "server version hidden")
 check(client.get(f"{API}/docs").status_code == 404, "API docs absent in production")
 check(client.get(f"{API}/openapi.json").status_code == 404, "OpenAPI schema absent in production")
+check(client.get(f"{API}/metrics").status_code == 404, "metrics not served to the network")
 check("development-only" not in client.get(f"{BASE}/").text, "no development value in the page")
 
 # 2. The administrator: password, then two-step enrolment before anything else.

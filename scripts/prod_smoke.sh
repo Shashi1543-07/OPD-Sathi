@@ -34,7 +34,8 @@ for name in postgres_password osa_app_password osa_migrator_password osa_worker_
   put "$name" "$(hex)"
 done
 for name in app_data_key app_hmac_key cursor_hmac_key notify_key; do put "$name" "$(b64)"; done
-for name in gemini_api_key sarvam_api_key twilio_auth_token whatsapp_access_token; do put "$name" ""; done
+for name in gemini_api_key sarvam_api_key twilio_auth_token whatsapp_access_token smtp_password \
+  telegram_bot_token; do put "$name" ""; done
 read_secret() { cat "$SECRETS/$1"; }
 put database_url "postgresql+asyncpg://osa_app:$(read_secret osa_app_password)@postgres:5432/osa"
 put worker_database_url "postgresql+asyncpg://osa_worker:$(read_secret osa_worker_password)@postgres:5432/osa"
@@ -49,6 +50,9 @@ openssl req -x509 -newkey rsa:2048 -sha256 -days 2 -nodes -keyout "$(host_path "
   -out "$(host_path "$CERTS/tls.crt")" -subj "/CN=localhost" \
   -addext "subjectAltName=DNS:localhost" >/dev/null 2>&1
 chmod 0644 "$CERTS/tls.crt" "$CERTS/tls.key"
+# Alerts go nowhere in the smoke test; the configuration must still be valid.
+ALERT_EMAIL=it@example.test SMTP_FROM=opd-saathi@example.test SMTP_HOST=localhost:25 \
+  bash scripts/alertmanager-config.sh "$WORK/alertmanager.yml"
 
 cat > "$WORK/.env" <<ENV
 POSTGRES_DB=osa
@@ -60,6 +64,7 @@ OSA_SECRETS_DIR=$(host_path "$SECRETS")
 OSA_CERTS_DIR=$(host_path "$CERTS")
 OSA_SUBNET=172.31.250.0/24
 WEB_PROXY_IP=172.31.250.10
+OSA_ALERTMANAGER_CONFIG=$(host_path "$WORK/alertmanager.yml")
 ENV
 # Smoke-test ports only; a hospital install publishes 443 and 80.
 cat > "$WORK/ports.yml" <<YAML
@@ -68,6 +73,8 @@ services:
     ports: !override
       - "127.0.0.1:$HTTPS_PORT:8443"
       - "127.0.0.1:$HTTP_PORT:8080"
+  prometheus:
+    ports: !reset []
 YAML
 
 C=(docker compose -p "$PROJECT" --env-file "$(host_path "$WORK/.env")" -f docker-compose.yml \
@@ -88,7 +95,7 @@ echo "==> Building and starting the production stack"
 "${C[@]}" build --quiet api worker web
 "${C[@]}" up -d postgres redis redis-cache worker-role-bootstrap
 "${C[@]}" run --rm api alembic -c /app/alembic.ini upgrade head
-"${C[@]}" up -d api worker web
+"${C[@]}" up -d api worker web prometheus alertmanager
 
 echo "==> Refusing development values"
 # The stack must not start in production with a development signing key.
@@ -143,4 +150,46 @@ for service in worker web api; do
   done
   [[ "$status" == "healthy" ]] && echo "ok   $service healthy" || { echo "FAIL $service $status"; leaks=1; }
 done
+
+echo "==> Monitoring"
+# Prometheus scrapes every part of the stack and the worker reports its alert gauges.
+prom() { "${C[@]}" exec -T prometheus wget -qO- "http://localhost:9090/api/v1/$1" 2>/dev/null; }
+query() { "${C[@]}" exec -T prometheus wget -qO- --post-data "query=$1" "http://localhost:9090/api/v1/query" 2>/dev/null; }
+for _ in $(seq 1 30); do
+  targets="$(prom targets || true)"
+  [[ "$(grep -o '"health":"up"' <<<"$targets" | wc -l)" -ge 5 ]] && break
+  sleep 2
+done
+for job in api worker web prometheus alertmanager; do
+  if "$PYTHON" -c "
+import json, sys
+targets = json.loads(sys.stdin.read())['data']['activeTargets']
+sys.exit(0 if any(t['labels']['job'] == '$job' and t['health'] == 'up' for t in targets) else 1)
+" <<<"$targets"; then echo "ok   Prometheus scrapes $job"; else echo "FAIL Prometheus cannot scrape $job"; leaks=1; fi
+done
+for _ in $(seq 1 30); do
+  gauges="$(query 'data_disk_free_ratio{job="worker"}' || true)"
+  grep -q '"value"' <<<"$gauges" && break
+  sleep 2
+done
+# The API must not export worker-only gauges (they would read 0 and fire false alerts).
+if query 'data_disk_free_ratio{job="api"}' | grep -q '"value"'; then
+  echo "FAIL the API exports worker-only gauges"; leaks=1
+else
+  echo "ok   worker-only gauges come from the worker alone"
+fi
+for metric in 'dependency_up{job="worker",dependency="postgres"}' \
+  'dependency_up{job="worker",dependency="redis"}' 'data_disk_free_ratio{job="worker"}' \
+  'tls_certificate_expiry_timestamp_seconds{job="worker"}'; do
+  value="$(query "$metric" | "$PYTHON" -c "
+import json, sys
+result = json.loads(sys.stdin.read())['data']['result']
+print(result[0]['value'][1] if result else '')
+")"
+  if [[ -n "$value" && "$value" != "0" ]]; then echo "ok   worker reports $metric"; else
+    echo "FAIL worker does not report $metric"; leaks=1; fi
+done
+rules="$(prom rules || true)"
+grep -q '"name":"ApiDown"' <<<"$rules" && grep -q '"name":"UrgentAlertUnacknowledged"' <<<"$rules" \
+  && echo "ok   alert rules loaded" || { echo "FAIL alert rules not loaded"; leaks=1; }
 exit $leaks

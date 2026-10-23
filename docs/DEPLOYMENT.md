@@ -143,9 +143,26 @@ Without `app_data_key`, encrypted records can never be read again.
 Runbooks for each failure are in `docs/runbooks/`. **Backups:** until the scheduled, encrypted,
 off-site backups of Phase 7 G2 are installed (pgBackRest, task 7.7), schedule `scripts/backup.sh`
 nightly with a systemd timer or cron, copy `/var/backups/opd-saathi` off the server, and keep the
-copies encrypted. **Monitoring and alerts** arrive with G2 (task 7.9).
+copies encrypted.
 
-## 8. Upgrades and rollback
+## 8. Monitoring and alerts
+
+Prometheus and Alertmanager run with the stack (ADR 010) and tell hospital IT when something
+fails: the API, web server, worker, database or Redis down; errors or slowness; a stuck queue;
+an urgent alert no nurse has acknowledged for 5 minutes; a kiosk silent during OPD hours; the
+disk over 80%; no backup for 26 hours; the certificate within 21 days of expiry.
+
+The setup script asks where alerts go: an email address and the hospital's mail server (put the
+mail account's password in `/etc/opd-saathi/secrets/smtp_password`), and optionally a Telegram
+group (bot token in `secrets/telegram_bot_token`). For an unattended install set `ALERT_EMAIL`,
+`SMTP_FROM`, `SMTP_HOST`, `SMTP_USER` and `TELEGRAM_CHAT_ID`. To change them later, edit
+`/etc/opd-saathi/alertmanager.yml` and `$C restart alertmanager`.
+
+What each alert means and the first thing to do: `docs/runbooks/alerts.md`, which also has the
+drill every alert must pass before go-live. Nothing is published: to look at Prometheus, open
+an SSH tunnel (`ssh -L 9090:127.0.0.1:9090 <server>`) and browse to `http://localhost:9090`.
+
+## 9. Upgrades and rollback
 
 1. Read the release notes; upgrade outside OPD hours.
 2. `cd /opt/opd-saathi && sudo git fetch --tags && sudo git checkout v<new>`
@@ -158,7 +175,7 @@ expand, migrate, contract (`CONTRIBUTING.md`), so the previous release runs on t
 database; a release whose migration cannot be reversed says so in its notes and needs the
 backup taken in step 3.
 
-## 9. Support
+## 10. Support
 
 First line: the hospital's IT person or OPD desk lead. Second line: the OPD Saathi team, by the
 channel and hours agreed in the support agreement (task 7.9.6). Report security issues

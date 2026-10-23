@@ -1,0 +1,46 @@
+# Alertmanager for one hospital server (Phase 7, task 7.9.2). scripts/setup-hospital.sh
+# writes /etc/opd-saathi/alertmanager.yml from this template with the hospital's contacts;
+# passwords and tokens stay in files under /etc/opd-saathi/secrets (never in this file).
+#
+# Placeholders: __ALERT_EMAIL__ (who is told), __SMTP_FROM__, __SMTP_HOST__ (host:port),
+# __SMTP_USER__, __TELEGRAM_CHAT_ID__ (0 when Telegram is not used).
+global:
+  resolve_timeout: 5m
+  smtp_from: "__SMTP_FROM__"
+  smtp_smarthost: "__SMTP_HOST__"
+  smtp_auth_username: "__SMTP_USER__"
+  smtp_auth_password_file: /run/secrets/smtp_password
+  smtp_require_tls: true
+
+route:
+  receiver: hospital-it
+  group_by: [alertname]
+  group_wait: 30s
+  group_interval: 5m
+  # Critical alerts repeat every hour until fixed; warnings every 4 hours.
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="none"]
+      receiver: nobody
+    - matchers: [severity="critical"]
+      receiver: hospital-it
+      repeat_interval: 1h
+
+receivers:
+  - name: nobody
+  - name: hospital-it
+    email_configs:
+      - to: "__ALERT_EMAIL__"
+        send_resolved: true
+    telegram_configs:
+      - bot_token_file: /run/secrets/telegram_bot_token
+        chat_id: __TELEGRAM_CHAT_ID__
+        send_resolved: true
+        message: '{{ range .Alerts }}{{ if eq .Status "firing" }}🔴{{ else }}✅{{ end }} {{ .Annotations.summary }} ({{ .Annotations.runbook }}){{ "\n" }}{{ end }}'
+
+inhibit_rules:
+  # When the API is down, do not also page for everything that follows from it.
+  - source_matchers: [alertname="ApiDown"]
+    target_matchers: [alertname=~"ApiErrorRateHigh|ApiSlow"]
+  - source_matchers: [alertname="DatabaseDown"]
+    target_matchers: [alertname=~"WorkerJobFailing|QueueUpdatesStuck"]

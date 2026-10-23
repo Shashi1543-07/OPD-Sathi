@@ -12,6 +12,10 @@
 #   - Every container: restart always, memory and CPU limits, rotated logs, no new privileges,
 #     all Linux capabilities dropped except the few an image needs, read-only root filesystem.
 #   - Health checks for the worker and the web server.
+#   - Monitoring (task 7.9; ADR 010): Prometheus scrapes the API, the worker and nginx on the
+#     private network and Alertmanager tells hospital IT (/etc/opd-saathi/alertmanager.yml,
+#     written by setup-hospital.sh). Neither is published; reach Prometheus through an SSH
+#     tunnel to 127.0.0.1:9090 when needed.
 
 x-hardened: &hardened
   restart: always
@@ -147,6 +151,8 @@ services:
       APP_HMAC_KEY_FILE: /run/secrets/app_hmac_key
       # Read-only root filesystem: font and PDF caches go to the private tmpfs.
       XDG_CACHE_HOME: /tmp/cache
+      # Served to Prometheus on the private network; nginx never forwards /metrics.
+      METRICS_ENABLED: "true"
     secrets:
       - database_url
       - worker_database_url
@@ -177,6 +183,15 @@ services:
       PROCESS_ROLE: worker
       APP_DATA_KEY: ""
       APP_HMAC_KEY: ""
+      METRICS_ENABLED: "true"
+      # What the alerts watch: the disk Docker keeps the database volume on (an empty volume
+      # on the same disk), the HTTPS certificate as served, and the backup job's status.
+      MONITOR_DISK_PATH: /var/lib/osa-disk
+      MONITOR_TLS_ADDRESS: web:8443
+      BACKUP_STATUS_FILE: /var/lib/osa-backup/status.json
+    volumes:
+      - disk-probe:/var/lib/osa-disk:ro
+      - backup-status:/var/lib/osa-backup:ro
     secrets:
       - database_url
       - worker_database_url
@@ -222,6 +237,46 @@ services:
       resources:
         limits: { cpus: "1", memory: "256m" }
 
+  prometheus:
+    <<: *hardened
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+      - --web.listen-address=:9090
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: "1g" }
+
+  alertmanager:
+    <<: *hardened
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ${OSA_ALERTMANAGER_CONFIG:-/etc/opd-saathi/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    secrets: [smtp_password, telegram_bot_token]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: "256m" }
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  # Empty: the worker reads free space of the disk it is on (the database volume's disk).
+  disk-probe:
+  # Written by the backup job, read by the worker.
+  backup-status:
+
 networks:
   default:
     ipam:
@@ -248,3 +303,5 @@ secrets:
   sarvam_api_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/sarvam_api_key" }
   twilio_auth_token: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/twilio_auth_token" }
   whatsapp_access_token: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/whatsapp_access_token" }
+  smtp_password: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/smtp_password" }
+  telegram_bot_token: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/telegram_bot_token" }
