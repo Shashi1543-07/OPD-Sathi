@@ -151,11 +151,11 @@ jobs:
       - run: pip install --require-hashes -r services/api/requirements.lock.txt
       - run: bandit -q -r services/api/app
       - run: pip-audit -r services/api/requirements.lock.txt
-      # Temporary waiver for the CI-only Semgrep scanner, which pins mcp==1.29.0 in every release;
-      # the advisory affects MCP HTTP servers, which `semgrep scan` never starts. See ADR 006.
+      # Temporary waivers for the CI-only Semgrep scanner, which pins mcp==1.29.0 and
+      # opentelemetry-api~=1.37.0 in every release; neither reaches the application. See ADR 006.
       - run: >-
           pip-audit -r services/api/requirements-security.lock.txt
-          --ignore-vuln GHSA-84m7-p3x7-pcfv --ignore-vuln CVE-2026-59951
+          --ignore-vuln GHSA-84m7-p3x7-pcfv --ignore-vuln CVE-2026-59951 --ignore-vuln CVE-2026-114603
       - run: pip install --require-hashes -r services/api/requirements-security.lock.txt
       - run: semgrep scan --config auto --error services/api/app
       - uses: actions/setup-node@v7
