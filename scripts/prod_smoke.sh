@@ -172,8 +172,9 @@ targets = json.loads(sys.stdin.read())['data']['activeTargets']
 sys.exit(0 if any(t['labels']['job'] == '$job' and t['health'] == 'up' for t in targets) else 1)
 " <<<"$targets"; then echo "ok   Prometheus scrapes $job"; else echo "FAIL Prometheus cannot scrape $job"; leaks=1; fi
 done
+# The worker's checks have run once Prometheus has its database check (set last).
 for _ in $(seq 1 30); do
-  gauges="$(query 'data_disk_free_ratio{job="worker"}' || true)"
+  gauges="$(query 'dependency_up{job="worker",dependency="postgres"}' || true)"
   grep -q '"value"' <<<"$gauges" && break
   sleep 2
 done

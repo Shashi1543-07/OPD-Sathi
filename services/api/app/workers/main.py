@@ -294,6 +294,12 @@ async def on_startup(ctx: dict[str, Any]) -> None:
                 if await client.sismember(registry_key, "ready"):
                     break
                 await asyncio.sleep(0.1)
+    # Measure once before serving metrics: a gauge first read as 0 (free disk, certificate
+    # expiry) would raise a false alert until the first scheduled run.
+    try:
+        await refresh_operational_metrics(ctx)
+    except Exception as exc:
+        logger.warning("operational_metrics_failed", error_type=type(exc).__name__)
 
 
 async def on_shutdown(ctx: dict[str, Any]) -> None:
