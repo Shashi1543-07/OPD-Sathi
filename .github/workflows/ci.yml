@@ -128,7 +128,7 @@ jobs:
       - run: npm run lighthouse:ci
       - run: npm run check-locales
       - run: npm run check-contrast
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: phase-1-visual-quality-results
@@ -188,7 +188,7 @@ jobs:
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out"               aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c image --quiet --exit-code 1 --ignore-unfixed               --severity HIGH,CRITICAL --ignorefile /out/.trivyignore opd-saathi-$image:ci
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out"               aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c image --quiet --format cyclonedx               --output /out/sbom/opd-saathi-$image.cdx.json opd-saathi-$image:ci
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom/
