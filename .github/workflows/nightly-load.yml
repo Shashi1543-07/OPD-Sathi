@@ -1,0 +1,93 @@
+name: Nightly load and install
+
+# The OPD under load (Phase 7, tasks 7.8.2 and 7.8.3; docs/SCALING.md): the production-mode
+# stack at a district hospital's peak for 15 minutes every night, and a soak of any length on
+# demand (8 hours is a whole OPD day). Fails on a threshold crossed, a token issued twice, or
+# a worker error. The reports are kept as an artifact.
+#
+# The install job installs OPD Saathi on a fresh Linux machine exactly as a hospital does
+# (scripts/setup-hospital.sh, unattended), then runs it again: the upgrade path, with its
+# backup before migrating (task 7.14.6).
+on:
+  schedule:
+    - cron: "0 21 * * *" # 02:30 IST
+  # Also on a pull request that changes what these jobs test.
+  pull_request:
+    paths:
+      - .github/workflows/nightly-load.yml
+      - scripts/setup-hospital.sh
+      - scripts/load-test.sh
+      - scripts/load_prepare.py
+      - infra/k6/**
+      - docker-compose.prod.yml
+      - infra/postgres/**
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: "How long (k6 duration, for example 15m or 8h)"
+        default: "15m"
+      arrivals_per_hour:
+        description: "Patients checking in per hour"
+        default: "300"
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 600
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/api/requirements.lock.txt
+      - run: pip install --require-hashes -r services/api/requirements.lock.txt
+      - name: Load test
+        env:
+          DURATION: ${{ inputs.duration || '15m' }}
+          ARRIVALS_PER_HOUR: ${{ inputs.arrivals_per_hour || '300' }}
+          REPORT_DIR: load-reports
+        run: bash scripts/load-test.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-reports
+          path: load-reports/
+
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HOST: opd.ci-hospital.test
+      HOSPITAL_NAME: CI Hospital
+      HOSPITAL_CODE: ci
+      ADMIN_NAME: CI Administrator
+      ADMIN_EMAIL: admin@example.test
+      ALERT_EMAIL: it@example.test
+      SMTP_FROM: opd@example.test
+      SMTP_HOST: localhost:25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install as a hospital would (unattended, staging certificate)
+        run: |
+          printf '%s\n' 'saffron kettle orbit 2468' > "$RUNNER_TEMP/admin.pw"
+          sudo -E ./scripts/setup-hospital.sh --host "$HOST" --self-signed \
+            --admin-password-file "$RUNNER_TEMP/admin.pw"
+      - name: It starts at boot, answers over HTTPS and reports its version
+        run: |
+          systemctl is-enabled opd-saathi
+          version="$(tr -d '\r\n' < VERSION)"
+          curl -fsSk --resolve "$HOST:443:127.0.0.1" "https://$HOST/api/healthz" | grep -q "\"version\":\"$version\""
+          test "$(curl -s -o /dev/null -w '%{http_code}' --resolve "$HOST:80:127.0.0.1" "http://$HOST/staff")" = 301
+      - name: The upgrade path (backup first, migrations, restart) is safe to run again
+        run: |
+          sudo -E ./scripts/setup-hospital.sh --host "$HOST" --self-signed \
+            --admin-password-file "$RUNNER_TEMP/admin.pw"
+          sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backup \
+            with-backup-secrets pgbackrest --stanza=osa info | grep -q "full backup"
+      - name: Logs on failure
+        if: failure()
+        run: sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail 100

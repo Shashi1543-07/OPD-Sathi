@@ -1,6 +1,6 @@
 # Runbook: PostgreSQL down or not accepting connections
 
-**Alerts:** `DatabaseDown`, `ApiNotReady` (readiness reports `postgres`), `DbPoolSaturated` ·
+**Alerts:** `DatabaseDown`, often with `ApiErrorRateHigh` and `WorkerJobFailing` ·
 **Owner:** hospital IT · **Time:** 15 minutes to diagnose
 
 ## Why it matters
@@ -22,7 +22,7 @@ df -h /var/lib/docker
 | What you see | Do |
 |---|---|
 | Container exited, "No space left on device" | `disk-full.md` |
-| "too many connections" or `DbPoolSaturated` | Count: `$C exec postgres psql -U postgres -c "select usename, state, count(*) from pg_stat_activity group by 1,2"`. Restart the API (`$C restart api`) to release a leaked pool; check the connection budget (`docs/SCALING.md`) |
+| "too many connections" | Count: `$C exec postgres psql -U postgres -c "select usename, state, count(*) from pg_stat_activity group by 1,2"`. Restart the API (`$C restart api`) to release a leaked pool; check the connection budget (`docs/SCALING.md`) |
 | "database system is in recovery mode" after a crash | Wait: it replays its log and comes back by itself; watch the log |
 | "could not open file" or checksum errors | Data corruption: stop, do not restart repeatedly; restore to the last good point (`restore.md`) |
 | Container keeps restarting with permission errors | The volume's ownership changed; never `chmod` by hand; contact second-line support |

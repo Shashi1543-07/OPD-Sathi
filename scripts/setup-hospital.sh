@@ -12,6 +12,8 @@
 #   --self-signed          Staging only: create a self-signed certificate if none is installed.
 #   --admin-password-file  Read the first administrator's password from this file (unattended).
 #   --no-build             Use images already built or loaded (offline bundle, task 7.1.7).
+#   --release-images FILE  Install the signed images of a release (its docker-compose.images.yml);
+#                          their signatures are verified when cosign is installed (docs/RELEASES.md).
 #
 # It is safe to run again: it never replaces an existing password or key. What it does:
 #   1. Creates /etc/opd-saathi/secrets (root only) with fresh random secrets, one file each.
@@ -19,6 +21,9 @@
 #   3. Checks that the clock is synchronised (NTP; CERT-In asks for NIC or NPL time servers).
 #   4. Builds and starts the production stack, applies migrations, onboards the hospital.
 #   5. Installs a systemd unit so the stack starts at boot.
+#   Alerts (task 7.9.2) go to ALERT_EMAIL through the hospital's mail server (SMTP_FROM,
+#   SMTP_HOST, SMTP_USER; password in secrets/smtp_password) and, with TELEGRAM_CHAT_ID, to a
+#   Telegram group (bot token in secrets/telegram_bot_token). Asked for on the first run.
 #
 # Follow docs/DEPLOYMENT.md; read it before running this on a hospital server.
 
@@ -29,6 +34,7 @@ ADD_HOSPITAL=0
 SELF_SIGNED=0
 PASSWORD_FILE=""
 BUILD="--build"
+RELEASE_IMAGES=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
@@ -36,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --self-signed) SELF_SIGNED=1; shift ;;
     --admin-password-file) PASSWORD_FILE="$2"; shift 2 ;;
     --no-build) BUILD=""; shift ;;
+    --release-images) RELEASE_IMAGES="$2"; BUILD=""; shift 2 ;;
     -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
@@ -53,6 +60,24 @@ CONFIG_DIR=/etc/opd-saathi
 SECRETS="$CONFIG_DIR/secrets"
 CERTS="$CONFIG_DIR/certs"
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
+# Images built here are labelled with this checkout's release (shown by /healthz).
+APP_VERSION="$(tr -d '\r\n' < VERSION)"
+export APP_VERSION
+if [[ -n "$RELEASE_IMAGES" ]]; then
+  # Signed release images instead of building (task 7.14.3; docs/RELEASES.md).
+  [[ -f "$RELEASE_IMAGES" ]] || fail "$RELEASE_IMAGES not found (the release's docker-compose.images.yml)."
+  if command -v cosign >/dev/null; then
+    for image in $(sed -n 's/^ *image: *\(ghcr\.io[^ ]*\)$/\1/p' "$RELEASE_IMAGES" | sort -u); do
+      cosign verify "$image" --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp '^https://github\.com/Shashi1543-07/OPD-Sathi/\.github/workflows/release\.yml@refs/tags/v' \
+        >/dev/null || fail "The signature of $image does not verify. Do not install it."
+    done
+    echo "  release image signatures verified"
+  else
+    echo "WARNING: cosign is not installed: release image signatures were not verified."
+  fi
+  COMPOSE+=(-f "$(realpath "$RELEASE_IMAGES")")
+fi
 
 step "Checking Docker Engine"
 command -v docker >/dev/null || fail "Docker Engine is not installed (docs/DEPLOYMENT.md, 'Prepare the server')."
@@ -82,10 +107,18 @@ done
 for name in app_data_key app_hmac_key cursor_hmac_key notify_key; do
   new_secret "$name" b64key
 done
+# The backup encryption passphrase (ADR 011): separate from the data keys, escrowed with them
+# (docs/runbooks/key-escrow.md). Off-site repository credentials stay empty until configured.
+new_secret pgbackrest_cipher_pass hex32
+for name in pgbackrest_repo2_cipher_pass pgbackrest_repo2_s3_key pgbackrest_repo2_s3_key_secret; do
+  new_secret "$name" empty
+done
 # Optional provider keys: empty until a contract is signed (task 7.5.9).
 for name in gemini_api_key sarvam_api_key twilio_auth_token whatsapp_access_token; do
   new_secret "$name" empty
 done
+# Alert delivery: filled in by hospital IT (the mail account's password, a Telegram bot token).
+for name in smtp_password telegram_bot_token; do new_secret "$name" empty; done
 read_secret() { tr -d '\r\n' < "$SECRETS/$1"; }
 DB=osa
 url_secret() {  # name, value
@@ -131,7 +164,9 @@ if [[ ! -s "$CERTS/tls.crt" || ! -s "$CERTS/tls.key" ]]; then
   fi
 fi
 chmod 0644 "$CERTS/tls.crt"
-# The web container's unprivileged user (uid 101) must read the key; the directory is root-only.
+# The web container runs as uid/gid 101 and mounts this directory: it must enter it and read
+# the key; no other host user can (root:101, 0750; the key 0400 owned by 101).
+chown root:101 "$CERTS" && chmod 0750 "$CERTS"
 chown 101:101 "$CERTS/tls.key" && chmod 0400 "$CERTS/tls.key"
 openssl x509 -in "$CERTS/tls.crt" -noout -checkhost "$HOST" | grep -q "does match" ||
   fail "The certificate in $CERTS/tls.crt is not valid for $HOST."
@@ -149,12 +184,49 @@ if command -v timedatectl >/dev/null; then
   fi
 fi
 
+step "Logs kept 180 days"
+# Containers log to the systemd journal (docker-compose.prod.yml); keep it on disk for 180
+# days (CERT-In, task 7.9.3), within a size cap. Logs carry no patient data by design.
+install -d -m 0755 /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/opd-saathi.conf <<JOURNAL
+[Journal]
+Storage=persistent
+MaxRetentionSec=180day
+SystemMaxUse=${OSA_LOG_MAX:-20G}
+JOURNAL
+systemctl restart systemd-journald
+echo "  journal kept for 180 days (at most ${OSA_LOG_MAX:-20G})"
+
+step "Alerts to hospital IT"
+ALERTMANAGER_CONFIG=/etc/opd-saathi/alertmanager.yml
+if [[ ! -s "$ALERTMANAGER_CONFIG" ]]; then
+  if [[ -z "${ALERT_EMAIL:-}" && -t 0 ]]; then
+    read -r -p "  Email address that receives alerts (hospital IT): " ALERT_EMAIL
+    read -r -p "  Sender address for alerts: " SMTP_FROM
+    read -r -p "  Mail server (host:port, for example smtp.hospital.in:587): " SMTP_HOST
+    read -r -p "  Mail account user name [$SMTP_FROM]: " SMTP_USER
+    read -r -p "  Telegram group chat id (empty for email only): " TELEGRAM_CHAT_ID
+  fi
+  [[ -n "${ALERT_EMAIL:-}" ]] ||
+    fail "Set ALERT_EMAIL, SMTP_FROM and SMTP_HOST (docs/DEPLOYMENT.md, 'Alerts'); without them no one hears about a failure."
+  ALERT_EMAIL="$ALERT_EMAIL" SMTP_FROM="${SMTP_FROM:-}" SMTP_HOST="${SMTP_HOST:-}" \
+    SMTP_USER="${SMTP_USER:-}" TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}" \
+    scripts/alertmanager-config.sh "$ALERTMANAGER_CONFIG"
+  echo "  alerts go to $ALERT_EMAIL; put the mail password in $SECRETS/smtp_password"
+else
+  echo "  keeping $ALERTMANAGER_CONFIG"
+fi
+set_env OSA_ALERTMANAGER_CONFIG "$ALERTMANAGER_CONFIG"
+
 step "Starting the database and caches"
 "${COMPOSE[@]}" up -d $BUILD postgres redis redis-cache worker-role-bootstrap
 
 step "Backing up before migrating"
 if "${COMPOSE[@]}" exec -T postgres pg_isready -q 2>/dev/null &&
    [[ -x scripts/backup.sh ]] && [[ "$("${COMPOSE[@]}" exec -T postgres sh -c 'psql -U postgres -d osa -tAc "select count(*) from alembic_version"' 2>/dev/null || echo 0)" != "0" ]]; then
+  # A full pgBackRest backup (restorable to the minute) and a logical dump as a second copy.
+  "${COMPOSE[@]}" run --rm $BUILD backup backup-loop run full ||
+    fail "Backup failed; not migrating (docs/runbooks/restore.md)."
   COMPOSE_FILE="docker-compose.yml:docker-compose.prod.yml" BACKUP_DIR=/var/backups/opd-saathi \
     ./scripts/backup.sh || fail "Backup failed; not migrating."
 else
@@ -165,7 +237,7 @@ step "Applying database migrations"
 "${COMPOSE[@]}" run --rm $BUILD api alembic -c /app/alembic.ini upgrade head
 
 step "Starting the API, worker and web server"
-"${COMPOSE[@]}" up -d $BUILD api worker web
+"${COMPOSE[@]}" up -d $BUILD api worker web prometheus alertmanager backup
 
 if [[ ! -f "$CONFIG_DIR/.onboarded" || $ADD_HOSPITAL -eq 1 ]]; then
   step "Onboarding the hospital"
@@ -193,8 +265,8 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=$REPO
-ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
-ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml stop
+ExecStart=/usr/bin/${COMPOSE[*]} up -d --remove-orphans
+ExecStop=/usr/bin/${COMPOSE[*]} stop
 TimeoutStartSec=300
 
 [Install]

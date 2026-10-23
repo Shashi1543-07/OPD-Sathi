@@ -21,7 +21,7 @@ Hospital: ______________________ Installation host: ______________________ Versi
 | ☐ | Point-in-time backups, encrypted and off-site; restore drill in the last 90 days | Backup report; signed drill log (`docs/runbooks/restore.md`) |
 | ☐ | Keys escrowed in two places | Key register entry (`docs/runbooks/key-escrow.md`) |
 | ☐ | Alerts reach a named person within 5 minutes; runbooks in place | Alert drill log; `docs/runbooks/` |
-| ☐ | Support contacts on the wall of the server room; support agreement signed | Photo; agreement |
+| ☐ | Support contacts on the wall of the server room; support agreement signed | Photo; signed `docs/SUPPORT.md` |
 | ☐ | Load and soak targets met for this hospital's size (7.8) | Load test report |
 | ☐ | Clock synchronised to NIC/NPL time | `timedatectl` output |
 | ☐ | UPS with automatic clean shutdown tested | Test note (`docs/runbooks/power.md`) |

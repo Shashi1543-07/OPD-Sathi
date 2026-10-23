@@ -1,0 +1,69 @@
+# Changelog
+
+What changed in each release of OPD Saathi, in plain language for hospital administrators and
+IT, then the technical detail. Versions follow semantic versioning; `1.0.0` is cut only after
+the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and installed:
+`docs/RELEASES.md`.
+
+## [Unreleased]
+
+## [0.7.0]
+
+The production-readiness release (Phase 7, gates G0 to G2). For pilots with synthetic data and
+staging; not yet for real patients (clinical sign-off, penetration test and the go-live
+checklist are still open).
+
+### For hospital staff and administrators
+
+- **SMS only by the patient's own choice.** The SMS box on the kiosk is never pre-ticked, and
+  a patient can stop messages from their status page.
+- **Staff accounts.** Administrators reset passwords (the person chooses a new one at first
+  sign-in), unlock accounts, edit staff and departments, and sign a person out everywhere.
+  Everyone can change their password and see and end their own sign-ins (My account).
+- **Two-step sign-in** with an authenticator app is required for administrators and available
+  to doctors and nurses, with ten single-use recovery codes.
+- **Audit log screen** (Settings → Audit log): search by record, person, action and date, and
+  export for an investigation.
+- **Kiosks stay paired**: their device secrets renew by themselves every 30 days.
+- **Settings → System** shows the version, the last backup, disk space, the certificate,
+  whether the database, queue store and worker answer, each kiosk's last check-in, and how AI,
+  voice and SMS are set up.
+- **Hindi and Marathi** staff screens: the recent-visits list and visit statuses showed
+  "???"; they are translated again. Staff initials in the sidebar are correct for every name.
+
+### For hospital IT
+
+- **Installation on a Linux server** with one command (`scripts/setup-hospital.sh`): secrets as
+  files, HTTPS only, hardened containers, starts at boot. Guide: `docs/DEPLOYMENT.md`.
+- **Backups that restore to the minute**: changes are archived within 5 minutes, encrypted
+  backups are taken every night, optionally copied off-site; a restore drill proves them.
+  `docs/runbooks/restore.md`.
+- **Alerts to a person** by email (and Telegram, if wanted) when the server, database, disk,
+  backups, certificate or a kiosk needs attention, or an urgent patient alert waits more than
+  5 minutes. `docs/runbooks/alerts.md`.
+- **Signed releases**: images are scanned, signed and listed with their components; an offline
+  bundle serves hospitals with slow internet.
+- **Paper fallback pack** to print (`docs/paper/`): intake forms in three languages with the
+  kiosk's own questions, a token roll and a kiosk sign.
+- **Logs kept 180 days** in the server's journal (CERT-In), with no patient data in them.
+- Runbooks for every failure, the key escrow and rotation, the paper fallback, and the
+  go-live checklist.
+
+### Technical
+
+- Worker sends SMS with its own notify key, never the patient-data key; worker batches survive
+  one bad row; unread settings removed or wired; every image pinned by digest.
+- Production overlay (`docker-compose.prod.yml`) with TLS in nginx, edge rate limits, strict
+  CSP and cross-origin isolation; production smoke test in CI.
+- Key rotation: JWT key overlap, data-key ring with `app.cli reencrypt` and
+  `app.cli verify-decrypt`.
+- Least privilege proven by tests; PostgreSQL and every service run as non-root users.
+- Security in CI: Trivy (repository and every image), Bandit, Semgrep, pip-audit, npm audit,
+  Gitleaks; nightly signed-in OWASP ZAP and Schemathesis; a test that logs carry no patient
+  data. OWASP ASVS L2 self-assessment: `docs/security/ASVS.md`.
+- Clinical content can be marked approved only with a review record;
+  `CLINICAL_CONTENT_APPROVAL_REQUIRED` blocks start-up while drafts remain.
+- Prometheus metrics (multiprocess) and Alertmanager with 19 tested alert rules; pgBackRest
+  point-in-time recovery; k6 load and soak tests.
+- Database migrations up to `0028_worker_monitoring` (expand-only; the previous release runs
+  on this schema).

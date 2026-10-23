@@ -48,6 +48,8 @@ class _FileReferenceSource(PydanticBaseSettingsSource):
 class Settings(BaseSettings):
     """Runtime configuration; secrets are supplied outside source control."""
 
+    # The release this build is (VERSION; set at image build time; 'dev' for local builds).
+    app_version: str = "dev"
     app_env: str = "development"
     # Which process reads these settings: the API holds the patient-data keys, the worker
     # must not (docker-compose.yml sets PROCESS_ROLE=worker for it).
@@ -128,6 +130,14 @@ class Settings(BaseSettings):
     # Lets the staff sign-in page offer a hospital picker instead of a raw ID field.
     public_hospital_directory: bool = True
     metrics_enabled: bool = False
+    # The worker's own metrics port (it has no web server); private network only.
+    worker_metrics_port: int = 9101
+    # What the worker watches for the alerts (docs/runbooks/): a directory on the disk that
+    # holds the database, the HTTPS address whose certificate expiry it reads, and the status
+    # file the backup job writes. Empty turns that check off.
+    monitor_disk_path: str = ""
+    monitor_tls_address: str = ""
+    backup_status_file: str = ""
     urgent_bonus_min: int = 360
     priority_bonus_min: int = 45
     vulnerable_bonus_min: int = 15

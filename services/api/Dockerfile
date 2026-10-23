@@ -27,6 +27,9 @@ COPY services/api/app ./app
 COPY services/api/alembic.ini ./alembic.ini
 COPY services/api/migrations ./migrations
 COPY services/api/gunicorn.conf.py ./gunicorn.conf.py
+# The release (the VERSION file), passed by the release workflow and setup-hospital.sh.
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 USER app
 EXPOSE 8000
 CMD ["gunicorn", "--config", "/app/gunicorn.conf.py", "app.main:app"]

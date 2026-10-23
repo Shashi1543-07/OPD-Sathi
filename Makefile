@@ -107,7 +107,7 @@ prompts-audio-check:
 load: load-test
 
 load-test:
-	k6 run infra/k6/smoke.js
+	bash scripts/load-test.sh
 
 # 40 synthetic patients through the whole check-in on the running stack (.env settings).
 load-smoke:

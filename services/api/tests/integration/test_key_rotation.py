@@ -101,3 +101,37 @@ async def test_rotate_reencrypt_and_retire_the_old_key() -> None:
         )
         sealed = [value for row in rows for value in row.values() if value]
         assert sealed and all(key_id_of(value) == "2" for value in sealed)
+
+
+async def test_verify_mode_decrypts_current_key_values_and_finds_unreadable_ones() -> None:
+    """Restore drills (task 7.7.5) prove every value reads, not only those to re-seal."""
+    async with synthetic_hospital() as hospital:
+        with api_client(hospital.settings) as client:
+            session = start_kiosk_session(client, activate_kiosk(client, hospital))
+            complete_intake(session, complaint="headache", phone="9876543211")
+            assert session.confirm().status_code == 200
+
+        async def verify(settings: object) -> dict[str, object]:
+            engine = create_async_engine(settings.migrations_database_url)  # type: ignore[attr-defined]
+            try:
+                async with engine.begin() as connection:
+                    await set_hospital_scope(connection, hospital.hospital_id)
+                    return await reencrypt_hospital(  # type: ignore[return-value]
+                        connection,
+                        hospital_id=hospital.hospital_id,
+                        ring=settings.app_data_keyring,  # type: ignore[attr-defined]
+                        apply=True,  # ignored in verify mode: nothing is written
+                        verify=True,
+                    )
+            finally:
+                await engine.dispose()
+
+        reports = await verify(hospital.settings)
+        assert reports["patients.phone_enc"].verified == 1  # type: ignore[attr-defined]
+        assert reports["case_sheets.data"].verified == 1  # type: ignore[attr-defined]
+        assert all(r.unreadable == 0 and r.resealed == 0 for r in reports.values())  # type: ignore[attr-defined]
+
+        # The same records with the wrong key (as after restoring with a lost key) are unreadable.
+        wrong = hospital.settings.model_copy(update={"app_data_key": NEW_KEY})
+        lost = await verify(wrong)
+        assert lost["patients.phone_enc"].unreadable == 1  # type: ignore[attr-defined]

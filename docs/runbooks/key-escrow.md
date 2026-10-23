@@ -15,8 +15,9 @@ places, held by two named people.
 ## What to escrow
 
 The whole secrets directory, `/etc/opd-saathi/secrets` (Linux) or the `.env` file (Windows
-installations). It holds the database and Redis passwords, the token-signing keys and the data
-keys. Escrow all of it: restoring a server needs every one.
+installations). It holds the database and Redis passwords, the token-signing keys, the data
+keys and the backup passphrase (`pgbackrest_cipher_pass`, without which no backup can be
+read; `restore.md`). Escrow all of it: restoring a server needs every one.
 
 ## Making the sealed copies
 

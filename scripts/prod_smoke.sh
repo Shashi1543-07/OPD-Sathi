@@ -30,11 +30,13 @@ b64() { openssl rand -base64 32 | tr -d '\r\n'; }
 put() { printf '%s' "$2" > "$SECRETS/$1"; chmod 0644 "$SECRETS/$1"; }
 
 for name in postgres_password osa_app_password osa_migrator_password osa_worker_password \
-  redis_password jwt_secret; do
+  redis_password jwt_secret pgbackrest_cipher_pass; do
   put "$name" "$(hex)"
 done
 for name in app_data_key app_hmac_key cursor_hmac_key notify_key; do put "$name" "$(b64)"; done
-for name in gemini_api_key sarvam_api_key twilio_auth_token whatsapp_access_token; do put "$name" ""; done
+for name in gemini_api_key sarvam_api_key twilio_auth_token whatsapp_access_token smtp_password \
+  telegram_bot_token pgbackrest_repo2_cipher_pass pgbackrest_repo2_s3_key \
+  pgbackrest_repo2_s3_key_secret; do put "$name" ""; done
 read_secret() { cat "$SECRETS/$1"; }
 put database_url "postgresql+asyncpg://osa_app:$(read_secret osa_app_password)@postgres:5432/osa"
 put worker_database_url "postgresql+asyncpg://osa_worker:$(read_secret osa_worker_password)@postgres:5432/osa"
@@ -49,6 +51,9 @@ openssl req -x509 -newkey rsa:2048 -sha256 -days 2 -nodes -keyout "$(host_path "
   -out "$(host_path "$CERTS/tls.crt")" -subj "/CN=localhost" \
   -addext "subjectAltName=DNS:localhost" >/dev/null 2>&1
 chmod 0644 "$CERTS/tls.crt" "$CERTS/tls.key"
+# Alerts go nowhere in the smoke test; the configuration must still be valid.
+ALERT_EMAIL=it@example.test SMTP_FROM=opd-saathi@example.test SMTP_HOST=localhost:25 \
+  bash scripts/alertmanager-config.sh "$WORK/alertmanager.yml"
 
 cat > "$WORK/.env" <<ENV
 POSTGRES_DB=osa
@@ -60,6 +65,9 @@ OSA_SECRETS_DIR=$(host_path "$SECRETS")
 OSA_CERTS_DIR=$(host_path "$CERTS")
 OSA_SUBNET=172.31.250.0/24
 WEB_PROXY_IP=172.31.250.10
+OSA_ALERTMANAGER_CONFIG=$(host_path "$WORK/alertmanager.yml")
+# Production logs to journald; Docker Desktop has none, CI's runner does.
+OSA_LOG_DRIVER=${OSA_LOG_DRIVER:-json-file}
 ENV
 # Smoke-test ports only; a hospital install publishes 443 and 80.
 cat > "$WORK/ports.yml" <<YAML
@@ -68,6 +76,8 @@ services:
     ports: !override
       - "127.0.0.1:$HTTPS_PORT:8443"
       - "127.0.0.1:$HTTP_PORT:8080"
+  prometheus:
+    ports: !reset []
 YAML
 
 C=(docker compose -p "$PROJECT" --env-file "$(host_path "$WORK/.env")" -f docker-compose.yml \
@@ -78,6 +88,9 @@ cleanup() {
     rm -rf "$WORK"
   else
     echo "Stack left running: docker compose -p $PROJECT ... (secrets in $WORK)"
+    # For scripts that continue with the running stack (scripts/load-test.sh).
+    # (an if, not "test && ...": a false test would become the script's exit status)
+    if [[ -n "${SMOKE_COMPOSE_FILE:-}" ]]; then printf '%s\n' "${C[*]}" > "$SMOKE_COMPOSE_FILE"; fi
   fi
 }
 trap cleanup EXIT
@@ -85,10 +98,10 @@ trap cleanup EXIT
 echo "==> Building and starting the production stack"
 # A stack left by an earlier KEEP=1 run has a database made with other passwords; start clean.
 "${C[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
-"${C[@]}" build --quiet api worker web
+"${C[@]}" build --quiet api worker web postgres backup worker-role-bootstrap
 "${C[@]}" up -d postgres redis redis-cache worker-role-bootstrap
 "${C[@]}" run --rm api alembic -c /app/alembic.ini upgrade head
-"${C[@]}" up -d api worker web
+"${C[@]}" up -d api worker web prometheus alertmanager backup
 
 echo "==> Refusing development values"
 # The stack must not start in production with a development signing key.
@@ -143,4 +156,84 @@ for service in worker web api; do
   done
   [[ "$status" == "healthy" ]] && echo "ok   $service healthy" || { echo "FAIL $service $status"; leaks=1; }
 done
+
+echo "==> Monitoring"
+# Prometheus scrapes every part of the stack and the worker reports its alert gauges.
+prom() { "${C[@]}" exec -T prometheus wget -qO- "http://localhost:9090/api/v1/$1" 2>/dev/null; }
+query() { "${C[@]}" exec -T prometheus wget -qO- --post-data "query=$1" "http://localhost:9090/api/v1/query" 2>/dev/null; }
+for _ in $(seq 1 30); do
+  targets="$(prom targets || true)"
+  [[ "$(grep -o '"health":"up"' <<<"$targets" | wc -l)" -ge 5 ]] && break
+  sleep 2
+done
+for job in api worker web prometheus alertmanager; do
+  if "$PYTHON" -c "
+import json, sys
+targets = json.loads(sys.stdin.read())['data']['activeTargets']
+sys.exit(0 if any(t['labels']['job'] == '$job' and t['health'] == 'up' for t in targets) else 1)
+" <<<"$targets"; then echo "ok   Prometheus scrapes $job"; else echo "FAIL Prometheus cannot scrape $job"; leaks=1; fi
+done
+# The worker's checks have run once Prometheus has its database check (set last).
+for _ in $(seq 1 30); do
+  gauges="$(query 'dependency_up{job="worker",dependency="postgres"}' || true)"
+  grep -q '"value"' <<<"$gauges" && break
+  sleep 2
+done
+# The API must not export worker-only gauges (they would read 0 and fire false alerts).
+if query 'data_disk_free_ratio{job="api"}' | grep -q '"value"'; then
+  echo "FAIL the API exports worker-only gauges"; leaks=1
+else
+  echo "ok   worker-only gauges come from the worker alone"
+fi
+for metric in 'dependency_up{job="worker",dependency="postgres"}' \
+  'dependency_up{job="worker",dependency="redis"}' 'data_disk_free_ratio{job="worker"}' \
+  'tls_certificate_expiry_timestamp_seconds{job="worker"}'; do
+  # Measured every 30 s; a value not yet measured is NaN (never 0), so wait for a real one.
+  for _ in $(seq 1 40); do
+    raw="$(query "$metric" || true)"
+    value="$("$PYTHON" -c "
+import json, sys
+try:
+    result = json.loads(sys.stdin.read())['data']['result']
+except ValueError:
+    result = []
+print(result[0]['value'][1] if result else '')
+" <<<"$raw")"
+    [[ -n "$value" && "$value" != "0" && "$value" != "NaN" ]] && break
+    sleep 2
+  done
+  if [[ -n "$value" && "$value" != "0" && "$value" != "NaN" ]]; then echo "ok   worker reports $metric"; else
+    echo "FAIL worker does not report $metric: ${raw:0:300}"; leaks=1; fi
+done
+echo "==> Backups"
+# The backup service takes a first full backup at once; WAL archiving runs from the start.
+for _ in $(seq 1 60); do
+  info="$("${C[@]}" exec -T backup with-backup-secrets pgbackrest --stanza=osa --output=json info 2>/dev/null || true)"
+  grep -q '"type":"full"' <<<"$info" && break
+  sleep 3
+done
+if grep -q '"type":"full"' <<<"$info"; then echo "ok   first full backup in the encrypted repository"; else
+  echo "FAIL no full backup: $("${C[@]}" logs --tail 20 backup 2>&1)"; leaks=1; fi
+grep -q '"cipher":"aes-256-cbc"' <<<"$info" && echo "ok   backup repository encrypted" ||
+  { echo "FAIL backup repository not encrypted"; leaks=1; }
+"${C[@]}" exec -T postgres psql -U postgres -d osa -qtAc "SELECT pg_switch_wal()" >/dev/null
+if "${C[@]}" exec -T backup with-backup-secrets pgbackrest --stanza=osa check >/dev/null 2>&1; then
+  echo "ok   WAL archiving works"; else echo "FAIL WAL archiving"; leaks=1; fi
+for _ in $(seq 1 30); do
+  backup_gauge="$(query 'backup_last_success_timestamp_seconds{job="worker"}' || true)"
+  grep -q '"value"' <<<"$backup_gauge" && break
+  sleep 2
+done
+grep -q '"value"' <<<"$backup_gauge" && echo "ok   monitoring sees the last backup" ||
+  { echo "FAIL monitoring does not see the backup: ${backup_gauge:0:200}"; leaks=1; }
+# Restore the backup to a restore point, compare every table and decrypt every value (7.7.5).
+if OSA_COMPOSE="${C[*]}" bash scripts/restore-drill.sh > "$WORK/restore-drill.log" 2>&1; then
+  echo "ok   restore drill: $(tail -1 "$WORK/restore-drill.log")"
+else
+  echo "FAIL restore drill:"; tail -25 "$WORK/restore-drill.log"; leaks=1
+fi
+
+rules="$(prom rules || true)"
+grep -q '"name":"ApiDown"' <<<"$rules" && grep -q '"name":"UrgentAlertUnacknowledged"' <<<"$rules" \
+  && echo "ok   alert rules loaded" || { echo "FAIL alert rules not loaded"; leaks=1; }
 exit $leaks

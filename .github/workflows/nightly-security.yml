@@ -6,6 +6,14 @@ name: Nightly security
 on:
   schedule:
     - cron: "30 20 * * *" # 02:00 IST
+  # Also on a pull request that changes the scans or the edge they test.
+  pull_request:
+    paths:
+      - .github/workflows/nightly-security.yml
+      - scripts/dast.sh
+      - scripts/dast_token.py
+      - infra/zap/**
+      - infra/web/**
   workflow_dispatch:
 
 permissions:

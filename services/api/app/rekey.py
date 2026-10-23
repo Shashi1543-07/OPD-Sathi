@@ -59,6 +59,8 @@ class FieldReport:
     checked: int = 0
     resealed: int = 0
     unreadable: int = 0
+    # Values under the current key that were decrypted to prove them readable (verify mode).
+    verified: int = 0
 
 
 def _sealed(value: Any, kind: str) -> str | bytes | None:
@@ -91,8 +93,14 @@ async def reencrypt_hospital(
     apply: bool,
     batch: int = 500,
     progress: Callable[[str], None] = lambda _message: None,
+    verify: bool = False,
 ) -> dict[str, FieldReport]:
-    """Re-seal one hospital's records (the caller has set its tenant scope)."""
+    """Re-seal one hospital's records (the caller has set its tenant scope).
+
+    With ``verify`` (restore drills, task 7.7.5) every value is decrypted, including those
+    already under the current key, and nothing is written.
+    """
+    apply = apply and not verify
     reports: dict[str, FieldReport] = {}
     for field in FIELDS:
         report = reports.setdefault(f"{field.table}.{field.value_column}", FieldReport())
@@ -125,11 +133,15 @@ async def reencrypt_hospital(
                 if sealed is None:
                     continue
                 try:
-                    if key_id_of(sealed) == ring.current_id:
+                    current = key_id_of(sealed) == ring.current_id
+                    if current and not verify:
                         continue
                     fresh = _reseal(sealed, field, row_key, ring)
                 except ValueError:
                     report.unreadable += 1
+                    continue
+                if current:
+                    report.verified += 1
                     continue
                 report.resealed += 1
                 if apply:
@@ -140,8 +152,9 @@ async def reencrypt_hospital(
                     )
                     await connection.execute(statement)
             after = rows[-1][0]
+        readable = f"{report.verified} decrypted, " if verify else ""
         progress(
-            f"  {field.table}.{field.value_column}: {report.checked} checked, "
+            f"  {field.table}.{field.value_column}: {report.checked} checked, {readable}"
             f"{report.resealed} {'re-sealed' if apply else 'to re-seal'}, "
             f"{report.unreadable} unreadable"
         )

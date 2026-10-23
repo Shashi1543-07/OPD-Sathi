@@ -31,7 +31,8 @@ With the defaults that is 2 x 20 + 15 + 5 = 60. Raising `WEB_CONCURRENCY` to 4 n
 - Phase 11's summary query measured 1.88 ms p95 over 30 iterations against the seeded 100,000-visit Compose fixture. This is a local query benchmark, not a concurrent request capacity result.
 - Phase 12's Lighthouse CI run measured kiosk performance 85–86, accessibility 100, and best practices 96; the status page scored 94–95, accessibility 100, and best practices 96.
 - After Phase 14 route splitting, the production entry chunk is 427.86 kB (135.36 kB gzip); six Lighthouse runs scored kiosk performance 88–89 and demo performance 96 with accessibility 100. This is single-browser lab evidence, not a clinic-device guarantee.
-- `make load-test` runs a 25-VU `/healthz` smoke profile with k6. A local run completed 1,382 requests in 70 s with 0.00% failed, 19.60 requests/s, and 13.51 ms p95 (host hardware was not captured). It does not simulate intake completion, queue mutations, staff WebSockets, or the playbook's 200-session/10-minute capacity target.
+- `make load-test` (`scripts/load-test.sh`, k6 scenario `infra/k6/opd-day.js`) is the real-flow
+  load test; see "Load and soak tests" below.
 
 ## Growth path and unfinished work
 
@@ -43,3 +44,31 @@ With the defaults that is 2 x 20 + 15 + 5 = 60. Raising `WEB_CONCURRENCY` to 4 n
 6. Add per-clinic dashboards and alerts for database pool saturation, queue update delay, outbox age, and Redis memory pressure.
 
 The local Compose stack and its smoke tests are development tools. They do not establish a production capacity, recovery objective, or security certification.
+
+## Load and soak tests (Phase 7, tasks 7.8.2 and 7.8.3)
+
+`scripts/load-test.sh` starts the production-mode stack, pairs 10 kiosks and 8 doctors, and runs
+four kinds of user at once for `DURATION` (default 15 minutes):
+
+| User | Default | What it does |
+|---|---|---|
+| Kiosk check-ins | 300 an hour (`ARRIVALS_PER_HOUR`), a district hospital's peak | Consent, identity, danger signs, every interview question with a pause, confirm |
+| Doctors | 8 | Call next, start, consult (`CONSULT_SECONDS`), complete; sign in again every 8 minutes |
+| Staff boards | 20 (`BOARDS`) | Refresh the queue every 5 s |
+| Patients' status pages | 200 (`STATUS_PAGES`) | Refresh every 15 s |
+
+It passes when every step's p95 is under 1.5 s, under 1% of requests fail, no token number was
+issued twice in a department and day, and the worker logged no error; it also records memory,
+database connections and Redis memory before and after, and the API's own p95 per route from
+Prometheus (`load-reports/resources.txt`). It runs every night in GitHub Actions
+(`nightly-load.yml`, 15 minutes); a soak of any length, for example `8h` across midnight so the
+close-out runs under load, is started by hand from the Actions page.
+
+**First results (23 Oct 2026, a developer laptop running the whole stack and k6 in a 4 GB Docker
+VM; not capacity figures):** 6,467 requests, 0.07% failed; no token issued twice; no worker
+error; memory and connections steady over the run. The API's own p95: check-in steps 50 to
+95 ms, staff board 88 ms, call next 82 to 917 ms, status page 242 to 1,540 ms. An uncached
+status request on the idle stack takes 38 ms (median, 68 patients waiting), so the long tails
+came from the load generator and stack competing for the VM's memory and CPU. Capacity per
+server size is measured on the nightly runner and on staging hardware before the pilot
+(task 7.8.1), and recorded here.

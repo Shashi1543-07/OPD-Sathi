@@ -8,7 +8,9 @@ kiosk browser's own speech features or typing are used.
 
 import base64
 import hashlib
+from collections.abc import Awaitable
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any
 
 import structlog
@@ -18,6 +20,7 @@ from app.ai.providers.stt.sarvam import SarvamSTT
 from app.ai.providers.tts.base import AudioClip, pad_with_silence
 from app.ai.providers.tts.sarvam import SarvamTTS
 from app.config import Settings
+from app.core import metrics
 
 _LOGGER = structlog.get_logger(__name__)
 _LOCALES = {"en": "en-IN", "hi": "hi-IN", "mr": "mr-IN"}
@@ -26,6 +29,20 @@ _PROMPT_CACHE_SECONDS = 7 * 24 * 60 * 60
 
 class SpeechUnavailableError(RuntimeError):
     """No configured provider could complete the speech request."""
+
+
+async def _measured[Result](provider: str, call: Awaitable[Result]) -> Result:
+    """Count a speech provider call by outcome and time it (task 7.9.1)."""
+    started = monotonic()
+    try:
+        result = await call
+    except Exception:
+        metrics.AI_CALLS.labels(provider, "failed").inc()
+        raise
+    finally:
+        metrics.AI_DURATION.labels(provider).observe(monotonic() - started)
+    metrics.AI_CALLS.labels(provider, "succeeded").inc()
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +104,14 @@ class SpeechService:
                 extension = next(
                     (kind for kind in ("webm", "ogg", "mp4") if kind in mime_type), "wav"
                 )
-                result = await self._sarvam_stt.transcribe_clip(
-                    audio,
-                    locale,
-                    filename=f"answer.{extension}",
-                    content_type=mime_type.split(";")[0],
+                result = await _measured(
+                    "sarvam_stt",
+                    self._sarvam_stt.transcribe_clip(
+                        audio,
+                        locale,
+                        filename=f"answer.{extension}",
+                        content_type=mime_type.split(";")[0],
+                    ),
                 )
                 if result.text.strip():
                     return Transcript(result.text.strip(), "sarvam")
@@ -146,12 +166,16 @@ class SpeechService:
     async def _synthesize_uncached(self, text: str, language: str) -> AudioClip:
         if self._sarvam_tts is not None:
             try:
-                return await self._sarvam_tts.synthesize(text, language, self._tts_voice)
+                return await _measured(
+                    "sarvam_tts", self._sarvam_tts.synthesize(text, language, self._tts_voice)
+                )
             except Exception as exc:
                 _LOGGER.warning("tts_provider_failed", provider="sarvam", error=type(exc).__name__)
         if self._tts_gemini and self._gemini is not None:
             try:
-                wav = await self._gemini.synthesize_speech(text, language=language)
+                wav = await _measured(
+                    "gemini_tts", self._gemini.synthesize_speech(text, language=language)
+                )
                 return AudioClip(wav, "audio/wav")
             except Exception as exc:
                 _LOGGER.warning("tts_provider_failed", provider="gemini", error=type(exc).__name__)

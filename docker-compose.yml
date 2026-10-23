@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    image: redis:7.4.11-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
     command:
       [
         "sh",
@@ -45,7 +45,7 @@ services:
     restart: unless-stopped
 
   redis-cache:
-    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+    image: redis:7.4.11-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
     command:
       [
         "sh",
@@ -85,6 +85,8 @@ services:
     build:
       context: .
       dockerfile: services/api/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     command: ["gunicorn", "--config", "/app/gunicorn.conf.py", "app.main:app"]
     environment: &app_environment
       APP_ENV: ${APP_ENV:-development}
@@ -163,6 +165,8 @@ services:
     build:
       context: .
       dockerfile: services/api/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     command: ["python", "-m", "app.workers.main"]
     environment:
       <<: *app_environment

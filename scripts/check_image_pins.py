@@ -35,7 +35,8 @@ def main() -> int:
             stages = set(re.findall(r"^FROM\s+\S+\s+AS\s+(\S+)", text, flags=re.M | re.I))
             for match in IMAGE.finditer(text):
                 image = match.group("image") or match.group("run")
-                if not image or image in stages or "${" in image or image == "scratch":
+                # "image: !reset null" (Compose) removes an inherited image: nothing to pin.
+                if not image or image in stages or "${" in image or image in {"scratch", "!reset"}:
                     continue
                 if not re.search(r"@sha256:[0-9a-f]{64}$", image):
                     line = text.count("\n", 0, match.start()) + 1

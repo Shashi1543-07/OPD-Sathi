@@ -1,6 +1,6 @@
 # Runbook: Redis state lost or corrupted
 
-**Alerts:** `RedisDown`, `ApiNotReady` (readiness reports `redis`) · **Owner:** hospital IT ·
+**Alerts:** `RedisDown`, often with `QueueUpdatesStuck` · **Owner:** hospital IT ·
 **Time:** 10 minutes · **Data at risk:** none clinical (task 7.7.4)
 
 ## What Redis holds, and what losing it costs

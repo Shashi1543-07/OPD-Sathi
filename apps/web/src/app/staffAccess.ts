@@ -1,7 +1,7 @@
 import type { StaffRole } from "../lib/auth";
 
 export type StaffPageId =
-  "queue" | "consultations" | "patients" | "reports" | "settings" | "audit";
+  "queue" | "consultations" | "patients" | "reports" | "settings" | "audit" | "system";
 
 export const navigationByRole: Record<StaffRole, StaffPageId[]> = {
   admin: [
@@ -11,6 +11,7 @@ export const navigationByRole: Record<StaffRole, StaffPageId[]> = {
     "reports",
     "settings",
     "audit",
+    "system",
   ],
   doctor: ["queue", "consultations", "patients"],
   nurse: ["queue", "patients"],

@@ -78,22 +78,36 @@ def test_healthz():
     with TestClient(app) as client:
         response = client.get("/healthz")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "version": "dev"}
 
 
 def test_metrics_export_uses_bounded_route_labels_and_prometheus_histogram():
     app = create_app(Settings(metrics_enabled=True))
+    sample = 'http_requests_total{method="GET",route="/healthz",status="200"}'
+
+    def healthz_count(text: str) -> float:
+        line = next((line for line in text.splitlines() if line.startswith(sample)), None)
+        return float(line.split()[-1]) if line else 0.0
+
     with TestClient(app) as client:
+        before = healthz_count(client.get("/metrics").text)
         client.get("/healthz")
+        record_id = uuid4()
+        client.get(f"/visits/{record_id}/case-sheet")
         response = client.get("/metrics")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
-    assert 'http_requests_total{method="GET",route="/healthz",status="200"} 1' in response.text
+    # Counters are process-wide (other tests add to them): compare before and after.
+    assert healthz_count(response.text) == before + 1
     assert any(
-        line.startswith('http_request_duration_seconds_bucket{method="GET",route="/healthz"')
-        and 'le="+Inf"} 1' in line
+        line.startswith('http_request_duration_seconds_bucket{le="+Inf",method="GET"')
+        or (line.startswith("http_request_duration_seconds_bucket") and 'route="/healthz"' in line)
         for line in response.text.splitlines()
     )
+    # Route templates only: a record id never becomes a label (refused before routing, the
+    # request above is counted as "unmatched").
+    assert str(record_id) not in response.text
+    assert 'route="unmatched"' in response.text
     assert ("GET", "/metrics") in PUBLIC_ROUTES
 
 

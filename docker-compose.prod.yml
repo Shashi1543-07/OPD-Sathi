@@ -12,18 +12,44 @@
 #   - Every container: restart always, memory and CPU limits, rotated logs, no new privileges,
 #     all Linux capabilities dropped except the few an image needs, read-only root filesystem.
 #   - Health checks for the worker and the web server.
+#   - Backups (task 7.7; ADR 011): PostgreSQL archives every WAL segment with pgBackRest and
+#     the backup service takes nightly encrypted backups, optionally copied off-site (repo2).
+#   - Monitoring (task 7.9; ADR 010): Prometheus scrapes the API, the worker and nginx on the
+#     private network and Alertmanager tells hospital IT (/etc/opd-saathi/alertmanager.yml,
+#     written by setup-hospital.sh). Neither is published; reach Prometheus through an SSH
+#     tunnel to 127.0.0.1:9090 when needed.
 
 x-hardened: &hardened
   restart: always
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]
   read_only: true
+  # Logs (no patient data by design; tests/security/test_no_pii_in_logs.py) go to the host's
+  # systemd journal, kept 180 days by setup-hospital.sh (task 7.9.3; CERT-In). Read them with
+  # `journalctl SYSLOG_IDENTIFIER=opd-saathi/<container> --since ...`. OSA_LOG_DRIVER=json-file
+  # where there is no journald (Docker Desktop, the local smoke test).
   logging:
-    driver: json-file
-    options: { max-size: "20m", max-file: "10" }
+    driver: ${OSA_LOG_DRIVER:-journald}
+    options: { tag: "opd-saathi/{{.Name}}" }
 
 # Secrets the API and worker read through <NAME>_FILE (app/config.py). The plain variables are
 # blanked so no value from .env can reach the container's environment.
+# Off-site backup repository (optional; docs/DEPLOYMENT.md, "Backups"): the same settings for
+# the database (which archives WAL) and the backup service. Keys come from secret files.
+x-backup-env: &backup_env
+  PGBACKREST_REPO2_TYPE: ${PGBACKREST_REPO2_TYPE:-}
+  PGBACKREST_REPO2_PATH: ${PGBACKREST_REPO2_PATH:-}
+  PGBACKREST_REPO2_S3_BUCKET: ${PGBACKREST_REPO2_S3_BUCKET:-}
+  PGBACKREST_REPO2_S3_ENDPOINT: ${PGBACKREST_REPO2_S3_ENDPOINT:-}
+  PGBACKREST_REPO2_S3_REGION: ${PGBACKREST_REPO2_S3_REGION:-}
+  PGBACKREST_REPO2_S3_URI_STYLE: ${PGBACKREST_REPO2_S3_URI_STYLE:-path}
+
+x-backup-secrets: &backup_secrets
+  - pgbackrest_cipher_pass
+  - pgbackrest_repo2_cipher_pass
+  - pgbackrest_repo2_s3_key
+  - pgbackrest_repo2_s3_key_secret
+
 x-app-secret-env: &app_secret_env
   APP_ENV: production
   PROVIDER_MODE: standard
@@ -57,8 +83,26 @@ x-app-secret-env: &app_secret_env
 services:
   postgres:
     <<: *hardened
+    # PostgreSQL with pgBackRest (infra/postgres/Dockerfile): every completed WAL segment is
+    # archived to the backup repository, and a segment is closed at least every 5 minutes,
+    # so at most 5 minutes of data can be lost (task 7.7.1).
+    # Built here from the pinned upstream image; the base file's image is not used.
+    image: !reset null
+    build:
+      context: .
+      dockerfile: infra/postgres/Dockerfile
+    entrypoint: ["with-backup-secrets", "docker-entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=osa archive-push %p
+      - -c
+      - archive_timeout=300
     ports: !reset []
     environment:
+      <<: *backup_env
       POSTGRES_PASSWORD: ""
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       OSA_APP_PASSWORD: ""
@@ -67,10 +111,22 @@ services:
       OSA_MIGRATOR_PASSWORD_FILE: /run/secrets/osa_migrator_password
       OSA_WORKER_PASSWORD: ""
       OSA_WORKER_PASSWORD_FILE: /run/secrets/osa_worker_password
-    secrets: [postgres_password, osa_app_password, osa_migrator_password, osa_worker_password]
-    # The entrypoint starts as root, prepares the data directory, then drops to "postgres".
-    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
-    tmpfs: ["/run/postgresql:mode=0775,uid=999,gid=999", "/tmp"]
+    secrets:
+      - postgres_password
+      - osa_app_password
+      - osa_migrator_password
+      - osa_worker_password
+      - pgbackrest_cipher_pass
+      - pgbackrest_repo2_cipher_pass
+      - pgbackrest_repo2_s3_key
+      - pgbackrest_repo2_s3_key_secret
+    # Runs as the postgres user from the start (the image's USER): no added capabilities.
+    volumes:
+      - pgbackrest-repo:/var/lib/pgbackrest
+      # The socket directory is shared with the backup service.
+      - pg-socket:/run/postgresql
+      - ${PGBACKREST_REPO2_HOST_PATH:-/var/lib/opd-saathi/offsite-unused}:/mnt/offsite
+    tmpfs: ["/tmp", "/var/spool/pgbackrest:uid=999,gid=999,mode=0750"]
     shm_size: 256m
     deploy:
       resources:
@@ -124,6 +180,11 @@ services:
         limits: { cpus: "1", memory: "512m" }
 
   worker-role-bootstrap:
+    # Our scanned PostgreSQL image (its psql), not the base file's upstream one.
+    image: !reset null
+    build:
+      context: .
+      dockerfile: infra/postgres/Dockerfile
     restart: "no"
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
@@ -147,6 +208,8 @@ services:
       APP_HMAC_KEY_FILE: /run/secrets/app_hmac_key
       # Read-only root filesystem: font and PDF caches go to the private tmpfs.
       XDG_CACHE_HOME: /tmp/cache
+      # Served to Prometheus on the private network; nginx never forwards /metrics.
+      METRICS_ENABLED: "true"
     secrets:
       - database_url
       - worker_database_url
@@ -177,6 +240,15 @@ services:
       PROCESS_ROLE: worker
       APP_DATA_KEY: ""
       APP_HMAC_KEY: ""
+      METRICS_ENABLED: "true"
+      # What the alerts watch: the disk Docker keeps the database volume on (an empty volume
+      # on the same disk), the HTTPS certificate as served, and the backup job's status.
+      MONITOR_DISK_PATH: /var/lib/osa-disk
+      MONITOR_TLS_ADDRESS: web:8443
+      BACKUP_STATUS_FILE: /var/lib/osa-backup/status.json
+    volumes:
+      - disk-probe:/var/lib/osa-disk:ro
+      - backup-status:/var/lib/osa-backup:ro
     secrets:
       - database_url
       - worker_database_url
@@ -222,6 +294,80 @@ services:
       resources:
         limits: { cpus: "1", memory: "256m" }
 
+  # Nightly encrypted backups (task 7.7.2; docs/runbooks/restore.md). Runs as the postgres
+  # user, reads the data directory, writes the repository and the status the worker reports.
+  backup:
+    <<: *hardened
+    build:
+      context: .
+      dockerfile: infra/postgres/Dockerfile
+    user: "999:999"
+    entrypoint: ["with-backup-secrets"]
+    command: ["backup-loop"]
+    environment:
+      <<: *backup_env
+      BACKUP_AT_UTC: ${BACKUP_AT_UTC:-20:00}
+      BACKUP_STATUS_FILE: /var/lib/osa-backup/status.json
+    secrets: *backup_secrets
+    volumes:
+      - postgres_data:/var/lib/postgresql/data:ro
+      - pgbackrest-repo:/var/lib/pgbackrest
+      - pg-socket:/run/postgresql
+      - backup-status:/var/lib/osa-backup
+      - ${PGBACKREST_REPO2_HOST_PATH:-/var/lib/opd-saathi/offsite-unused}:/mnt/offsite
+    tmpfs: ["/tmp", "/var/spool/pgbackrest:uid=999,gid=999,mode=0750"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: "512m" }
+
+  prometheus:
+    <<: *hardened
+    # Always on in production (the base file puts it behind a development profile).
+    profiles: !reset []
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+      - --web.listen-address=:9090
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: "1g" }
+
+  alertmanager:
+    <<: *hardened
+    image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ${OSA_ALERTMANAGER_CONFIG:-/etc/opd-saathi/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    secrets: [smtp_password, telegram_bot_token]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: "256m" }
+
+volumes:
+  prometheus-data:
+  alertmanager-data:
+  # Empty: the worker reads free space of the disk it is on (the database volume's disk).
+  disk-probe:
+  # Written by the backup job, read by the worker.
+  backup-status:
+  # The local backup repository (repo1): encrypted backups and archived WAL.
+  pgbackrest-repo:
+  pg-socket:
+
 networks:
   default:
     ipam:
@@ -248,3 +394,9 @@ secrets:
   sarvam_api_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/sarvam_api_key" }
   twilio_auth_token: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/twilio_auth_token" }
   whatsapp_access_token: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/whatsapp_access_token" }
+  smtp_password: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/smtp_password" }
+  telegram_bot_token: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/telegram_bot_token" }
+  pgbackrest_cipher_pass: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/pgbackrest_cipher_pass" }
+  pgbackrest_repo2_cipher_pass: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/pgbackrest_repo2_cipher_pass" }
+  pgbackrest_repo2_s3_key: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/pgbackrest_repo2_s3_key" }
+  pgbackrest_repo2_s3_key_secret: { file: "${OSA_SECRETS_DIR:-/etc/opd-saathi/secrets}/pgbackrest_repo2_s3_key_secret" }

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OPD intake form (paper)</title>
+<style>
+@page { size: A4; margin: 12mm; }
+* { box-sizing: border-box; }
+body { font: 11pt/1.35 "Noto Sans", "Noto Sans Devanagari", "Nirmala UI", Mangal, sans-serif;
+  color: #000; background: #fff; margin: 0; }
+h1 { font-size: 16pt; margin: 0 0 2pt; } h2 { font-size: 11.5pt; margin: 6pt 0 2pt;
+  border-bottom: 1.5pt solid #000; padding-bottom: 1pt; }
+.note { font-size: 9pt; margin: 0 0 6pt; }
+.head, .row { display: flex; gap: 10pt; flex-wrap: wrap; }
+.field { flex: 1 1 30%; min-width: 45mm; border-bottom: 1pt solid #000; padding-top: 10pt;
+  font-size: 9pt; }
+.danger { border: 2pt solid #000; padding: 4pt 6pt; }
+.danger strong { display: block; margin-bottom: 3pt; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 3pt 2pt; border-bottom: 0.5pt solid #666; vertical-align: top; }
+td.box { width: 22mm; white-space: nowrap; }
+.tick { display: inline-block; width: 10pt; height: 10pt; border: 1pt solid #000;
+  margin-right: 4pt; vertical-align: -1pt; }
+.options { columns: 2; column-gap: 12pt; }
+.options > span { display: block; break-inside: avoid; padding: 1pt 0; }
+.scale span { display: inline-block; width: 15pt; height: 15pt; border: 1pt solid #000;
+  text-align: center; margin-right: 2pt; font-size: 9pt; line-height: 15pt; }
+.lines { border-bottom: 1pt solid #000; height: 14pt; }
+.nurse { border: 1pt dashed #000; padding: 4pt 6pt; margin-top: 8pt; }
+.footer { font-size: 7.5pt; margin-top: 6pt; color: #333; }
+.roll { display: grid; grid-template-columns: repeat(5, 1fr); }
+.roll div { border: 1pt dashed #000; height: 18mm; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; font-size: 15pt; font-weight: 700; }
+.roll small { font-size: 7pt; font-weight: 400; }
+.sign { text-align: center; padding-top: 30mm; }
+.sign h1 { font-size: 30pt; margin: 6mm 0 2mm; } .sign p { font-size: 16pt; margin: 0 0 14mm; }
+</style>
+</head>
+<body>
+
+<h1>OPD intake form (paper)</h1>
+<p class="note">Used only while the computer system is down. Staff copy into the system later.</p>
+<div class="head">
+  <div class="field">Paper token: P-______</div>
+  <div class="field">Department</div>
+  <div class="field">Date and time of arrival</div>
+</div>
+<h2>1 · Do you have any of these right now?</h2>
+<div class="danger"><strong>Ask first. If YES to any: take the patient to the nurse now.</strong>
+<table><tr><td>Chest discomfort</td><td class="box"><span class="tick"></span>Yes &nbsp; <span class="tick"></span>No</td></tr><tr><td>Trouble breathing</td><td class="box"><span class="tick"></span>Yes &nbsp; <span class="tick"></span>No</td></tr><tr><td>Heavy bleeding</td><td class="box"><span class="tick"></span>Yes &nbsp; <span class="tick"></span>No</td></tr><tr><td>Fainting or unable to stay awake</td><td class="box"><span class="tick"></span>Yes &nbsp; <span class="tick"></span>No</td></tr><tr><td>Sudden weakness or difficulty speaking</td><td class="box"><span class="tick"></span>Yes &nbsp; <span class="tick"></span>No</td></tr><tr><td>A seizure happening now</td><td class="box"><span class="tick"></span>Yes &nbsp; <span class="tick"></span>No</td></tr></table></div>
+<h2>2 · About the patient</h2>
+<div class="row">
+  <div class="field" style="flex-basis:100%">Patient&#x27;s full name</div>
+  <div class="field">Age in years</div>
+  <div class="field">Sex: <span class="tick"></span>Female &nbsp; <span class="tick"></span>Male &nbsp; <span class="tick"></span>Other</div>
+  <div class="field">Mobile number (optional)</div>
+  <div class="field">OPD number (for example 26-000123)</div>
+</div>
+<h2>3 · What is the main problem that brought you here today?</h2>
+<p class="note">Main problem (tick one or write it)</p>
+<div class="options"><span><span class="tick"></span>Fever</span><span><span class="tick"></span>Cough</span><span><span class="tick"></span>Difficulty breathing</span><span><span class="tick"></span>Stomach pain</span><span><span class="tick"></span>Vomiting or loose motions</span><span><span class="tick"></span>Headache</span><span><span class="tick"></span>Body or joint pain</span><span><span class="tick"></span>Skin rash or itching</span><span><span class="tick"></span>Burning while passing urine</span><span><span class="tick"></span>Weakness or tiredness</span><span><span class="tick"></span>Injury or fall</span><span><span class="tick"></span>Other: ____________</span></div>
+<h2>4 · Since when do you have this problem?</h2>
+<div class="options"><span><span class="tick"></span>Since today</span><span><span class="tick"></span>1 to 3 days</span><span><span class="tick"></span>4 to 7 days</span><span><span class="tick"></span>1 to 4 weeks</span><span><span class="tick"></span>More than a month</span></div>
+<h2>5 · How bad is it right now? 0 means not at all, 10 means the worst.</h2>
+<div class="scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+<h2>6 · Anything else the doctor should know</h2>
+<div class="lines"></div><div class="lines"></div>
+<div class="nurse"><strong>Nurse use</strong>
+<div class="row">
+  <div class="field">Urgency:
+    <span class="tick"></span>Routine
+    <span class="tick"></span>Priority
+    <span class="tick"></span>Urgent</div>
+  <div class="field">Entered in the system as token</div>
+  <div class="field">Entered by</div>
+</div></div>
+<p class="footer">OPD Saathi · docs/paper · scripts/make_paper_forms.py · en</p>
+
+</body>
+</html>

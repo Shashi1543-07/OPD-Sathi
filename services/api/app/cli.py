@@ -104,7 +104,9 @@ async def _create_admin(
     return selected_hospital_id
 
 
-async def _reencrypt(*, hospital_id: UUID | None, apply: bool, batch: int) -> int:
+async def _reencrypt(
+    *, hospital_id: UUID | None, apply: bool, batch: int, verify: bool = False
+) -> int:
     """Re-seal records still encrypted with an older data key (docs/runbooks/key-rotation.md)."""
     from app.rekey import reencrypt_hospital
 
@@ -138,6 +140,7 @@ async def _reencrypt(*, hospital_id: UUID | None, apply: bool, batch: int) -> in
                     apply=apply,
                     batch=batch,
                     progress=print,
+                    verify=verify,
                 )
                 unreadable += sum(report.unreadable for report in reports.values())
                 if apply:
@@ -1455,6 +1458,10 @@ def main() -> None:
         "content-status",
         help="List each clinical content file and whether it is approved or still a draft",
     )
+    commands.add_parser(
+        "verify-decrypt",
+        help="Decrypt every encrypted value with the keys in the ring (restore drills)",
+    )
     reset_mfa = commands.add_parser(
         "reset-mfa",
         help="Break-glass: remove a staff member's two-step sign-in (audited)",
@@ -1614,6 +1621,14 @@ def main() -> None:
             "Next: sign in at /staff, then use Settings to add staff accounts and to "
             "register each kiosk (each one gets its own activation code)."
         )
+        return
+    if args.command == "verify-decrypt":
+        unreadable = asyncio.run(
+            _reencrypt(hospital_id=None, apply=False, batch=500, verify=True)
+        )
+        if unreadable:
+            raise SystemExit(f"{unreadable} encrypted value(s) could not be read.")
+        print("Every encrypted value was read with the keys in the ring.")
         return
     if args.command == "reencrypt":
         unreadable = asyncio.run(
