@@ -2637,6 +2637,7 @@ class AdminRepository:
         ),
         "kiosks": (
             "UPDATE kiosks SET deleted_at = now(), is_active = false, secret_hash = NULL, "
+            "previous_secret_hash = NULL, "
             "activation_code_hash = NULL, activation_code_expires_at = NULL, "
             "checkin_code_hash = NULL "
             "WHERE hospital_id = :hospital_id AND id = :resource_id AND deleted_at IS NULL "

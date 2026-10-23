@@ -121,6 +121,8 @@ class Settings(BaseSettings):
     kiosk_token_hours: int = 12
     # How long a one-time kiosk activation code can be used before an admin must issue another.
     kiosk_activation_code_hours: int = 24
+    # A kiosk's device secret is replaced this often, at a token renewal (task 7.3.9).
+    kiosk_secret_rotation_days: int = 30
     patient_session_hours: int = 2
     max_request_body_bytes: int = 1_048_576
     # Lets the staff sign-in page offer a hospital picker instead of a raw ID field.
@@ -268,6 +270,8 @@ class Settings(BaseSettings):
         self._previous_data_keys()
         if not self.jwt_kid or len(self.jwt_kid) > 64:
             raise ValueError("JWT_KID must contain between 1 and 64 characters")
+        if not 1 <= self.kiosk_secret_rotation_days <= 365:
+            raise ValueError("KIOSK_SECRET_ROTATION_DAYS must be between 1 and 365")
         if not 1 <= self.db_pool_min <= self.db_pool_max <= 200:
             raise ValueError("DB_POOL_MIN and DB_POOL_MAX must satisfy 1 <= min <= max <= 200")
         if self.max_request_body_bytes < 1024:

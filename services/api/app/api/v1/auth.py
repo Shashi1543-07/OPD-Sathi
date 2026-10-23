@@ -902,8 +902,9 @@ async def renew_kiosk_token(
     service, without anyone typing an activation code again. Deleting or re-pairing the
     kiosk invalidates the secret at once (401: the device forgets it). A deactivated kiosk
     is refused with 403 but keeps its secret, so activating it again needs no new code.
-    The secret is not rotated on use, so a renewal lost to a flaky hospital network never
-    strands the kiosk.
+    The secret is replaced every KIOSK_SECRET_ROTATION_DAYS (the answer then carries
+    ``device_secret``); the previous one keeps working until the device has used the new one,
+    so a renewal lost to a flaky hospital network never strands the kiosk.
     """
     settings: Settings = request.app.state.settings
     await _limit_request(
@@ -924,8 +925,11 @@ async def renew_kiosk_token(
             (
                 await connection.execute(
                     text(
-                        "SELECT id, hospital_id, is_active FROM kiosks "
-                        "WHERE secret_hash = :secret_hash AND deleted_at IS NULL LIMIT 1"
+                        "SELECT id, hospital_id, is_active, secret_rotated_at, "
+                        "(secret_hash = :secret_hash) AS current_secret, "
+                        "previous_secret_hash IS NOT NULL AS rotation_pending FROM kiosks "
+                        "WHERE (secret_hash = :secret_hash OR previous_secret_hash = :secret_hash) "
+                        "AND deleted_at IS NULL LIMIT 1"
                     ),
                     {"secret_hash": secret_hash},
                 )
@@ -950,6 +954,48 @@ async def renew_kiosk_token(
                 ),
                 {"hospital_id": kiosk["hospital_id"], "id": kiosk["id"]},
             )
+            rotated_at = kiosk["secret_rotated_at"]
+            due = rotated_at is None or rotated_at <= datetime.now(UTC) - timedelta(
+                days=settings.kiosk_secret_rotation_days
+            )
+            if kiosk["current_secret"] and kiosk["rotation_pending"]:
+                # The device has the new secret: the old one stops working now.
+                await connection.execute(
+                    text(
+                        "UPDATE kiosks SET previous_secret_hash = NULL "
+                        "WHERE hospital_id = :hospital_id AND id = :id"
+                    ),
+                    {"hospital_id": kiosk["hospital_id"], "id": kiosk["id"]},
+                )
+            elif due or not kiosk["current_secret"]:
+                # Rotate: due by age, or the device came back with the previous secret (it
+                # never stored the last new one). The secret it used stays valid meanwhile.
+                new_secret = create_opaque_secret()
+                await connection.execute(
+                    text(
+                        "UPDATE kiosks SET previous_secret_hash = :used, "
+                        "secret_hash = :new_hash, secret_rotated_at = now() "
+                        "WHERE hospital_id = :hospital_id AND id = :id"
+                    ),
+                    {
+                        "used": secret_hash,
+                        "new_hash": digest_secret(new_secret),
+                        "hospital_id": kiosk["hospital_id"],
+                        "id": kiosk["id"],
+                    },
+                )
+                kiosk["device_secret"] = new_secret
+                await audit(
+                    connection,
+                    request,
+                    hospital_id=kiosk["hospital_id"],
+                    actor_type="kiosk",
+                    actor_id=kiosk["id"],
+                    action="kiosk.secret_rotated",
+                    resource_type="kiosk",
+                    resource_id=kiosk["id"],
+                    meta={"reason": "age" if kiosk["current_secret"] else "retry"},
+                )
             await audit(
                 connection,
                 request,
@@ -969,10 +1015,13 @@ async def renew_kiosk_token(
             "This kiosk was deleted or set up on another device. "
             "Ask an administrator for a new activation code.",
         )
-    return {
+    response_body = {
         **_kiosk_token_response(settings, kiosk_id=kiosk["id"], hospital_id=kiosk["hospital_id"]),
         "hospital_name": kiosk["hospital_name"],
     }
+    if kiosk.get("device_secret"):
+        response_body["device_secret"] = kiosk["device_secret"]
+    return response_body
 
 
 @router.post("/kiosks/activate")
@@ -1035,6 +1084,7 @@ async def activate_kiosk(
                     text(
                         "UPDATE kiosks SET activation_code_hash = NULL, "
                         "activation_code_expires_at = NULL, secret_hash = :secret_hash, "
+                        "previous_secret_hash = NULL, secret_rotated_at = now(), "
                         "paired_at = now(), last_seen_at = now() WHERE id = :id"
                     ),
                     {"secret_hash": digest_secret(device_secret), "id": kiosk["id"]},

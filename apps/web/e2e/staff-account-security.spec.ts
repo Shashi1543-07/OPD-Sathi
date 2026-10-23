@@ -19,6 +19,14 @@ const session = (restrictions: string[]) => ({
 });
 
 async function noAccessibilityViolations(page: Page) {
+  // Measure colours once fade-ins have finished; mid-animation text is still translucent.
+  // (Looping animations such as a spinner never finish, so only finite ones are awaited.)
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+      .every((animation) => animation.playState !== "running"),
+  );
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 }
