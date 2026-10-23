@@ -1,0 +1,2 @@
+# Trivy waivers (ADR 009). One advisory id per line, each with a comment above it giving the
+# reason, who accepted it and a review date. A waiver without a reason is not accepted in review.

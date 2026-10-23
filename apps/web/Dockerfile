@@ -18,4 +18,6 @@ COPY infra/web/security-headers.conf /etc/nginx/conf.d/security-headers.inc
 COPY infra/web/api-proxy.inc /etc/nginx/conf.d/api-proxy.inc
 COPY infra/web/tls-headers.inc /etc/nginx/conf.d/tls-headers.inc
 COPY --from=build /app/dist /usr/share/nginx/html
+# Explicit, so a base-image change can never run the server as root.
+USER 101
 EXPOSE 8080 8443
