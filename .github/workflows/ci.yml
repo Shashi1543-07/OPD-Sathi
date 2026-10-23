@@ -54,6 +54,12 @@ jobs:
       # Every documented setting is read by something; every image is pinned by digest.
       - run: python scripts/check_env_example.py
       - run: python scripts/check_image_pins.py
+      # Shell scripts are run directly (sudo ./scripts/setup-hospital.sh): keep them executable,
+      # which a Windows checkout cannot show.
+      - name: Shell scripts are executable
+        run: |
+          not_executable="$(git ls-files -s -- '*.sh' | awk '$1 != "100755" {print $4}')"
+          test -z "$not_executable" || { echo "Not executable: $not_executable"; exit 1; }
       - run: mypy --strict services/api/app
       - run: PYTHONPATH=services/api python services/api/scripts/validate_question_bank.py
       - run: make prompts-audio-check
