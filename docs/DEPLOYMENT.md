@@ -198,5 +198,5 @@ backup taken in step 3.
 ## 10. Support
 
 First line: the hospital's IT person or OPD desk lead. Second line: the OPD Saathi team, by the
-channel and hours agreed in the support agreement (task 7.9.6). Report security issues
+channel and hours agreed in the support agreement (`docs/SUPPORT.md`). Report security issues
 privately (`SECURITY.md`) and incidents by `docs/INCIDENT_RESPONSE.md`.

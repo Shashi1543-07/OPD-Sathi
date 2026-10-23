@@ -441,13 +441,13 @@ Signed by the medical superintendent or clinical lead, hospital IT, the DPO or l
 | 7.4 Security verification | 7.4.1–7.4.9 | 7.4.1–7.4.5, 7.4.7, 7.4.9 done (G1); 7.4.6 external auditor; 7.4.8 with G2 alerts |
 | 7.5 Privacy and legal | 7.5.1–7.5.11 | not started |
 | 7.6 Clinical safety and governance | 7.6.1–7.6.7 | 7.6.1 loaders and gate done (G1), sign-off by clinicians open; 7.6.3, 7.6.4 drafted; others open |
-| 7.7 Reliability, backup and recovery | 7.7.1–7.7.9 | not started |
-| 7.8 Scaling and performance | 7.8.1–7.8.10 | not started |
-| 7.9 Monitoring and operations | 7.9.1–7.9.7 | not started |
+| 7.7 Reliability, backup and recovery | 7.7.1–7.7.9 | 7.7.2–7.7.5, 7.7.7, 7.7.9 done (G2); 7.7.1 targets proposed, to sign; 7.7.6 standby and 7.7.8 chaos per case open |
+| 7.8 Scaling and performance | 7.8.1–7.8.10 | 7.8.2, 7.8.3, 7.8.7 done (G2; nightly); 7.8.1 capacity per tier from staging; 7.8.4–7.8.6, 7.8.8–7.8.10 open |
+| 7.9 Monitoring and operations | 7.9.1–7.9.7 | 7.9.1–7.9.7 done (G2); alert drill and support agreement to sign with the hospital |
 | 7.10 Interoperability | 7.10.1–7.10.6 | not started |
 | 7.11 Finishing the product | 7.11.1–7.11.11 | not started |
 | 7.12 Usability, accessibility and polish | 7.12.1–7.12.6 | not started |
 | 7.13 Testing and quality gates | 7.13.1–7.13.7 | not started |
-| 7.14 Releases and delivery | 7.14.1–7.14.7 | not started |
+| 7.14 Releases and delivery | 7.14.1–7.14.7 | 7.14.2–7.14.4, 7.14.6 done (G2); first release to cut; 7.14.1 staging needs hardware; 7.14.5 on first hotfix; 7.14.7 open |
 | 7.15 Documentation, training and support | 7.15.1–7.15.5 | not started |
 | 7.16 Pilot and go-live | 7.16.1–7.16.4 | not started |
