@@ -12,6 +12,7 @@ Usage: python scripts/prod_smoke.py https://localhost:8443 <admin email> <admin 
        (the HTTP port is taken from SMOKE_HTTP_URL, default http://localhost:8080)
 """
 
+import json
 import os
 import sys
 import uuid
@@ -53,6 +54,9 @@ page = client.get(f"{BASE}/staff")
 check("max-age=63072000" in page.headers.get("strict-transport-security", ""), "HSTS on pages")
 csp = page.headers.get("content-security-policy", "")
 check("script-src 'self'" in csp and "img-src 'self' data: blob:" in csp, "strict CSP on pages")
+check(page.headers.get("cross-origin-embedder-policy") == "require-corp"
+      and page.headers.get("cross-origin-opener-policy") == "same-origin",
+      "page cross-origin isolated")
 check(page.headers.get("server", "").lower() == "nginx", "server version hidden")
 check(client.get(f"{API}/docs").status_code == 404, "API docs absent in production")
 check(client.get(f"{API}/openapi.json").status_code == 404, "OpenAPI schema absent in production")
@@ -72,6 +76,11 @@ enabled = call("POST", "/auth/mfa/enable", admin, json={"code": pyotp.TOTP(secre
 check(enabled.status_code == 200 and len(enabled.json()["recovery_codes"]) == 10,
       "two-step sign-in enrolled with ten recovery codes")
 admin = enabled.json()["access_token"]
+if os.getenv("SMOKE_STATE_FILE"):
+    # The dynamic scans (scripts/dast.sh) sign in as this synthetic administrator.
+    with open(os.environ["SMOKE_STATE_FILE"], "w", encoding="utf-8") as state:
+        json.dump({"base": BASE, "hospital_id": hospital_id, "email": ADMIN_EMAIL,
+                   "password": ADMIN_PASSWORD, "totp_secret": secret}, state)
 
 # 3. A kiosk checks a patient in.
 departments = call("GET", "/admin/departments?limit=100", admin).json()["items"]

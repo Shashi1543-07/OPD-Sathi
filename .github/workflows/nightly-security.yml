@@ -1,0 +1,36 @@
+name: Nightly security
+
+# Dynamic tests against the production-mode stack (Phase 7, tasks 7.4.4 and 7.4.5; ADR 009):
+# OWASP ZAP baseline and API scans, and Schemathesis fuzzing. Too slow for every pull request,
+# so they run every night on main and on demand; a high-risk finding fails the run.
+on:
+  schedule:
+    - cron: "30 20 * * *" # 02:00 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/api/requirements.lock.txt
+      - run: pip install --require-hashes -r services/api/requirements.lock.txt
+      - name: OpenAPI document from the source (production does not publish it)
+        run: python services/api/scripts/write_openapi.py
+      - name: Start the production stack
+        run: KEEP=1 SMOKE_STATE_FILE="$RUNNER_TEMP/smoke-state.json" bash scripts/prod_smoke.sh
+      - name: ZAP and Schemathesis
+        run: SMOKE_STATE="$RUNNER_TEMP/smoke-state.json" bash scripts/dast.sh https://localhost:8443 services/api/openapi.json dast-reports
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dast-reports
+          path: dast-reports/

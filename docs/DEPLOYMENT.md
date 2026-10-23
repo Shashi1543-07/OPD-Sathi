@@ -1,53 +1,165 @@
-# Setting up OPD Saathi at a hospital
+# Installing and running OPD Saathi at a hospital
 
-For the engineer installing OPD Saathi on site. The demo (`start-demo.ps1`) is separate and must not be used for a real hospital.
+For the engineer or hospital IT person installing OPD Saathi on a hospital's own server, and for
+whoever runs it afterwards. Follow it in order. The demo (`start-demo.ps1`) is separate and
+must never be used for a real hospital.
 
-## How hospitals are kept apart
+**Before any real patient:** the go-live checklist (`docs/GO_LIVE_CHECKLIST.md`) must be complete
+and signed. Until then, use synthetic data only.
 
-Each hospital gets its **own installation**: a server (or PC) inside the hospital running its own PostgreSQL database, Redis, API, worker and web app with Docker. Patient data never leaves that hospital's server, and each installation has its own secrets and encryption keys in its `.env`.
+## 1. How it fits together
 
-Inside one installation, everything belongs to a hospital record:
+One server inside the hospital runs everything in Docker: PostgreSQL (the records), Redis
+(queues and sessions), the API, the worker (queue updates, messages, end-of-day close-out) and
+the web server (nginx, HTTPS). Kiosks, staff PCs and patients' phones reach it over the
+hospital network at one address, `https://<host>`. Nothing is published to the internet
+(`docs/THREAT_MODEL.md`, "Accepted residual risks").
 
-- Departments, staff accounts, kiosks, patients, visits and the queue all carry the hospital's ID.
-- PostgreSQL row-level security makes the database itself refuse any read or write outside the signed-in hospital, so one hospital's staff can never see another's patients, even through a bug in the app.
-- Every kiosk is registered by that hospital's administrator, so a kiosk can only add patients to that hospital's queue. One hospital can run any number of kiosks; all of them feed the same department queues.
+Each hospital's data is kept apart by PostgreSQL row-level security, so one server can serve
+several hospitals (a district hosting its PHCs); each still gets its own administrator,
+departments, staff and kiosks.
 
-This also allows **several hospitals on one server** (for example a district hosting its PHCs centrally). They share the machine but stay isolated by the same rules. Use `setup-hospital.ps1 -AddHospital` for each extra hospital.
+## 2. Choose and size the server
 
-## Install at a new hospital
+| Hospital | Patients a day | Server | Disk (data) |
+|---|---|---|---|
+| Primary health centre | up to 200 | 4 cores, 8 GB RAM | 200 GB SSD |
+| District hospital | up to 2,000 | 8 cores, 16 GB RAM | 1 TB SSD |
+| Medical college | 5,000+ | 16 cores, 32 GB RAM | 2 TB SSD, plus a standby server |
 
-Needs: a Windows PC or server on the hospital network with Docker Desktop, and this repository.
+The figures are planning estimates until the load tests (task 7.8) confirm them for the pilot.
+Photos of old papers dominate disk use: at a district hospital, about 100 GB a year before
+retention (`docs/SCALING.md`).
 
-```powershell
-cd C:\OPD-Saathi
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\setup-hospital.ps1
+Also needed: a UPS with at least 15 minutes and automatic clean shutdown
+(`docs/runbooks/power.md`); full-disk encryption for the data volume (LUKS on Linux, BitLocker
+on Windows); a fixed address on the hospital network.
+
+**Operating system.** Ubuntu 24.04 LTS (or the state's standard Linux) with Docker Engine is
+the recommended server. Docker Engine on Linux is free to use. Docker Desktop (Windows, Mac) is a
+desktop product whose licence requires a paid subscription for larger organisations and, per
+Docker's terms, government entities: use it only for the demo and development.
+
+## 3. Prepare the server (Linux)
+
+```sh
+sudo apt update && sudo apt full-upgrade -y
+# Docker Engine and the Compose plugin, from Docker's own repository:
+# https://docs.docker.com/engine/install/ubuntu/
+sudo apt install -y git openssl curl
+sudo git clone https://github.com/Shashi1543-07/OPD-Sathi.git /opt/opd-saathi
+```
+
+**Time.** Sign-in expiry, token numbering and the end-of-day close-out depend on the clock.
+CERT-In asks for NIC or NPL time servers. With `systemd-timesyncd`:
+
+```sh
+sudo sed -i 's/^#\?NTP=.*/NTP=samay1.nic.in samay2.nic.in/' /etc/systemd/timesyncd.conf
+sudo systemctl restart systemd-timesyncd && timedatectl show -p NTPSynchronized
+```
+
+(Confirm the current NIC/NPL server names with hospital IT; any reachable NTP source is better
+than none.) Monitoring alerts on clock drift (task 7.9).
+
+**Network** (hospital IT, task 7.2.6). Kiosks and staff PCs on the staff network. If patients
+check in on their own phones, the patient Wi-Fi may reach only port 443 of this server and
+must not isolate clients from it. The server's outbound traffic only to the AI, speech and SMS
+providers (if contracted), OS updates and NTP. SSH only from the IT network, with keys.
+
+## 4. HTTPS
+
+Browsers allow the microphone and the encrypted offline kiosk form only over HTTPS. Choose a
+route with hospital IT (task 7.2.2) and record it:
+
+- **(a) A public DNS name for the server's private address** (for example
+  `opd.district-hospital.in` resolving to `10.20.0.5`), with a certificate from an ACME CA by DNS
+  validation. Every phone trusts it. **Required if patients check in on their own phones.**
+- **(b) The hospital's or state's own certificate authority**, with its root installed on the
+  managed kiosks and staff PCs. Enough when patients use kiosks only. **Never ask patients to
+  install a root certificate on their phones.**
+
+Place the certificate (with its chain appended) and key as `/etc/opd-saathi/certs/tls.crt` and
+`tls.key`. Renewal: `docs/runbooks/certificate.md`. Check: `scripts/check-tls.sh <host>`.
+
+## 5. Install
+
+```sh
+cd /opt/opd-saathi
+sudo ./scripts/setup-hospital.sh --host opd.district-hospital.in
 ```
 
 The script:
 
-1. Creates `.env` with fresh random passwords and keys for this hospital.
-2. Builds and starts the stack, and applies database migrations.
-3. Asks for the hospital's name (shown on its kiosks and token slips), a short unique code, and the first administrator's name, email and password.
-4. Creates the hospital, that administrator, and the 8 standard departments: General Medicine, Orthopaedics, ENT, Obstetrics and Gynaecology, Paediatrics, Dermatology, Ophthalmology and General Surgery.
-5. Prints the address staff PCs and kiosks use on the hospital network.
+1. Creates `/etc/opd-saathi/secrets` (root only) with fresh random passwords and keys, one file
+   each. They are mounted into the containers as files; none appears in an environment
+   variable, `docker inspect` or the process list.
+2. Writes the non-secret settings to `.env`. AI is off (`LLM_ENABLED=false`) until a provider
+   contract is signed (task 7.5.9); voice still works with the browser's own speech.
+3. Checks the certificate and the clock.
+4. Builds and starts the production stack (`docker-compose.yml` with
+   `docker-compose.prod.yml`): hardened containers, only ports 443 and 80 (redirect) open.
+5. Applies the database migrations and onboards the hospital: its name, a short code, and the
+   first administrator.
+6. Installs `opd-saathi.service` so the stack starts at boot.
 
-Run it again at any time to restart or update. It never replaces existing database passwords or encryption keys.
+For an unattended install: `HOSPITAL_NAME=... HOSPITAL_CODE=... ADMIN_NAME=... ADMIN_EMAIL=...
+sudo -E ./scripts/setup-hospital.sh --host ... --admin-password-file /root/admin.pw`.
 
-### Departments
+**Windows Server** (only where the state mandates it): install Docker for Windows Server and run
+`setup-hospital.ps1`; Linux is preferred because the scripts, hardening and systemd unit are
+built for it.
 
-The standard departments use the codes the automatic routing understands (`GENMED`, `ORTHO`, `ENT`, `OBG`, `PAED`, `DERM`, `OPHTH`, `SURG`). Kiosks send a patient to General Medicine first, then the routing moves them to the matching department. The administrator can rename, deactivate or delete departments the hospital does not have. A new department with its own code works for manual routing; patients reach it through a nurse or doctor rather than automatically.
+**Then, immediately:** make the sealed key-escrow copies (`docs/runbooks/key-escrow.md`).
+Without `app_data_key`, encrypted records can never be read again.
 
-## The hospital administrator's first day
+## 6. The administrator's first day
 
-1. Sign in at `/staff` and open **Settings**.
-2. **Users**: add each doctor and nurse with their department.
-3. **Kiosks**: register each kiosk by its location ("OPD entrance", "Paediatrics wing"). Copy its setup link and open it once on that kiosk. The kiosk then stays signed in by itself.
-4. If a kiosk device is replaced or its browser is reset, choose **New activation code** for that kiosk. It keeps the same kiosk record and history.
+1. Open `https://<host>/staff` and sign in. Set up two-step sign-in when asked (an authenticator
+   app on your phone); print or write down the ten recovery codes.
+2. **Settings → Users:** add each doctor and nurse with their department. They choose their own
+   password at first sign-in.
+3. **Settings → Departments:** the standard ones exist (codes `GENMED`, `ORTHO`, `ENT`, `OBG`,
+   `PAED`, `DERM`, `OPHTH`, `SURG`, which the automatic routing understands); rename or deactivate
+   the ones the hospital does not have.
+4. **Settings → Kiosks:** register each kiosk by location, open its setup link once on that
+   kiosk. Its device secret then renews and rotates by itself.
+5. For phone check-in: create a phone check-in QR and print it for the waiting area.
+6. Lock the kiosks down (kiosk browser mode, Windows Assigned Access or Android lock-task) with a
+   privacy filter, on a stand (task 7.3.9).
 
-## Before going live
+## 7. Running it
 
-- **HTTPS.** Browsers only allow the microphone on `https://` or `localhost`. Until the hospital address has a certificate, kiosks on other machines can be tapped and typed on but cannot use voice. Either put a reverse proxy with a certificate in front of the web port, or for managed kiosk PCs start Chrome with `--unsafely-treat-insecure-origin-as-secure=http://<server-address>:5173`.
-- **AI and voice keys.** Put `GEMINI_API_KEY` (and optionally `SARVAM_API_KEY`) in `.env` and run the script again. Without them OPD Saathi uses its rules and the browser's voice.
-- **Backups.** Back up the database and the `.env` file together (`scripts/backup.sh`). Without the `.env`, the encrypted patient fields cannot be read.
-- **Keep `.env` private.** It holds this hospital's encryption and signing keys.
+| Task | How |
+|---|---|
+| Status | `docker compose -f docker-compose.yml -f docker-compose.prod.yml ps` |
+| Logs (no patient data by design) | `... logs --tail 200 api worker web` |
+| Restart | `sudo systemctl restart opd-saathi` |
+| Back up now | `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml BACKUP_DIR=/var/backups/opd-saathi scripts/backup.sh` |
+| Account help | Settings → Users: reset password, unlock, reset two-step sign-in, sign out everywhere |
+| Investigation | Settings → Audit log (`docs/runbooks/audit-investigation.md`) |
+| Key rotation | `docs/runbooks/key-rotation.md` |
+| Server down in OPD hours | `docs/runbooks/server-down.md` (paper fallback) |
+
+Runbooks for each failure are in `docs/runbooks/`. **Backups:** until the scheduled, encrypted,
+off-site backups of Phase 7 G2 are installed (pgBackRest, task 7.7), schedule `scripts/backup.sh`
+nightly with a systemd timer or cron, copy `/var/backups/opd-saathi` off the server, and keep the
+copies encrypted. **Monitoring and alerts** arrive with G2 (task 7.9).
+
+## 8. Upgrades and rollback
+
+1. Read the release notes; upgrade outside OPD hours.
+2. `cd /opt/opd-saathi && sudo git fetch --tags && sudo git checkout v<new>`
+3. `sudo ./scripts/setup-hospital.sh --host <host>`: it backs up before migrating, applies
+   migrations, rebuilds and restarts, and checks readiness.
+4. Check `https://<host>/api/readyz` and sign in.
+
+**Rollback:** check out the previous tag and run the setup script again. Migrations follow
+expand, migrate, contract (`CONTRIBUTING.md`), so the previous release runs on the upgraded
+database; a release whose migration cannot be reversed says so in its notes and needs the
+backup taken in step 3.
+
+## 9. Support
+
+First line: the hospital's IT person or OPD desk lead. Second line: the OPD Saathi team, by the
+channel and hours agreed in the support agreement (task 7.9.6). Report security issues
+privately (`SECURITY.md`) and incidents by `docs/INCIDENT_RESPONSE.md`.

@@ -146,6 +146,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"
         )
         response.headers.setdefault("Permissions-Policy", "microphone=(self)")
+        response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         if request.app.state.settings.app_env == "production":
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=63072000; includeSubDomains"

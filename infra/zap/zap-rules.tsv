@@ -1,0 +1,19 @@
+# ZAP rule overrides for scripts/dast.sh (Phase 7, task 7.4.4).
+# Format: <rule id>	<IGNORE|WARN|FAIL>	<rule name>. Every IGNORE needs a reason on the line
+# above it, reviewed like a waiver (ADR 006). High-risk findings fail the nightly run either way.
+#
+# Pages and the app shell are sent "no-cache" on purpose: kiosks must pick up a new release at
+# once. Every response with patient or account data is "no-store" (checked by prod_smoke.py).
+10015	IGNORE	Re-examine Cache-control Directives
+# The flagged files are the build's content-hashed /assets (public code and styles, no data),
+# cached for 30 days as immutable; a new release has new file names.
+10049	IGNORE	Storable and Cacheable Content
+# Informational: the scanner noting a single-page application.
+10109	IGNORE	Modern Web Application
+# Known and accepted for now: React style attributes and the splash <style> need it (see
+# infra/web/security-headers.conf). Scripts stay 'self' only, which is what stops injection.
+10055	WARN	CSP: style-src unsafe-inline
+# The API scan also requests the web app's own paths: unknown paths return the single-page
+# app (text/html) and static files their own types (JavaScript, fonts, CSS). API answers are
+# JSON, CSV or PDF as documented; nginx's own errors are problem JSON (nginx.tls.conf).
+100001	IGNORE	Unexpected Content-Type was returned

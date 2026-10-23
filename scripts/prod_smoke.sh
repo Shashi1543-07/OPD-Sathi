@@ -83,6 +83,8 @@ cleanup() {
 trap cleanup EXIT
 
 echo "==> Building and starting the production stack"
+# A stack left by an earlier KEEP=1 run has a database made with other passwords; start clean.
+"${C[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 "${C[@]}" build --quiet api worker web
 "${C[@]}" up -d postgres redis redis-cache worker-role-bootstrap
 "${C[@]}" run --rm api alembic -c /app/alembic.ini upgrade head
