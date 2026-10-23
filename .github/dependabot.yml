@@ -1,17 +1,40 @@
 # Weekly update pull requests (Phase 7, tasks 7.0.4 and 7.4.3). Every one runs the full CI,
 # including the image-pin check, before anyone can merge it.
+#
+# Platform jumps are planned upgrades, not weekly updates, so Dependabot proposes only
+# patches for them (docs/RELEASES.md):
+#   - PostgreSQL major versions need a data migration (pg_upgrade or dump and restore);
+#   - Redis 8 changed its licence (to be reviewed before any government deployment);
+#   - Python and Node versions are runtime upgrades with their own testing;
+#   - nginx stays on the stable line (even minor versions).
 version: 2
 updates:
   - package-ecosystem: docker
-    directories: ["/services/api", "/apps/web"]
+    directories: ["/services/api", "/apps/web", "/infra/postgres"]
     schedule: { interval: weekly, day: monday }
     groups:
       base-images: { patterns: ["*"] }
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "nginxinc/nginx-unprivileged"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: docker-compose
     directory: "/"
     schedule: { interval: weekly, day: monday }
     groups:
       compose-images: { patterns: ["*"] }
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "grafana/grafana"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule: { interval: weekly, day: monday }
