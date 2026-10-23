@@ -25,7 +25,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -d osa"
           --health-interval 5s --health-timeout 3s --health-retries 12
       redis:
-        image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
+        image: redis:7.4.11-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
         ports: [6379:6379]
         options: >-
           --health-cmd "redis-cli ping"
@@ -164,6 +164,15 @@ jobs:
       - name: Scan and describe the images
         run: |
           mkdir -p sbom
+          # Third-party images the production stack runs (Redis, Prometheus, Alertmanager).
+          for image in $(POSTGRES_DB=osa POSTGRES_USER=postgres OSA_SECRETS_DIR=/tmp \
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml config --images |
+            grep '@sha256:' | sort -u); do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out" \
+              aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+              image --quiet --exit-code 1 --ignore-unfixed --severity HIGH,CRITICAL \
+              --ignorefile /out/.trivyignore "$image"
+          done
           for image in api web postgres; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out"               aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c image --quiet --exit-code 1 --ignore-unfixed               --severity HIGH,CRITICAL --ignorefile /out/.trivyignore opd-saathi-$image:ci
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out"               aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c image --quiet --format cyclonedx               --output /out/sbom/opd-saathi-$image.cdx.json opd-saathi-$image:ci

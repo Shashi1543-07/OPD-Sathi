@@ -48,6 +48,8 @@ class _FileReferenceSource(PydanticBaseSettingsSource):
 class Settings(BaseSettings):
     """Runtime configuration; secrets are supplied outside source control."""
 
+    # The release this build is (VERSION; set at image build time; 'dev' for local builds).
+    app_version: str = "dev"
     app_env: str = "development"
     # Which process reads these settings: the API holds the patient-data keys, the worker
     # must not (docker-compose.yml sets PROCESS_ROLE=worker for it).

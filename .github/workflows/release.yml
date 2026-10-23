@@ -1,0 +1,87 @@
+name: Release
+
+# A release (Phase 7, tasks 7.14.2 and 7.14.3; ADR 009; docs/RELEASES.md): pushing a tag
+# vX.Y.Z equal to the VERSION file builds the images once, scans them, pushes them to the
+# GitHub container registry by digest, signs them with cosign (keyless, this workflow's
+# GitHub identity) and attaches each SBOM as a signed attestation. The GitHub release carries
+# the release notes from CHANGELOG.md, docker-compose.images.yml (the exact images, for
+# `setup-hospital.sh --release-images`), the SBOMs, and a signed offline bundle (task 7.1.7).
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: The tag is the VERSION file and has release notes
+        run: |
+          version="$(tr -d '\r\n' < VERSION)"
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME but VERSION $version"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $version"; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "REGISTRY=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.5.3
+      - name: Sign in to the container registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build, scan, push, sign and attest
+        run: |
+          mkdir -p release
+          trivy() {
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out" \
+              aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c "$@"
+          }
+          for spec in api:services/api/Dockerfile web:apps/web/Dockerfile postgres:infra/postgres/Dockerfile; do
+            name="${spec%%:*}"; dockerfile="${spec#*:}"
+            image="$REGISTRY/opd-saathi-$name"
+            docker build -q --build-arg APP_VERSION="$VERSION" -t "$image:$VERSION" -f "$dockerfile" .
+            trivy image --quiet --exit-code 1 --ignore-unfixed --severity HIGH,CRITICAL \
+              --ignorefile /out/.trivyignore "$image:$VERSION"
+            docker push -q "$image:$VERSION"
+            digest="$(docker inspect -f '{{index .RepoDigests 0}}' "$image:$VERSION")"
+            trivy image --quiet --format cyclonedx --output "/out/release/opd-saathi-$name.cdx.json" "$image:$VERSION"
+            cosign sign --yes "$digest"
+            cosign attest --yes --type cyclonedx --predicate "release/opd-saathi-$name.cdx.json" "$digest"
+            echo "$name=$digest" >> release/digests.txt
+          done
+      - name: The images file and the offline bundle
+        run: |
+          get() { sed -n "s/^$1=//p" release/digests.txt; }
+          cat > release/docker-compose.images.yml <<YAML
+          # OPD Saathi $VERSION: the signed release images (docs/RELEASES.md). Install with
+          #   sudo ./scripts/setup-hospital.sh --host <name> --release-images docker-compose.images.yml
+          services:
+            api: { image: $(get api), build: !reset null }
+            worker: { image: $(get api), build: !reset null }
+            web: { image: $(get web), build: !reset null }
+            postgres: { image: $(get postgres), build: !reset null }
+            backup: { image: $(get postgres), build: !reset null }
+            worker-role-bootstrap: { image: $(get postgres), build: !reset null }
+          YAML
+          # Hospitals with slow or no internet: every image the production stack runs, in one
+          # file (Compose lists them; the settings only satisfy its checks).
+          images="$(POSTGRES_DB=osa POSTGRES_USER=postgres OSA_SECRETS_DIR=/tmp \
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+            -f release/docker-compose.images.yml config --images | sort -u | tr '\n' ' ')"
+          echo "Bundling: $images"
+          for image in $images; do docker pull -q "$image" >/dev/null; done
+          docker save $images | gzip -6 > "release/opd-saathi-$VERSION-images.tar.gz"
+          (cd release && sha256sum ./*.tar.gz ./*.yml ./*.json > SHA256SUMS)
+          cosign sign-blob --yes --bundle release/SHA256SUMS.sigstore.json release/SHA256SUMS
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          awk -v v="## [$VERSION]" 'index($0, v) == 1 {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > release/notes.md
+          gh release create "$GITHUB_REF_NAME" --title "OPD Saathi $VERSION" --notes-file release/notes.md \
+            release/docker-compose.images.yml release/*.cdx.json release/*.tar.gz \
+            release/SHA256SUMS release/SHA256SUMS.sigstore.json release/digests.txt

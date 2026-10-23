@@ -1,2 +1,13 @@
 # Trivy waivers (ADR 009). One advisory id per line, each with a comment above it giving the
 # reason, who accepted it and a review date. A waiver without a reason is not accepted in review.
+
+# prom/alertmanager v0.34.1 (the newest release) is built with Go and modules that have these
+# fixes upstream but no Alertmanager release yet. Exposure: only Prometheus reaches it, on the
+# private Docker network (no published port); its only outbound connections are TLS to the
+# hospital's mail server and Telegram. Accepted by the OPD Saathi team on 23 Oct 2026; each
+# entry expires on 30 Nov 2026, when the scan fails again until Alertmanager is upgraded.
+CVE-2026-78669 exp:2026-11-30
+CVE-2026-84445 exp:2026-11-30
+CVE-2026-111943 exp:2026-11-30
+CVE-2026-78667 exp:2026-11-30
+CVE-2026-97031 exp:2026-11-30

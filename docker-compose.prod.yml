@@ -176,6 +176,11 @@ services:
         limits: { cpus: "1", memory: "512m" }
 
   worker-role-bootstrap:
+    # Our scanned PostgreSQL image (its psql), not the base file's upstream one.
+    image: !reset null
+    build:
+      context: .
+      dockerfile: infra/postgres/Dockerfile
     restart: "no"
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]

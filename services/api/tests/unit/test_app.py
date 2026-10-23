@@ -78,7 +78,7 @@ def test_healthz():
     with TestClient(app) as client:
         response = client.get("/healthz")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "version": "dev"}
 
 
 def test_metrics_export_uses_bounded_route_labels_and_prometheus_histogram():

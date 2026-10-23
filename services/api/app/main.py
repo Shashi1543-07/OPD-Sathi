@@ -300,7 +300,7 @@ def create_app(
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
-        return {"status": "ok"}
+        return {"status": "ok", "version": configured.app_version}
 
     @app.get("/readyz", include_in_schema=False, response_model=None)
     async def readyz(request: Request) -> Response:

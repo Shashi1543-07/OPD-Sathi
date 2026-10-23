@@ -12,6 +12,8 @@
 #   --self-signed          Staging only: create a self-signed certificate if none is installed.
 #   --admin-password-file  Read the first administrator's password from this file (unattended).
 #   --no-build             Use images already built or loaded (offline bundle, task 7.1.7).
+#   --release-images FILE  Install the signed images of a release (its docker-compose.images.yml);
+#                          their signatures are verified when cosign is installed (docs/RELEASES.md).
 #
 # It is safe to run again: it never replaces an existing password or key. What it does:
 #   1. Creates /etc/opd-saathi/secrets (root only) with fresh random secrets, one file each.
@@ -32,6 +34,7 @@ ADD_HOSPITAL=0
 SELF_SIGNED=0
 PASSWORD_FILE=""
 BUILD="--build"
+RELEASE_IMAGES=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
@@ -39,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --self-signed) SELF_SIGNED=1; shift ;;
     --admin-password-file) PASSWORD_FILE="$2"; shift 2 ;;
     --no-build) BUILD=""; shift ;;
+    --release-images) RELEASE_IMAGES="$2"; BUILD=""; shift 2 ;;
     -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
@@ -56,6 +60,24 @@ CONFIG_DIR=/etc/opd-saathi
 SECRETS="$CONFIG_DIR/secrets"
 CERTS="$CONFIG_DIR/certs"
 COMPOSE=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
+# Images built here are labelled with this checkout's release (shown by /healthz).
+APP_VERSION="$(tr -d '\r\n' < VERSION)"
+export APP_VERSION
+if [[ -n "$RELEASE_IMAGES" ]]; then
+  # Signed release images instead of building (task 7.14.3; docs/RELEASES.md).
+  [[ -f "$RELEASE_IMAGES" ]] || fail "$RELEASE_IMAGES not found (the release's docker-compose.images.yml)."
+  if command -v cosign >/dev/null; then
+    for image in $(sed -n 's/^ *image: *\(ghcr\.io[^ ]*\)$/\1/p' "$RELEASE_IMAGES" | sort -u); do
+      cosign verify "$image" --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+        --certificate-identity-regexp '^https://github\.com/Shashi1543-07/OPD-Sathi/\.github/workflows/release\.yml@refs/tags/v' \
+        >/dev/null || fail "The signature of $image does not verify. Do not install it."
+    done
+    echo "  release image signatures verified"
+  else
+    echo "WARNING: cosign is not installed: release image signatures were not verified."
+  fi
+  COMPOSE+=(-f "$(realpath "$RELEASE_IMAGES")")
+fi
 
 step "Checking Docker Engine"
 command -v docker >/dev/null || fail "Docker Engine is not installed (docs/DEPLOYMENT.md, 'Prepare the server')."
@@ -228,8 +250,8 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=$REPO
-ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
-ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml stop
+ExecStart=/usr/bin/${COMPOSE[*]} up -d --remove-orphans
+ExecStop=/usr/bin/${COMPOSE[*]} stop
 TimeoutStartSec=300
 
 [Install]
