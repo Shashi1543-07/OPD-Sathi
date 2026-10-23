@@ -181,13 +181,17 @@ fi
 for metric in 'dependency_up{job="worker",dependency="postgres"}' \
   'dependency_up{job="worker",dependency="redis"}' 'data_disk_free_ratio{job="worker"}' \
   'tls_certificate_expiry_timestamp_seconds{job="worker"}'; do
-  value="$(query "$metric" | "$PYTHON" -c "
+  raw="$(query "$metric" || true)"
+  value="$("$PYTHON" -c "
 import json, sys
-result = json.loads(sys.stdin.read())['data']['result']
+try:
+    result = json.loads(sys.stdin.read())['data']['result']
+except ValueError:
+    result = []
 print(result[0]['value'][1] if result else '')
-")"
+" <<<"$raw")"
   if [[ -n "$value" && "$value" != "0" ]]; then echo "ok   worker reports $metric"; else
-    echo "FAIL worker does not report $metric"; leaks=1; fi
+    echo "FAIL worker does not report $metric: ${raw:0:300}"; leaks=1; fi
 done
 rules="$(prom rules || true)"
 grep -q '"name":"ApiDown"' <<<"$rules" && grep -q '"name":"UrgentAlertUnacknowledged"' <<<"$rules" \

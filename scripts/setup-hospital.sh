@@ -191,7 +191,7 @@ step "Applying database migrations"
 "${COMPOSE[@]}" run --rm $BUILD api alembic -c /app/alembic.ini upgrade head
 
 step "Starting the API, worker and web server"
-"${COMPOSE[@]}" up -d $BUILD api worker web
+"${COMPOSE[@]}" up -d $BUILD api worker web prometheus alertmanager
 
 if [[ ! -f "$CONFIG_DIR/.onboarded" || $ADD_HOSPITAL -eq 1 ]]; then
   step "Onboarding the hospital"
