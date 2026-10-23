@@ -42,6 +42,13 @@ updates:
     directory: "/services/api"
     schedule: { interval: weekly, day: monday }
     open-pull-requests-limit: 5
+    ignore:
+      # The CI-only Semgrep lock (requirements-security.lock.txt) must match Semgrep's own pins
+      # (ADR 006): these move only with a Semgrep release that allows them.
+      - dependency-name: "wcmatch"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "opentelemetry-*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
   - package-ecosystem: npm
     directory: "/apps/web"
     schedule: { interval: weekly, day: monday }
