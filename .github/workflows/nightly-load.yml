@@ -11,6 +11,16 @@ name: Nightly load and install
 on:
   schedule:
     - cron: "0 21 * * *" # 02:30 IST
+  # Also on a pull request that changes what these jobs test.
+  pull_request:
+    paths:
+      - .github/workflows/nightly-load.yml
+      - scripts/setup-hospital.sh
+      - scripts/load-test.sh
+      - scripts/load_prepare.py
+      - infra/k6/**
+      - docker-compose.prod.yml
+      - infra/postgres/**
   workflow_dispatch:
     inputs:
       duration:
