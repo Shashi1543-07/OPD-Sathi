@@ -142,6 +142,20 @@ export const router = createBrowserRouter([
         },
       },
       {
+        // Settings -> System: the installation at a glance (task 7.9.7).
+        path: "system",
+        lazy: async () => {
+          const { SystemStatus } = await import("./SystemStatus");
+          return {
+            Component: () => (
+              <StaffPageGate page="system">
+                <SystemStatus />
+              </StaffPageGate>
+            ),
+          };
+        },
+      },
+      {
         // Every staff member's own password, two-step sign-in and sessions.
         path: "account",
         lazy: async () => {

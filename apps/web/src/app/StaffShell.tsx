@@ -8,15 +8,16 @@ import { staffAuth, StaffUser, type MfaChallenge } from "../lib/auth";
 import { AccountSetupGate } from "./AccountForms";
 import { navigationByRole, type StaffPageId } from "./staffAccess";
 import {
+  Activity,
   BarChart3,
   ClipboardList,
   FileSearch,
   HeartPulse,
   LogOut,
-  ShieldCheck,
-  UserPlus,
   Settings,
+  ShieldCheck,
   Stethoscope,
+  UserPlus,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -28,10 +29,11 @@ const NAV_ICONS: Record<StaffPageId, LucideIcon> = {
   reports: BarChart3,
   settings: Settings,
   audit: FileSearch,
+  system: Activity,
 };
 
 function initials(name: string) {
-  const parts = name.trim().split(/s+/).filter(Boolean);
+  const parts = name.trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 

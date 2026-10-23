@@ -2,6 +2,7 @@
 
 import asyncio
 import functools
+import json
 import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -24,7 +25,12 @@ from app.domain.queue.scoring import queue_score
 from app.notifications.providers import build_notification_provider
 from app.notifications.queue import deliver_pending_once, record_queue_event_intents
 from app.workers import monitoring
-from app.workers.health import STALE_AFTER_SECONDS, heartbeat_key
+from app.workers.health import (
+    STALE_AFTER_SECONDS,
+    SYSTEM_STATUS_TTL,
+    heartbeat_key,
+    system_status_key,
+)
 from app.workers.metrics import worker_metrics
 
 logger = structlog.get_logger(__name__)
@@ -368,30 +374,42 @@ async def collect_operational_metrics(connection: AsyncConnection) -> None:
 
 @_measured
 async def refresh_operational_metrics(ctx: dict[str, Any]) -> None:
+    """Alert gauges, and the summary Settings -> System shows (system_status_key)."""
     settings = ctx["settings"]
+    gauges = worker_metrics()
+    snapshot: dict[str, Any] = {"checked_at": time.time()}
     try:
         await ctx["redis"].ping()
-        worker_metrics().dependency_up.labels("redis").set(1)
+        snapshot["redis"] = True
     except Exception:
-        worker_metrics().dependency_up.labels("redis").set(0)
-    gauges = worker_metrics()
-    probes: list[tuple[str, Any, Callable[[str], float | None]]] = [
-        (settings.monitor_disk_path, gauges.disk_free_ratio, monitoring.disk_free_ratio),
-        (settings.monitor_tls_address, gauges.tls_cert_expiry, monitoring.certificate_expiry),
-        (settings.backup_status_file, gauges.backup_last_success, monitoring.backup_last_success),
+        snapshot["redis"] = False
+    gauges.dependency_up.labels("redis").set(1 if snapshot["redis"] else 0)
+    probes: list[tuple[str, str, Any, Callable[[str], float | None]]] = [
+        ("disk_free_ratio", settings.monitor_disk_path, gauges.disk_free_ratio,
+         monitoring.disk_free_ratio),
+        ("certificate_expires_at", settings.monitor_tls_address, gauges.tls_cert_expiry,
+         monitoring.certificate_expiry),
+        ("backup_last_success", settings.backup_status_file, gauges.backup_last_success,
+         monitoring.backup_last_success),
     ]
-    for target, gauge, probe in probes:
-        if target:
-            value = await asyncio.to_thread(probe, target)
-            if value is not None:
-                gauge.set(value)
+    for name, target, gauge, probe in probes:
+        value = await asyncio.to_thread(probe, target) if target else None
+        snapshot[name] = value
+        if value is not None:
+            gauge.set(value)
     try:
         async with ctx["engine"].begin() as connection:
             await collect_operational_metrics(connection)
+        snapshot["postgres"] = True
     except Exception:
-        worker_metrics().dependency_up.labels("postgres").set(0)
+        snapshot["postgres"] = False
         raise
-    worker_metrics().dependency_up.labels("postgres").set(1)
+    finally:
+        gauges.dependency_up.labels("postgres").set(1 if snapshot["postgres"] else 0)
+        if snapshot["redis"]:
+            await ctx["redis"].set(
+                system_status_key(settings.app_env), json.dumps(snapshot), ex=SYSTEM_STATUS_TTL
+            )
 
 
 @_measured

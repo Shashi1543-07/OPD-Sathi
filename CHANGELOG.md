@@ -25,6 +25,11 @@ checklist are still open).
 - **Audit log screen** (Settings → Audit log): search by record, person, action and date, and
   export for an investigation.
 - **Kiosks stay paired**: their device secrets renew by themselves every 30 days.
+- **Settings → System** shows the version, the last backup, disk space, the certificate,
+  whether the database, queue store and worker answer, each kiosk's last check-in, and how AI,
+  voice and SMS are set up.
+- **Hindi and Marathi** staff screens: the recent-visits list and visit statuses showed
+  "???"; they are translated again. Staff initials in the sidebar are correct for every name.
 
 ### For hospital IT
 
@@ -38,6 +43,9 @@ checklist are still open).
   5 minutes. `docs/runbooks/alerts.md`.
 - **Signed releases**: images are scanned, signed and listed with their components; an offline
   bundle serves hospitals with slow internet.
+- **Paper fallback pack** to print (`docs/paper/`): intake forms in three languages with the
+  kiosk's own questions, a token roll and a kiosk sign.
+- **Logs kept 180 days** in the server's journal (CERT-In), with no patient data in them.
 - Runbooks for every failure, the key escrow and rotation, the paper fallback, and the
   go-live checklist.
 

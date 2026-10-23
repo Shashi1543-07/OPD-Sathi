@@ -35,6 +35,7 @@ from app.api.v1 import documents as documents_api
 from app.api.v1 import intake as intake_api
 from app.api.v1 import queue as queue_api
 from app.api.v1 import speech as speech_api
+from app.api.v1 import system as system_api
 from app.config import Settings, get_settings
 from app.core import metrics
 from app.core.auth import AuthenticationGateMiddleware
@@ -289,6 +290,7 @@ def create_app(
     app.include_router(auth_api.router)
     app.include_router(account_api.router)
     app.include_router(audit_api.router)
+    app.include_router(system_api.router)
     app.include_router(admin_api.router)
     app.include_router(analytics_api.router)
     app.include_router(intake_api.router)

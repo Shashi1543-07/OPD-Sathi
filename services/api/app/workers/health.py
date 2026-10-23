@@ -22,6 +22,15 @@ def heartbeat_key(app_env: str) -> str:
     return f"osa:{app_env}:worker:heartbeat"
 
 
+# The worker's last view of the system for Settings -> System (app.api.v1.system): backup,
+# disk, certificate and dependency checks, refreshed every 30 seconds.
+SYSTEM_STATUS_TTL = 120
+
+
+def system_status_key(app_env: str) -> str:
+    return f"osa:{app_env}:worker:system-status"
+
+
 async def heartbeat_age() -> float | None:
     """Seconds since the last completed relay tick, or None when there is none."""
     settings = get_settings()
