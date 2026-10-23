@@ -141,3 +141,30 @@ tests:
             exp_annotations:
               summary: Queue changes are not reaching the live boards (oldest waiting over 30 s).
               runbook: docs/runbooks/alerts.md
+
+  - name: values nobody has measured yet (NaN) never raise an alert, except "never reported"
+    interval: 1m
+    input_series:
+      - series: 'data_disk_free_ratio{job="worker"}'
+        values: "NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN"
+      - series: 'tls_certificate_expiry_timestamp_seconds{job="worker"}'
+        values: "NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN"
+      - series: 'backup_last_success_timestamp_seconds{job="worker"}'
+        values: "NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN"
+    alert_rule_test:
+      - alertname: DiskSpaceCritical
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: CertificateExpiring
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: BackupMissing
+        eval_time: 30m
+        exp_alerts: []
+      - alertname: BackupNeverReported
+        eval_time: 45m
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: The backup job has never reported a success to monitoring.
+              runbook: docs/runbooks/restore.md

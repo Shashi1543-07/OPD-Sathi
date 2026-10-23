@@ -124,7 +124,7 @@ groups:
           summary: No successful database backup for 26 hours.
           runbook: docs/runbooks/restore.md
       - alert: BackupNeverReported
-        expr: absent(backup_last_success_timestamp_seconds{job="worker"})
+        expr: absent(backup_last_success_timestamp_seconds{job="worker"} >= 0)  # missing or NaN
         for: 30m
         labels: {severity: warning}
         annotations:

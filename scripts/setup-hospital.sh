@@ -164,7 +164,9 @@ if [[ ! -s "$CERTS/tls.crt" || ! -s "$CERTS/tls.key" ]]; then
   fi
 fi
 chmod 0644 "$CERTS/tls.crt"
-# The web container's unprivileged user (uid 101) must read the key; the directory is root-only.
+# The web container runs as uid/gid 101 and mounts this directory: it must enter it and read
+# the key; no other host user can (root:101, 0750; the key 0400 owned by 101).
+chown root:101 "$CERTS" && chmod 0750 "$CERTS"
 chown 101:101 "$CERTS/tls.key" && chmod 0400 "$CERTS/tls.key"
 openssl x509 -in "$CERTS/tls.crt" -noout -checkhost "$HOST" | grep -q "does match" ||
   fail "The certificate in $CERTS/tls.crt is not valid for $HOST."

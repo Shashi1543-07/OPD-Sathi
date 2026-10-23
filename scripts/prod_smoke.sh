@@ -187,8 +187,10 @@ fi
 for metric in 'dependency_up{job="worker",dependency="postgres"}' \
   'dependency_up{job="worker",dependency="redis"}' 'data_disk_free_ratio{job="worker"}' \
   'tls_certificate_expiry_timestamp_seconds{job="worker"}'; do
-  raw="$(query "$metric" || true)"
-  value="$("$PYTHON" -c "
+  # Measured every 30 s; a value not yet measured is NaN (never 0), so wait for a real one.
+  for _ in $(seq 1 40); do
+    raw="$(query "$metric" || true)"
+    value="$("$PYTHON" -c "
 import json, sys
 try:
     result = json.loads(sys.stdin.read())['data']['result']
@@ -196,7 +198,10 @@ except ValueError:
     result = []
 print(result[0]['value'][1] if result else '')
 " <<<"$raw")"
-  if [[ -n "$value" && "$value" != "0" ]]; then echo "ok   worker reports $metric"; else
+    [[ -n "$value" && "$value" != "0" && "$value" != "NaN" ]] && break
+    sleep 2
+  done
+  if [[ -n "$value" && "$value" != "0" && "$value" != "NaN" ]]; then echo "ok   worker reports $metric"; else
     echo "FAIL worker does not report $metric: ${raw:0:300}"; leaks=1; fi
 done
 echo "==> Backups"

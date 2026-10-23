@@ -41,6 +41,9 @@ NETWORK="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{
 echo "==> Preparing kiosks and doctors"
 "$PYTHON" scripts/load_prepare.py "$(host_path "$WORK/state.json")" \
   "$(host_path "$WORK/fixtures.json")" "${KIOSKS:-10}" "${DOCTORS:-8}"
+# k6 runs as its own user in its container: it reads the fixtures and writes its summary here
+# (synthetic data only; the directory is removed afterwards).
+chmod 0777 "$WORK" && chmod 0644 "$WORK/fixtures.json"
 
 snapshot() {  # name
   {

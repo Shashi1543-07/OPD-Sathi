@@ -30,7 +30,7 @@ class WorkerMetrics:
 
 @cache
 def worker_metrics() -> WorkerMetrics:
-    return WorkerMetrics(
+    metrics = WorkerMetrics(
         jobs=Counter("worker_job_runs_total", "Worker job runs.", ("job", "outcome")),
         last_success=Gauge(
             "worker_job_last_success_timestamp_seconds",
@@ -73,3 +73,8 @@ def worker_metrics() -> WorkerMetrics:
             "backup_last_success_timestamp_seconds", "When the last database backup completed."
         ),
     )
+    # Unknown until first measured (the web server may start after the worker): NaN, never 0,
+    # so no "disk full" or "certificate expired" alert fires on a value nobody measured.
+    for gauge in (metrics.disk_free_ratio, metrics.tls_cert_expiry, metrics.backup_last_success):
+        gauge.set(float("nan"))
+    return metrics
