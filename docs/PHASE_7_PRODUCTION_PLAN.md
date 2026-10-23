@@ -432,6 +432,8 @@ Signed by the medical superintendent or clinical lead, hospital IT, the DPO or l
 
 ## 11. Progress checklist
 
+Where the work stands and where the next session starts: `docs/PHASE_7_HANDOFF.md`.
+
 | Workstream | Tasks | Status |
 |---|---|---|
 | 7.0 Fix what the analysis found | 7.0.1–7.0.6 | 7.0.1–7.0.5 done (G0, PR #17); 7.0.6 open |
