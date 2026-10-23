@@ -12,7 +12,10 @@ RUN npx vite build
 
 # Runs as an unprivileged user (uid 101) and listens on 8080; production mounts
 # infra/web/nginx.tls.conf as default.conf and serves HTTPS on 8443.
-FROM nginxinc/nginx-unprivileged:1.27-alpine@sha256:65e3e85dbaed8ba248841d9d58a899b6197106c23cb0ff1a132b7bfe0547e4c0
+FROM nginxinc/nginx-unprivileged:1.30.6-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
+# Alpine security updates published since the base image was built.
+USER root
+RUN apk upgrade --no-cache
 COPY infra/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY infra/web/security-headers.conf /etc/nginx/conf.d/security-headers.inc
 COPY infra/web/api-proxy.inc /etc/nginx/conf.d/api-proxy.inc
