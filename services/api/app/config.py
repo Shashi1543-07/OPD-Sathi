@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     public_web_url: str = ""
     log_level: str = "INFO"
     database_url: str = "postgresql+asyncpg://osa_app:local-only@localhost:5432/osa"
+    # Optional read-only replica for heavy report exports; empty uses the primary.
+    database_read_url: str = ""
+    # Connections each API process keeps open (min) and may open at peak (max).
+    db_pool_min: int = 5
+    db_pool_max: int = 20
     worker_database_url: str = ""
     migrations_database_url: str = "postgresql+asyncpg://osa_migrator:local-only@localhost:5432/osa"
     redis_state_url: str = "redis://:local-only@localhost:6379/0"
@@ -32,6 +37,9 @@ class Settings(BaseSettings):
     cursor_hmac_key: str = "development-only-cursor-key-change-before-deploy"
     app_data_key: str = ""
     app_hmac_key: str = ""
+    # Encrypts only the phone numbers of patients who opted in to queue messages. The worker
+    # holds this key and never APP_DATA_KEY, so a compromised worker exposes nothing clinical.
+    notify_key: str = ""
     # "auto" picks the best configured provider: Sarvam, then Gemini, then the browser.
     stt_provider: str = "auto"
     stt_model: str = "saaras:v3-realtime"
@@ -108,6 +116,16 @@ class Settings(BaseSettings):
             value.strip() for value in (self.whatsapp_access_token, self.whatsapp_phone_number_id)
         ):
             raise ValueError("WhatsApp credentials are required when enabled")
+        if self.notify_key:
+            notify_key = _decode_key(self.notify_key, "NOTIFY_KEY")
+            try:
+                same_key = notify_key == base64.b64decode(self.app_data_key, validate=True)
+            except (binascii.Error, ValueError):
+                same_key = False
+            if same_key:
+                raise ValueError("NOTIFY_KEY must differ from APP_DATA_KEY")
+        elif self.notification_provider != "console":
+            raise ValueError("NOTIFY_KEY is required when NOTIFICATION_PROVIDER sends messages")
         if not 1 <= self.llm_max_calls_per_session <= 30:
             raise ValueError("LLM_MAX_CALLS_PER_SESSION must be between 1 and 30")
         if not 1 <= self.llm_max_output_tokens <= 1024:
@@ -162,6 +180,8 @@ class Settings(BaseSettings):
                     raise ValueError(f"production {setting_name} must decode to exactly 32 bytes")
         if not self.jwt_kid or len(self.jwt_kid) > 64:
             raise ValueError("JWT_KID must contain between 1 and 64 characters")
+        if not 1 <= self.db_pool_min <= self.db_pool_max <= 200:
+            raise ValueError("DB_POOL_MIN and DB_POOL_MAX must satisfy 1 <= min <= max <= 200")
         if self.max_request_body_bytes < 1024:
             raise ValueError("MAX_REQUEST_BODY_BYTES must be at least 1024")
         if min(self.urgent_bonus_min, self.priority_bonus_min, self.vulnerable_bonus_min) < 0:
@@ -209,6 +229,11 @@ class Settings(BaseSettings):
     @property
     def app_hmac_key_bytes(self) -> bytes:
         return _decode_key(self.app_hmac_key, "APP_HMAC_KEY")
+
+    @property
+    def notify_key_bytes(self) -> bytes | None:
+        """The opted-in phone key, or None where no messages are sent (console provider)."""
+        return _decode_key(self.notify_key, "NOTIFY_KEY") if self.notify_key else None
 
 
 def _decode_key(encoded: str, name: str) -> bytes:

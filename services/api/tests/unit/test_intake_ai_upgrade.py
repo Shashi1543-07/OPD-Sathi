@@ -264,6 +264,9 @@ class _CloseOutConnection:
         self.statements.append((str(statement), params))
         return 2
 
+    async def execute(self, statement: Any) -> None:
+        self.cleared = str(statement)
+
 
 @pytest.mark.asyncio
 async def test_previous_days_are_closed_so_todays_queue_starts_empty() -> None:
@@ -281,3 +284,6 @@ async def test_previous_days_are_closed_so_todays_queue_starts_empty() -> None:
     }
     assert all("service_date <" in sql for sql, _ in connection.statements)
     assert all("'day_closed'" in sql for sql, _ in connection.statements)
+    # The numbers kept only for queue messages are erased once their day has passed.
+    assert "notify_phone_enc = NULL" in connection.cleared
+    assert "service_date <" in connection.cleared

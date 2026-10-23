@@ -2,7 +2,7 @@
 
 ## Current local architecture
 
-- The API runs two Gunicorn/Uvicorn workers by default. It is stateless apart from PostgreSQL and Redis.
+- The API runs `WEB_CONCURRENCY` Gunicorn/Uvicorn workers (default 2; `services/api/gunicorn.conf.py`), each recycled after about 2,000 requests (with jitter, so never all at once) and given 30 seconds to finish requests on restart. It is stateless apart from PostgreSQL and Redis.
 - PostgreSQL is the source of truth for visits, queue state, tenants, audit events, and analytics. API database connections use `pool_pre_ping` and a five-second PostgreSQL statement timeout.
 - Redis state is persistent (AOF with `appendfsync everysec`) and uses `noeviction`. It carries queues, kiosk sessions, rate limits, and idempotency records.
 - Redis cache is a separate, bounded service with `allkeys-lru`. LLM provider caching uses this connection. Cache loss must not be treated as loss of clinical records.
@@ -13,9 +13,18 @@ Compose defaults expose PostgreSQL on `127.0.0.1:5432`, state Redis on `127.0.0.
 
 ## Connection budget
 
-The default SQLAlchemy async pool is five connections per API process. With two API workers and one worker process, plan for at least 15 application connections, plus migrations, operator sessions, and health checks. Keep the combined pool limit below PostgreSQL `max_connections`; lower the Gunicorn worker count or pool size on a small clinic host. PgBouncer is not configured yet.
+Each API process keeps `DB_POOL_MIN` connections open and opens up to `DB_POOL_MAX` at peak (defaults 5 and 20). The worst case is:
 
-Analytics endpoints use the application database URL today. `DATABASE_READ_URL` is documented in `.env.example` but is not wired into a separate read-only engine. Do not point it at a replica until lag behavior and export consistency have been tested.
+```
+WEB_CONCURRENCY x DB_POOL_MAX   (API)
++ 15                           (worker: its default pool and overflow)
++ 5                            (migrations, backups, an operator's psql session)
+must stay below PostgreSQL max_connections (100 by default)
+```
+
+With the defaults that is 2 x 20 + 15 + 5 = 60. Raising `WEB_CONCURRENCY` to 4 needs `DB_POOL_MAX` of 20 at most (80 + 20 = 100 is already the limit, so lower it to 15) or a higher `max_connections`. PgBouncer is not configured yet (task 7.8.4).
+
+`DATABASE_READ_URL`, when set, is used for the one pure-read heavy query: the report CSV export. Every other report route also writes an audit entry in the same transaction and stays on the primary. Leave it empty unless a replica exists; the export then reads from the primary.
 
 ## Measured results
 

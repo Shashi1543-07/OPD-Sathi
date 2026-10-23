@@ -565,6 +565,7 @@ export function KioskIntake() {
   const session = useMemo(() => intake.session(), []);
   const [consent, setConsent] = useState<ConsentCopy | undefined>(session?.consent);
   const [aiConsent, setAiConsent] = useState<ConsentCopy | undefined>(session?.ai_consent);
+  const [smsConsent, setSmsConsent] = useState<ConsentCopy | undefined>(session?.sms_consent);
   const language: Language = consent?.language ?? "en";
   const [stage, setStage] = useState<Stage>((session?.stage as Stage) ?? "consent");
   const [error, setError] = useState("");
@@ -575,6 +576,7 @@ export function KioskIntake() {
   const [name, setName] = useState("");
   const [sex, setSex] = useState<"female" | "male" | "other" | "">("");
   const [phone, setPhone] = useState("");
+  // Queue messages only when the patient ticks the box themselves; never pre-ticked.
   const [smsOptIn, setSmsOptIn] = useState(false);
   // "Have you visited before?": ask, then the OPD card (number and PIN), then whether
   // today is about the same problem as the earlier visit.
@@ -751,7 +753,7 @@ export function KioskIntake() {
       sex || "unknown",
       phone || undefined,
       session?.assisted ? name.trim() : undefined,
-      smsOptIn,
+      smsOptIn ? smsConsent : undefined,
     );
     // At the desk the nurse finds an earlier record from the consultation screen.
     if (session?.assisted) {
@@ -816,6 +818,9 @@ export function KioskIntake() {
       const result = await intake.changeLanguage(next);
       setConsent(result.consent);
       setAiConsent(result.ai_consent);
+      setSmsConsent(result.sms_consent);
+      // The notice changed language: the patient ticks again if they still want SMS.
+      setSmsOptIn(false);
       setLanguage(next);
       if (stage === "danger") setTiles((await intake.dangerTiles()).tiles);
       if (stage === "interview" || stage === "summary") {
@@ -1041,7 +1046,8 @@ export function KioskIntake() {
                 onChange={(event) => {
                   const digits = event.target.value.replace(/\D/g, "");
                   setPhone(digits);
-                  setSmsOptIn(digits.length === 10);
+                  // A changed number needs a fresh tick: consent is for one number.
+                  if (digits !== phone) setSmsOptIn(false);
                   setError("");
                 }}
               />
@@ -1049,14 +1055,14 @@ export function KioskIntake() {
                 <small className="intake-field-error">{t("phoneInvalid")}</small>
               )}
             </label>
-            {phone.length === 10 && phoneValid && (
+            {phone.length === 10 && phoneValid && smsConsent && (
               <label className="intake-check">
                 <input
                   type="checkbox"
                   checked={smsOptIn}
                   onChange={(event) => setSmsOptIn(event.target.checked)}
                 />
-                <span>{t("smsOptIn")}</span>
+                <span>{smsConsent.text}</span>
               </label>
             )}
             <div className="intake-actions">

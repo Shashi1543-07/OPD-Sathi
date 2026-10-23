@@ -97,17 +97,22 @@ test("the queue never scrolls sideways, from a wide desktop down to a narrow pho
   await expect(page.getByRole("region", { name: "Queue patients" }).locator(".qb-item")).toHaveCount(3);
   for (const width of [1600, 1366, 1024, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.waitForTimeout(150);
-    const overflow = await page.evaluate(() => {
-      const main = document.querySelector(".staff-main");
-      return {
-        page: document.scrollingElement!.scrollWidth - document.scrollingElement!.clientWidth,
-        main: main ? main.scrollWidth - main.clientWidth : 0,
-        actionsOffscreen: [...document.querySelectorAll(".qb-item .qb-actions > *")].filter(
-          (el) => el.getBoundingClientRect().right > document.documentElement.clientWidth + 1,
-        ).length,
-      };
-    });
-    expect(overflow, `at ${width}px`).toEqual({ page: 0, main: 0, actionsOffscreen: 0 });
+    // Re-measured until the layout has settled at the new width: no fixed wait.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const main = document.querySelector(".staff-main");
+            return {
+              page: document.scrollingElement!.scrollWidth - document.scrollingElement!.clientWidth,
+              main: main ? main.scrollWidth - main.clientWidth : 0,
+              actionsOffscreen: [...document.querySelectorAll(".qb-item .qb-actions > *")].filter(
+                (el) => el.getBoundingClientRect().right > document.documentElement.clientWidth + 1,
+              ).length,
+            };
+          }),
+        { message: `at ${width}px` },
+      )
+      .toEqual({ page: 0, main: 0, actionsOffscreen: 0 });
   }
 });

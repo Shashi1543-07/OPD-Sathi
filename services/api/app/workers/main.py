@@ -58,7 +58,11 @@ def _score(row: dict[str, Any], settings: Any) -> int:
 
 
 async def relay_once(connection: AsyncConnection, client: Any, *, settings: Any) -> int:
-    """Apply up to 100 pending queue outbox events and mark only successful ones."""
+    """Apply up to 100 pending queue outbox events and mark only successful ones.
+
+    A failing event is rolled back to its savepoint, counted as an attempt and retried on the
+    next tick; the events after it still go through.
+    """
     events = (
         (
             await connection.execute(
@@ -79,65 +83,67 @@ async def relay_once(connection: AsyncConnection, client: Any, *, settings: Any)
         hospital_id = event["hospital_id"]
         payload = event["payload"]
         try:
-            visit_id = UUID(payload["visit_id"])
-            row = await _visit(connection, hospital_id, visit_id)
-            if payload.get("op") == "remove" or row is None or row["status"] != "queued":
+            # A savepoint per event: a database error here must not abort the batch.
+            async with connection.begin_nested():
+                visit_id = UUID(payload["visit_id"])
+                row = await _visit(connection, hospital_id, visit_id)
+                if payload.get("op") == "remove" or row is None or row["status"] != "queued":
+                    department_id = (
+                        row["department_id"] if row is not None else UUID(payload["department_id"])
+                    )
+                    await queue.remove(
+                        hospital_id=hospital_id,
+                        department_id=department_id,
+                        visit_id=visit_id,
+                    )
+                    if row is not None and row["status"] in {"called", "in_consult"}:
+                        await queue.publish_delta(
+                            hospital_id=hospital_id,
+                            department_id=row["department_id"],
+                            ops=[
+                                {
+                                    "op": "upsert",
+                                    "item": {
+                                        "visit_id": str(visit_id),
+                                        "token": row["token_label"],
+                                        "urgency": row["urgency"],
+                                        "status": row["status"],
+                                    },
+                                }
+                            ],
+                        )
+                else:
+                    await queue.enqueue(
+                        hospital_id=hospital_id,
+                        department_id=row["department_id"],
+                        visit_id=visit_id,
+                        score=_score(row, settings),
+                        item={
+                            "visit_id": str(visit_id),
+                            "token": row["token_label"],
+                            "urgency": row["urgency"],
+                            "status": row["status"],
+                        },
+                    )
+                await queue.publish_status(
+                    hospital_id=hospital_id,
+                    visit_id=visit_id,
+                    payload={"changed": True},
+                )
                 department_id = (
                     row["department_id"] if row is not None else UUID(payload["department_id"])
                 )
-                await queue.remove(
+                await record_queue_event_intents(
+                    connection,
+                    client,
                     hospital_id=hospital_id,
                     department_id=department_id,
-                    visit_id=visit_id,
+                    settings=settings,
+                    token_issued_visit_id=visit_id if payload.get("notify_token") is True else None,
                 )
-                if row is not None and row["status"] in {"called", "in_consult"}:
-                    await queue.publish_delta(
-                        hospital_id=hospital_id,
-                        department_id=row["department_id"],
-                        ops=[
-                            {
-                                "op": "upsert",
-                                "item": {
-                                    "visit_id": str(visit_id),
-                                    "token": row["token_label"],
-                                    "urgency": row["urgency"],
-                                    "status": row["status"],
-                                },
-                            }
-                        ],
-                    )
-            else:
-                await queue.enqueue(
-                    hospital_id=hospital_id,
-                    department_id=row["department_id"],
-                    visit_id=visit_id,
-                    score=_score(row, settings),
-                    item={
-                        "visit_id": str(visit_id),
-                        "token": row["token_label"],
-                        "urgency": row["urgency"],
-                        "status": row["status"],
-                    },
+                await connection.execute(
+                    text("UPDATE outbox SET processed_at = now() WHERE id = :id"), {"id": event_id}
                 )
-            await queue.publish_status(
-                hospital_id=hospital_id,
-                visit_id=visit_id,
-                payload={"changed": True},
-            )
-            department_id = (
-                row["department_id"] if row is not None else UUID(payload["department_id"])
-            )
-            await record_queue_event_intents(
-                connection,
-                client,
-                hospital_id=hospital_id,
-                department_id=department_id,
-                settings=settings,
-                token_issued_visit_id=visit_id if payload.get("notify_token") is True else None,
-            )
-            await connection.execute(
-                text("UPDATE outbox SET processed_at = now() WHERE id = :id"), {"id": event_id}
-            )
             processed += 1
         except Exception:
             logger.exception("queue_outbox_retry", outbox_id=str(event_id))
@@ -181,6 +187,14 @@ async def close_previous_days(connection: AsyncConnection) -> int:
             {"source": source, "target": target},
         )
         closed += int(count or 0)
+    # The number kept for queue messages serves only the day it was given for.
+    await connection.execute(
+        text(
+            "UPDATE visits SET notify_phone_enc = NULL, notify_phone_hmac = NULL "
+            "WHERE service_date < (now() AT TIME ZONE 'Asia/Kolkata')::date "
+            "AND (notify_phone_enc IS NOT NULL OR notify_phone_hmac IS NOT NULL)"
+        )
+    )
     return closed
 
 

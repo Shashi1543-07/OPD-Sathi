@@ -154,8 +154,9 @@ test("settings keeps the heading and tabs in place while long lists scroll insid
     await page.getByRole("tab", { name: tab }).click();
     for (const width of WIDTHS) {
       await page.setViewportSize({ width, height: width < 800 ? 844 : 900 });
-      await page.waitForTimeout(80);
-      expect(await overflow(page), `${tab} at ${width}px`).toEqual({ page: 0, main: 0, sticking: [] });
+      await expect
+        .poll(() => overflow(page), { message: `${tab} at ${width}px` })
+        .toEqual({ page: 0, main: 0, sticking: [] });
       // Every row action is fully on screen horizontally.
       const offscreen = await page.evaluate(() =>
         [...document.querySelectorAll(".adm-toggle")].filter((button) => {
@@ -231,8 +232,9 @@ test("reports keep even card rows, a reconciled chart, and no sideways scrolling
 
   for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: width < 800 ? 844 : 900 });
-    await page.waitForTimeout(80);
-    expect(await overflow(page), `reports at ${width}px`).toEqual({ page: 0, main: 0, sticking: [] });
+    await expect
+      .poll(() => overflow(page), { message: `reports at ${width}px` })
+      .toEqual({ page: 0, main: 0, sticking: [] });
   }
   await page.setViewportSize({ width: 390, height: 844 });
   expect((await columns())[0].perRow).toBe(1);

@@ -193,6 +193,67 @@ describe("kiosk intake", () => {
     expect(intakeMock.markFollowUp).not.toHaveBeenCalled();
   });
 
+  it("never ticks the SMS box for the patient; only their own tick sends the notice", async () => {
+    const user = userEvent.setup();
+    const smsConsent = {
+      language: "en",
+      version: "sms-consent-1.0",
+      sha256: "c".repeat(64),
+      text: "Synthetic notice about optional SMS",
+    };
+    intakeMock.identity.mockResolvedValue({ next: "danger_signs" });
+    intakeMock.dangerTiles.mockResolvedValue({ tiles: [] });
+    renderIntake("identity", { sms_consent: smsConsent });
+
+    await user.type(screen.getByLabelText("How old are you?"), "52");
+    await user.click(screen.getByRole("radio", { name: "Male" }));
+    const phone = screen.getByRole("textbox", { name: /Mobile number/ });
+    await user.type(phone, "9876543210");
+    const box = screen.getByRole("checkbox", { name: "Synthetic notice about optional SMS" });
+    expect(box).not.toBeChecked();
+
+    // Ticked, then the number changed: consent was for the old number, so it is cleared.
+    await user.click(box);
+    expect(box).toBeChecked();
+    await user.clear(phone);
+    await user.type(phone, "9123456780");
+    const again = screen.getByRole("checkbox", { name: "Synthetic notice about optional SMS" });
+    expect(again).not.toBeChecked();
+
+    await user.click(again);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() =>
+      expect(intakeMock.identity).toHaveBeenCalledWith(
+        52,
+        "male",
+        "9123456780",
+        undefined,
+        smsConsent,
+      ),
+    );
+  });
+
+  it("sends no SMS notice when the patient leaves the box unticked", async () => {
+    const user = userEvent.setup();
+    intakeMock.identity.mockResolvedValue({ next: "danger_signs" });
+    renderIntake("identity", {
+      sms_consent: { language: "en", version: "s", sha256: "d".repeat(64), text: "SMS notice" },
+    });
+    await user.type(screen.getByLabelText("How old are you?"), "30");
+    await user.click(screen.getByRole("radio", { name: "Female" }));
+    await user.type(screen.getByRole("textbox", { name: /Mobile number/ }), "9876543210");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() =>
+      expect(intakeMock.identity).toHaveBeenCalledWith(
+        30,
+        "female",
+        "9876543210",
+        undefined,
+        undefined,
+      ),
+    );
+  });
+
   it("asks about AI help separately after the consent, and either answer continues", async () => {
     const user = userEvent.setup();
     intakeMock.consent.mockResolvedValue({ next: "identity" });

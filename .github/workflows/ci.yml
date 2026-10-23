@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16.9
+        image: postgres:16.9@sha256:ddfe3e8713e3ee5b8f286082cb12512488dfbf3f5a1ecb0b74a42e6055af0a5f
         env:
           POSTGRES_DB: osa
           POSTGRES_USER: postgres
@@ -22,7 +22,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -d osa"
           --health-interval 5s --health-timeout 3s --health-retries 12
       redis:
-        image: redis:7.4.2-alpine
+        image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
         ports: [6379:6379]
         options: >-
           --health-cmd "redis-cli ping"
@@ -47,7 +47,10 @@ jobs:
           OSA_MIGRATOR_PASSWORD: ci-osa-migrator-password
           OSA_WORKER_PASSWORD: ci-osa-worker-password
       - run: pip install --require-hashes -r services/api/requirements.lock.txt
-      - run: ruff check services/api/app services/api/tests services/api/scripts
+      - run: ruff check services/api/app services/api/tests services/api/scripts scripts
+      # Every documented setting is read by something; every image is pinned by digest.
+      - run: python scripts/check_env_example.py
+      - run: python scripts/check_image_pins.py
       - run: mypy --strict services/api/app
       - run: PYTHONPATH=services/api python services/api/scripts/validate_question_bank.py
       - run: make prompts-audio-check
@@ -64,6 +67,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://osa_app:ci-osa-app-password@localhost:5432/osa
           TEST_DATABASE_URL: postgresql+asyncpg://osa_app:ci-osa-app-password@localhost:5432/osa
           TEST_MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:ci-osa-migrator-password@localhost:5432/osa
+          TEST_WORKER_DATABASE_URL: postgresql+asyncpg://osa_worker:ci-osa-worker-password@localhost:5432/osa
           REDIS_STATE_URL: redis://localhost:6379/0
           REDIS_CACHE_URL: redis://localhost:6379/1
       - run: coverage report --include='services/api/app/core/*,services/api/app/domain/*' --fail-under=95
@@ -77,7 +81,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version-file: apps/web/.nvmrc
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
@@ -131,7 +135,7 @@ jobs:
             git cat-file -e "${GITLEAKS_HEAD}^{commit}"
             LOG_OPTS="${GITLEAKS_BASE}..${GITLEAKS_HEAD}"
           fi
-          docker run --rm -v "$GITHUB_WORKSPACE:/repo" zricethezav/gitleaks:v8.30.1 git --redact --log-opts="$LOG_OPTS" /repo
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git --redact --log-opts="$LOG_OPTS" /repo
       - name: Scan pull request commits for secrets
         if: github.event_name == 'pull_request'
         env:
@@ -140,22 +144,22 @@ jobs:
         run: |
           git cat-file -e "${GITLEAKS_BASE}^{commit}"
           git cat-file -e "${GITLEAKS_HEAD}^{commit}"
-          docker run --rm -v "$GITHUB_WORKSPACE:/repo" zricethezav/gitleaks:v8.30.1 git --redact --log-opts="${GITLEAKS_BASE}..${GITLEAKS_HEAD}" /repo
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo" zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git --redact --log-opts="${GITLEAKS_BASE}..${GITLEAKS_HEAD}" /repo
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: pip install --require-hashes -r services/api/requirements.lock.txt
       - run: bandit -q -r services/api/app
       - run: pip-audit -r services/api/requirements.lock.txt
-      # Temporary waiver for the CI-only Semgrep scanner, which pins mcp==1.29.0 in every release;
-      # the advisory affects MCP HTTP servers, which `semgrep scan` never starts. See ADR 006.
+      # Temporary waivers for the CI-only Semgrep scanner, which pins mcp==1.29.0 and
+      # opentelemetry-api~=1.37.0 in every release; neither reaches the application. See ADR 006.
       - run: >-
           pip-audit -r services/api/requirements-security.lock.txt
-          --ignore-vuln GHSA-84m7-p3x7-pcfv --ignore-vuln CVE-2026-59951
+          --ignore-vuln GHSA-84m7-p3x7-pcfv --ignore-vuln CVE-2026-59951 --ignore-vuln CVE-2026-114603
       - run: pip install --require-hashes -r services/api/requirements-security.lock.txt
       - run: semgrep scan --config auto --error services/api/app
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version-file: apps/web/.nvmrc
       - run: npm audit --audit-level=high
         working-directory: apps/web

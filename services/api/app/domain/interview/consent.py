@@ -9,7 +9,8 @@ from app.domain.interview.bank import REVIEW_STATUS, Language
 CONSENT_DIRECTORY = Path(__file__).with_name("consent")
 # "care": the history is collected for the clinic team (required to continue).
 # "ai": online AI services may process the answers, voice and photos (optional).
-ConsentPurpose = Literal["care", "ai"]
+# "sms": queue messages to the phone number the patient gave (optional, nothing pre-ticked).
+ConsentPurpose = Literal["care", "ai", "sms"]
 
 
 class ConsentCopy(TypedDict):

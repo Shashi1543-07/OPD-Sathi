@@ -171,8 +171,9 @@ test("an open case sheet fits every screen, in every section", async ({ page }) 
     await page.setViewportSize({ width, height: width < 800 ? 844 : 900 });
     for (const tab of ["Overview", "Patient history", "Interview transcript", "Clinical notes"]) {
       await page.getByRole("tab", { name: new RegExp(`^${tab}`) }).click();
-      await page.waitForTimeout(60);
-      expect(await overflow(page), `${tab} at ${width}px`).toEqual({ page: 0, main: 0, sticking: [] });
+      await expect
+        .poll(() => overflow(page), { message: `${tab} at ${width}px` })
+        .toEqual({ page: 0, main: 0, sticking: [] });
     }
     await page.getByRole("tab", { name: /^Overview/ }).click();
   }

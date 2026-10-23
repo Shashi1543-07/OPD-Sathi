@@ -1,3 +1,5 @@
+import base64
+
 import pytest
 
 from app.config import Settings
@@ -9,6 +11,9 @@ from app.notifications.providers import (
     build_notification_provider,
     render_message,
 )
+
+# Sending providers need the key that opens opted-in numbers (task 7.0.1).
+NOTIFY_KEY = base64.b64encode(b"n" * 32).decode("ascii")
 
 
 @pytest.mark.parametrize("language", ["en", "hi", "mr"])
@@ -52,10 +57,12 @@ def test_explicit_provider_selection_builds_the_matching_adapter() -> None:
         twilio_account_sid="AC" + "a" * 32,
         twilio_auth_token="synthetic-secret",
         twilio_from_number="+15005550006",
+        notify_key=NOTIFY_KEY,
     )
     whatsapp = Settings(
         app_env="test",
         notification_provider="whatsapp",
+        notify_key=NOTIFY_KEY,
         whatsapp_access_token="synthetic-secret",
         whatsapp_phone_number_id="synthetic-number-id",
     )

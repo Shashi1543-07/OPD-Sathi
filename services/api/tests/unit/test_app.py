@@ -128,13 +128,16 @@ def test_readiness_returns_503_for_dependencies_that_exceed_timeout():
         engine_factory=lambda _url: SlowEngine(),
         redis_factory=lambda _url, **_kwargs: SlowRedis(),
     )
-    started = monotonic()
     with TestClient(app) as client:
+        # Time the readiness answer itself, not the app's start-up (which warms the PDF
+        # renderer and is slow on a loaded machine).
+        started = monotonic()
         response = client.get("/readyz")
+        elapsed = monotonic() - started
     assert response.status_code == 503
     assert "postgres" in response.json()["detail"]
     assert "redis" in response.json()["detail"]
-    assert monotonic() - started < 2.5
+    assert elapsed < 2.5
 
 
 def test_problem_json_and_request_id():

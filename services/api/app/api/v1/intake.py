@@ -117,17 +117,28 @@ class ConsentPayload(StrictPayload):
     granted: bool
 
 
+class ConsentNoticeRef(StrictPayload):
+    """The exact notice a patient agreed to: its version and the hash of its text."""
+
+    version: str = Field(min_length=1, max_length=64)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class IdentityPayload(StrictPayload):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     age: StrictInt = Field(ge=0, le=120)
     sex: Literal["female", "male", "other", "unknown"]
     phone: str | None = Field(default=None, pattern=r"^[6-9][0-9]{9}$")
     sms_opt_in: bool = False
+    # The SMS notice shown beside the box, required when the patient ticked it themselves.
+    sms_consent: ConsentNoticeRef | None = None
 
     @model_validator(mode="after")
     def require_phone_for_sms(self) -> "IdentityPayload":
         if self.sms_opt_in and not self.phone:
             raise ValueError("a phone number is required to receive queue updates")
+        if self.sms_opt_in and self.sms_consent is None:
+            raise ValueError("queue updates need the SMS notice the patient agreed to")
         return self
 
 
@@ -958,6 +969,7 @@ async def create_session(
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": copy,
         "ai_consent": get_consent_copy(payload.language, "ai"),
+        "sms_consent": get_consent_copy(payload.language, "sms"),
     }
 
 
@@ -1045,6 +1057,7 @@ async def create_assisted_session(
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": {**consent, "language": payload.language},
         "ai_consent": get_consent_copy(payload.language, "ai"),
+        "sms_consent": get_consent_copy(payload.language, "sms"),
         "assisted": True,
     }
 
@@ -1235,6 +1248,7 @@ async def create_checkin_session(
         "expires_in": settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": get_consent_copy(payload.language),
         "ai_consent": get_consent_copy(payload.language, "ai"),
+        "sms_consent": get_consent_copy(payload.language, "sms"),
         "channel": "mobile",
         "hospital_name": point["hospital_name"],
     }
@@ -1281,6 +1295,7 @@ async def change_language(
         "language": payload.language,
         "consent": get_consent_copy(payload.language),
         "ai_consent": get_consent_copy(payload.language, "ai"),
+        "sms_consent": get_consent_copy(payload.language, "sms"),
     }
 
 
@@ -1440,11 +1455,64 @@ async def save_identity(
         raise _error(
             409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
         )
+    language: Language = context["language"]
+    sms_copy = get_consent_copy(language, "sms")
+    if payload.sms_consent is not None and (
+        payload.sms_consent.version != sms_copy["version"]
+        or payload.sms_consent.sha256 != sms_copy["sha256"]
+    ):
+        raise _error(
+            409,
+            "CONSENT_COPY_MISMATCH",
+            "SMS notice changed",
+            "Read the SMS notice again and tick the box if you agree.",
+        )
+    channel = (
+        "nurse"
+        if state.get("assisted") is True
+        else "mobile"
+        if state.get("channel") == "mobile"
+        else "kiosk"
+    )
     # Phone numbers are not unique: families share one phone and returning patients give
     # theirs again. A number is a contact detail, never an identity.
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        await IntakeRepository(connection, request.app.state.settings).update_identity(
+        repository = IntakeRepository(connection, request.app.state.settings)
+        # SMS is the patient's own choice: a tick records the consent; an untick after going
+        # back records the change. No tick and no earlier answer records nothing.
+        if payload.sms_opt_in or await repository.has_consent_row(
+            hospital_id=hospital_id, visit_id=visit_id, purpose="sms"
+        ):
+            await repository.record_sms_consent(
+                hospital_id=hospital_id,
+                visit_id=visit_id,
+                language=language,
+                version=sms_copy["version"],
+                text_sha256=sms_copy["sha256"],
+                granted=payload.sms_opt_in,
+                channel=channel,
+            )
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user" if state.get("assisted") is True else "patient",
+                actor_id=(
+                    UUID(state["nurse_id"])
+                    if state.get("assisted") is True and state.get("nurse_id")
+                    else visit_id
+                ),
+                action=(
+                    "intake.sms_consent.granted"
+                    if payload.sms_opt_in
+                    else "intake.sms_consent.declined"
+                ),
+                resource_type="visit",
+                resource_id=visit_id,
+                meta={"language": language, "version": sms_copy["version"]},
+            )
+        await repository.update_identity(
             hospital_id=hospital_id,
             visit_id=visit_id,
             patient_id=context["patient_id"],

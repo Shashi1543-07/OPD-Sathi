@@ -23,6 +23,8 @@ type Session = {
   consent?: ConsentCopy;
   /** The separate notice about online AI help, asked right after the consent. */
   ai_consent?: ConsentCopy;
+  /** The notice beside the optional SMS box; ticking it is the patient's consent. */
+  sms_consent?: ConsentCopy;
   stage?: string;
   assisted?: boolean;
   /** Started from a hospital's phone check-in QR on the patient's own phone. */
@@ -421,6 +423,7 @@ export const intake = {
       patient_access_token: string;
       consent: ConsentCopy;
       ai_consent: ConsentCopy;
+      sms_consent?: ConsentCopy;
       expires_in: number;
       hospital_name?: string;
     }>(`/intake/checkin/${encodeURIComponent(code)}/sessions`, {
@@ -432,6 +435,7 @@ export const intake = {
       patient_access_token: response.patient_access_token,
       consent: response.consent,
       ai_consent: response.ai_consent,
+      sms_consent: response.sms_consent,
       channel: "mobile",
       checkin: code,
       // A minute of margin so the phone never resumes a session the server just expired.
@@ -495,12 +499,16 @@ export const intake = {
       method: "POST",
       body: JSON.stringify({ version: notice.version, sha256: notice.sha256, granted }),
     }),
+  /**
+   * Save age, sex and contact. ``smsNotice`` is the SMS notice the patient ticked themselves;
+   * without it no queue messages are sent.
+   */
   identity: (
     age: number,
     sex: string,
     phone?: string,
     name?: string,
-    smsOptIn = false,
+    smsNotice?: ConsentCopy,
   ) =>
     patientRequest<{ next: string }>("/identity", {
       method: "POST",
@@ -509,7 +517,9 @@ export const intake = {
         sex,
         phone: phone || null,
         name: name || null,
-        sms_opt_in: smsOptIn,
+        sms_opt_in: Boolean(smsNotice && phone),
+        sms_consent:
+          smsNotice && phone ? { version: smsNotice.version, sha256: smsNotice.sha256 } : null,
       }),
     }),
   dangerSigns: (tileIds: string[]) =>
@@ -680,10 +690,16 @@ export const intake = {
       language: Language;
       consent: ConsentCopy;
       ai_consent: ConsentCopy;
+      sms_consent?: ConsentCopy;
     }>("/language", { method: "POST", body: JSON.stringify({ language }) });
     const session = getPatientSession();
     if (session)
-      savePatientSession({ ...session, consent: result.consent, ai_consent: result.ai_consent });
+      savePatientSession({
+        ...session,
+        consent: result.consent,
+        ai_consent: result.ai_consent,
+        sms_consent: result.sms_consent,
+      });
     return result;
   },
   requestHelp: () =>

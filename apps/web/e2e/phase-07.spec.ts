@@ -369,7 +369,9 @@ test("doctor and nurse routes stay inside their role access map", async ({
   }
 });
 
-test("5,000-row virtual queue applies a live urgent update in under 100 ms", async ({
+// Tagged @timing: a wall-clock budget, so it runs on its own (see "e2e" in package.json)
+// instead of sharing the CPU with parallel workers.
+test("5,000-row virtual queue applies a live urgent update in under 100 ms @timing", async ({
   page,
 }) => {
   await mockStaffSession(page, "doctor");

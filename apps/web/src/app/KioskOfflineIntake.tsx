@@ -47,26 +47,39 @@ export function KioskOfflineIntake() {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const syncing = useRef(false);
+  // The network came back while a sync was running: run once more straight after it.
+  const resyncAfter = useRef(false);
 
-  const syncPending = useCallback(async () => {
-    if (!navigator.onLine || syncing.current || !intake.kioskAccessToken()) return;
+  const syncPending = useCallback(async (reconnected = false) => {
+    if (!navigator.onLine || !intake.kioskAccessToken()) return;
+    if (syncing.current) {
+      if (reconnected) resyncAfter.current = true;
+      return;
+    }
     syncing.current = true;
+    let ignoreBackoff = reconnected;
     try {
-      const pending = await pendingOfflineSubmissions();
-      for (const { record, submission } of pending) {
-        if (!navigator.onLine) break;
+      do {
+        resyncAfter.current = false;
         try {
-          const response = await intake.submitOffline(submission);
-          await removeOfflineSubmission(record.id);
-          setSyncState({ kind: "synced", token: response.token });
+          const pending = await pendingOfflineSubmissions({ ignoreBackoff });
+          for (const { record, submission } of pending) {
+            if (!navigator.onLine) break;
+            try {
+              const response = await intake.submitOffline(submission);
+              await removeOfflineSubmission(record.id);
+              setSyncState({ kind: "synced", token: response.token });
+            } catch {
+              await deferOfflineSubmission(record);
+              setSyncState({ kind: "failed" });
+            }
+          }
+          setPendingCount(await offlineSubmissionCount());
         } catch {
-          await deferOfflineSubmission(record);
           setSyncState({ kind: "failed" });
         }
-      }
-      setPendingCount(await offlineSubmissionCount());
-    } catch {
-      setSyncState({ kind: "failed" });
+        ignoreBackoff = true;
+      } while (resyncAfter.current && navigator.onLine);
     } finally {
       syncing.current = false;
     }
@@ -76,11 +89,12 @@ export function KioskOfflineIntake() {
     void offlineSubmissionCount().then(setPendingCount).catch(() => setFormError(t("offlineSyncFailed")));
     const initialSync = window.setTimeout(() => void syncPending(), 0);
     const timer = window.setInterval(() => void syncPending(), 10_000);
-    window.addEventListener("online", syncPending);
+    const reconnected = () => void syncPending(true);
+    window.addEventListener("online", reconnected);
     return () => {
       window.clearInterval(timer);
       window.clearTimeout(initialSync);
-      window.removeEventListener("online", syncPending);
+      window.removeEventListener("online", reconnected);
     };
   }, [syncPending, t]);
 

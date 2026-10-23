@@ -207,6 +207,7 @@ _SECRET_ROUTES = {
     "/status/{token}",
     "/status/{token}/stream",
     "/status/{token}/ai-consent/withdraw",
+    "/status/{token}/sms/stop",
     "/intake/checkin/{code}",
 }
 _PATIENT_SOCKET = "/ws/intake/{visit_id}/audio"

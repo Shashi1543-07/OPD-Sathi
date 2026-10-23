@@ -41,14 +41,18 @@ for (const screen of screens) {
         });
         await page.goto(`${screen.path}?lang=${language}`);
         await expect(page.locator("h1")).toBeVisible();
+        // Measure the final layout: web fonts change text widths once they load.
+        await page.evaluate(() => document.fonts.ready);
 
-        const horizontalOverflow = await page.evaluate(
-          () => document.documentElement.scrollWidth > window.innerWidth,
-        );
-        expect(
-          horizontalOverflow,
-          "page should not overflow horizontally",
-        ).toBe(false);
+        await expect
+          .poll(
+            () =>
+              page.evaluate(
+                () => document.documentElement.scrollWidth > window.innerWidth,
+              ),
+            { message: "page should not overflow horizontally" },
+          )
+          .toBe(false);
 
         if (screen.kiosk) {
           const smallTargets = await page
@@ -113,6 +117,7 @@ for (const viewport of viewports) {
       });
       await page.goto(`${screen.path}?lang=xa`);
       await expect(page.locator("h1")).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
       const overflow = await page.evaluate(() => ({
         horizontal: document.documentElement.scrollWidth > window.innerWidth,
         viewportWidth: window.innerWidth,

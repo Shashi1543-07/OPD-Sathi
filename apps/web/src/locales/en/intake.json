@@ -25,7 +25,6 @@
   "phoneQuestion": "Mobile number (optional)",
   "phoneHint": "Only to send your token by SMS",
   "phoneInvalid": "Enter a 10-digit mobile number starting with 6, 7, 8 or 9.",
-  "smsOptIn": "Send my queue token and position to this number by SMS",
   "nameQuestion": "Patient's full name",
   "dangerTitle": "Do you have any of these right now?",
   "dangerSubtitle": "Tap all that apply. If none, tap “No, none of these”.",

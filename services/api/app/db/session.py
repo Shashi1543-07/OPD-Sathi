@@ -8,10 +8,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 
-def create_engine(database_url: str) -> AsyncEngine:
+def create_engine(database_url: str, *, pool_min: int = 5, pool_max: int = 15) -> AsyncEngine:
+    """An engine keeping ``pool_min`` connections and opening up to ``pool_max`` at peak."""
     return create_async_engine(
         database_url,
         pool_pre_ping=True,
+        pool_size=pool_min,
+        max_overflow=pool_max - pool_min,
         connect_args={"server_settings": {"statement_timeout": "5000"}},
     )
 

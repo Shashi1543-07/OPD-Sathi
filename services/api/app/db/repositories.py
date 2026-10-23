@@ -1585,21 +1585,80 @@ class IntakeRepository:
         channel: str,
     ) -> None:
         """Record (or, while still registering, change) the answer about online AI help."""
+        await self._record_optional_consent(
+            purpose="ai",
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            language=language,
+            version=version,
+            text_sha256=text_sha256,
+            granted=granted,
+            channel=channel,
+        )
+
+    async def record_sms_consent(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        language: str,
+        version: str,
+        text_sha256: str,
+        granted: bool,
+        channel: str,
+    ) -> None:
+        """Record the patient's own tick (or untick) of the optional queue-message box."""
+        await self._record_optional_consent(
+            purpose="sms",
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            language=language,
+            version=version,
+            text_sha256=text_sha256,
+            granted=granted,
+            channel=channel,
+        )
+
+    async def has_consent_row(self, *, hospital_id: UUID, visit_id: UUID, purpose: str) -> bool:
+        return (
+            await self.connection.scalar(
+                text(
+                    "SELECT id FROM consents WHERE hospital_id = :hospital_id "
+                    "AND visit_id = :visit_id AND purpose = :purpose"
+                ),
+                {"hospital_id": hospital_id, "visit_id": visit_id, "purpose": purpose},
+            )
+            is not None
+        )
+
+    async def _record_optional_consent(
+        self,
+        *,
+        purpose: str,
+        hospital_id: UUID,
+        visit_id: UUID,
+        language: str,
+        version: str,
+        text_sha256: str,
+        granted: bool,
+        channel: str,
+    ) -> None:
         await self.connection.execute(
             text(
                 "INSERT INTO consents (id, hospital_id, visit_id, purpose, language, "
                 "text_version, text_sha256, granted, granted_at, channel) VALUES (:id, "
-                ":hospital_id, :visit_id, 'ai', :language, :version, :text_sha256, :granted, "
-                ":granted_at, :channel) ON CONFLICT (hospital_id, visit_id, purpose) DO UPDATE "
-                "SET language = EXCLUDED.language, text_version = EXCLUDED.text_version, "
-                "text_sha256 = EXCLUDED.text_sha256, granted = EXCLUDED.granted, "
-                "granted_at = EXCLUDED.granted_at, channel = EXCLUDED.channel, "
-                "withdrawn_at = NULL, withdrawn_by = NULL"
+                ":hospital_id, :visit_id, :purpose, :language, :version, :text_sha256, "
+                ":granted, :granted_at, :channel) ON CONFLICT (hospital_id, visit_id, purpose) "
+                "DO UPDATE SET language = EXCLUDED.language, "
+                "text_version = EXCLUDED.text_version, text_sha256 = EXCLUDED.text_sha256, "
+                "granted = EXCLUDED.granted, granted_at = EXCLUDED.granted_at, "
+                "channel = EXCLUDED.channel, withdrawn_at = NULL, withdrawn_by = NULL"
             ),
             {
                 "id": uuid7(),
                 "hospital_id": hospital_id,
                 "visit_id": visit_id,
+                "purpose": purpose,
                 "language": language,
                 "version": version,
                 "text_sha256": text_sha256,
@@ -1618,6 +1677,37 @@ class IntakeRepository:
                 "AND granted AND withdrawn_at IS NULL RETURNING id"
             ),
             {"hospital_id": hospital_id, "visit_id": visit_id, "by": by},
+        )
+        return withdrawn is not None
+
+    async def withdraw_sms_consent(self, *, hospital_id: UUID, visit_id: UUID, by: str) -> bool:
+        """Stop queue messages: withdraw the consent, forget the number, cancel what is due.
+
+        False if messages were never on or are already stopped.
+        """
+        withdrawn = await self.connection.scalar(
+            text(
+                "UPDATE consents SET withdrawn_at = now(), withdrawn_by = :by "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id AND purpose = 'sms' "
+                "AND granted AND withdrawn_at IS NULL RETURNING id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id, "by": by},
+        )
+        await self.connection.execute(
+            text(
+                "UPDATE visits SET sms_opt_in = false, sms_opt_in_at = NULL, "
+                "notify_phone_enc = NULL, notify_phone_hmac = NULL "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        await self.connection.execute(
+            text(
+                "UPDATE notifications SET status = 'failed', last_error_code = 'opted_out', "
+                "next_attempt_at = NULL, updated_at = now() WHERE hospital_id = :hospital_id "
+                "AND visit_id = :visit_id AND status IN ('pending', 'sending')"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
         )
         return withdrawn is not None
 
@@ -1660,6 +1750,45 @@ class IntakeRepository:
             },
         )
 
+    def _notify_contact(
+        self, *, visit_id: UUID, phone: str | None, sms_opt_in: bool
+    ) -> dict[str, Any]:
+        """The visit's copy of an opted-in number, readable by the worker with NOTIFY_KEY only."""
+        opted_in = sms_opt_in and phone is not None
+        notify_key = self.settings.notify_key_bytes
+        return {
+            "sms_opt_in": opted_in,
+            "notify_phone_enc": (
+                encrypt_field(
+                    phone, key=notify_key, associated_data=f"visits:notify_phone_enc:{visit_id}"
+                )
+                if opted_in and phone and notify_key is not None
+                else None
+            ),
+            "notify_phone_hmac": (
+                lookup_digest(phone, key=self.settings.app_hmac_key_bytes)
+                if opted_in and phone
+                else None
+            ),
+        }
+
+    async def _save_notify_contact(
+        self, *, hospital_id: UUID, visit_id: UUID, phone: str | None, sms_opt_in: bool
+    ) -> None:
+        await self.connection.execute(
+            text(
+                "UPDATE visits SET sms_opt_in = :sms_opt_in, "
+                "sms_opt_in_at = CASE WHEN :sms_opt_in THEN now() ELSE NULL END, "
+                "notify_phone_enc = :notify_phone_enc, notify_phone_hmac = :notify_phone_hmac "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id"
+            ),
+            {
+                **self._notify_contact(visit_id=visit_id, phone=phone, sms_opt_in=sms_opt_in),
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+            },
+        )
+
     async def update_identity(
         self,
         *,
@@ -1673,21 +1802,20 @@ class IntakeRepository:
         name: str | None = None,
         linked: bool = False,
     ) -> None:
+        if sms_opt_in and not phone:
+            raise ValueError("notification opt-in requires a phone number")
         if linked:
             # A visit joined to an existing patient (OPD card or staff) never rewrites the
             # patient's record from a self-service screen; staff correct it if needed.
             await self.connection.execute(
                 text(
-                    "UPDATE visits SET age_years = :age, sms_opt_in = :sms_opt_in, "
-                    "sms_opt_in_at = CASE WHEN :sms_opt_in THEN now() ELSE NULL END "
+                    "UPDATE visits SET age_years = :age "
                     "WHERE hospital_id = :hospital_id AND id = :visit_id"
                 ),
-                {
-                    "age": age,
-                    "sms_opt_in": sms_opt_in,
-                    "hospital_id": hospital_id,
-                    "visit_id": visit_id,
-                },
+                {"age": age, "hospital_id": hospital_id, "visit_id": visit_id},
+            )
+            await self._save_notify_contact(
+                hospital_id=hospital_id, visit_id=visit_id, phone=phone, sms_opt_in=sms_opt_in
             )
             return
         name_enc = (
@@ -1709,8 +1837,6 @@ class IntakeRepository:
             else None
         )
         phone_hmac = lookup_digest(phone, key=self.settings.app_hmac_key_bytes) if phone else None
-        if sms_opt_in and not phone:
-            raise ValueError("notification opt-in requires a phone number")
         current_year = datetime.now(ZoneInfo("Asia/Kolkata")).year
         await self.connection.execute(
             text(
@@ -1738,17 +1864,8 @@ class IntakeRepository:
             ),
             {"age": age, "hospital_id": hospital_id, "visit_id": visit_id},
         )
-        await self.connection.execute(
-            text(
-                "UPDATE visits SET sms_opt_in = :sms_opt_in, "
-                "sms_opt_in_at = CASE WHEN :sms_opt_in THEN now() ELSE NULL END "
-                "WHERE hospital_id = :hospital_id AND id = :visit_id"
-            ),
-            {
-                "sms_opt_in": sms_opt_in and phone is not None,
-                "hospital_id": hospital_id,
-                "visit_id": visit_id,
-            },
+        await self._save_notify_contact(
+            hospital_id=hospital_id, visit_id=visit_id, phone=phone, sms_opt_in=sms_opt_in
         )
 
     async def record_danger_tiles(
