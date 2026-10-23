@@ -138,8 +138,9 @@ export interface paths {
          *     service, without anyone typing an activation code again. Deleting or re-pairing the
          *     kiosk invalidates the secret at once (401: the device forgets it). A deactivated kiosk
          *     is refused with 403 but keeps its secret, so activating it again needs no new code.
-         *     The secret is not rotated on use, so a renewal lost to a flaky hospital network never
-         *     strands the kiosk.
+         *     The secret is replaced every KIOSK_SECRET_ROTATION_DAYS (the answer then carries
+         *     ``device_secret``); the previous one keeps working until the device has used the new one,
+         *     so a renewal lost to a flaky hospital network never strands the kiosk.
          */
         post: operations["renew_kiosk_token_kiosks_token_post"];
         delete?: never;
