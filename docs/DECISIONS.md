@@ -49,6 +49,7 @@
 - **Why the risk is acceptable:** CI runs only `semgrep scan` on the API source, for a few minutes. Semgrep starts no MCP server there, so nothing serves the affected transport. `mcp` is not in the application's lock (`services/api/requirements.lock.txt`), its Docker images or any deployment.
 - **Decision:** CI audits the Semgrep lock with `--ignore-vuln` for exactly this advisory (both of its IDs). The application lock is still audited with no exceptions, and any other advisory in the Semgrep lock still fails CI.
 - **Review:** when Semgrep's `mcp` pin moves, regenerate the lock with the command in its header and delete the two `--ignore-vuln` arguments from `.github/workflows/ci.yml`.
+- **Amendment, 23 Oct 2026:** pip-audit reports CVE-2026-114603 for `opentelemetry-api`, fixed in 1.45.1. The application lock now uses 1.45.1. The Semgrep lock cannot: every Semgrep release, including 1.182.1 (the newest on 23 Oct 2026), requires `opentelemetry-api~=1.37.0`, which Semgrep uses only for its own optional telemetry during the scan. The same reasoning applies as for `mcp`: the package exists only in the CI-only scanner lock, never in the application, its images or any deployment. CI waives exactly this advisory for the Semgrep lock (`--ignore-vuln CVE-2026-114603`); the application lock is audited with no exceptions. Remove the waiver when Semgrep allows `opentelemetry-api` 1.45.1 or later.
 
 ## ADR 007 — Production configuration: an overlay, secrets as files, HTTPS in the existing nginx
 
