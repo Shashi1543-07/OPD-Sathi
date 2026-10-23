@@ -129,6 +129,19 @@ export const router = createBrowserRouter([
         },
       },
       {
+        path: "audit",
+        lazy: async () => {
+          const { AuditLog } = await import("./AuditLog");
+          return {
+            Component: () => (
+              <StaffPageGate page="audit">
+                <AuditLog />
+              </StaffPageGate>
+            ),
+          };
+        },
+      },
+      {
         // Every staff member's own password, two-step sign-in and sessions.
         path: "account",
         lazy: async () => {

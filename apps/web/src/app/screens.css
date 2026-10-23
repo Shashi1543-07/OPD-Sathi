@@ -8814,3 +8814,46 @@
     display: none !important;
   }
 }
+
+/* ---- Audit log (Phase 7, 7.3.10) ---- */
+.audit-filters {
+  align-items: end;
+  display: grid;
+  gap: var(--space-2) var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+}
+.audit-filters label {
+  color: var(--text-muted);
+  display: grid;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  gap: var(--space-1);
+}
+.audit-filters input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: inherit;
+  min-height: 2.5rem;
+  min-width: 0;
+  padding: 0 var(--space-2);
+}
+.audit-filters .acct-actions {
+  grid-column: 1 / -1;
+}
+.audit-table code {
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+.audit-id {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--font-size-xs);
+  margin-left: var(--space-1);
+  padding: 0.1rem 0.35rem;
+}

@@ -10,6 +10,7 @@ import { navigationByRole, type StaffPageId } from "./staffAccess";
 import {
   BarChart3,
   ClipboardList,
+  FileSearch,
   HeartPulse,
   LogOut,
   ShieldCheck,
@@ -26,6 +27,7 @@ const NAV_ICONS: Record<StaffPageId, LucideIcon> = {
   patients: ClipboardList,
   reports: BarChart3,
   settings: Settings,
+  audit: FileSearch,
 };
 
 function initials(name: string) {

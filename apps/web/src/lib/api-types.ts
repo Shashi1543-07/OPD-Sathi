@@ -352,8 +352,31 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Audit */
+        /**
+         * List Audit
+         * @description Search the hospital's audit log, newest first. Each search is itself audited.
+         */
         get: operations["list_audit_audit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Audit
+         * @description The matching entries as CSV (at most 50,000), for an investigation file. Audited.
+         */
+        get: operations["export_audit_audit_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3507,6 +3530,11 @@ export interface operations {
             query?: {
                 limit?: number;
                 cursor?: string | null;
+                record?: string | null;
+                person?: string | null;
+                action?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
             };
             header?: never;
             path?: never;
@@ -3523,6 +3551,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_audit_audit_export_get: {
+        parameters: {
+            query?: {
+                record?: string | null;
+                person?: string | null;
+                action?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

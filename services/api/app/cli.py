@@ -62,8 +62,7 @@ async def _create_admin(
                     async with connection.begin_nested():
                         await connection.execute(
                             text(
-                                "INSERT INTO hospitals (id, name, code) "
-                                "VALUES (:id, :name, :code)"
+                                "INSERT INTO hospitals (id, name, code) VALUES (:id, :name, :code)"
                             ),
                             {
                                 "id": selected_hospital_id,
@@ -103,6 +102,67 @@ async def _create_admin(
     finally:
         await engine.dispose()
     return selected_hospital_id
+
+
+async def _reencrypt(*, hospital_id: UUID | None, apply: bool, batch: int) -> int:
+    """Re-seal records still encrypted with an older data key (docs/runbooks/key-rotation.md)."""
+    from app.rekey import reencrypt_hospital
+
+    settings = get_settings()
+    ring = settings.app_data_keyring
+    if hospital_id is not None:
+        hospital_ids = [hospital_id]
+    else:
+        # The worker role may list every hospital; each is then processed in its own scope.
+        lister = create_async_engine(settings.worker_database_url or settings.database_url)
+        try:
+            async with lister.connect() as connection:
+                hospital_ids = list(
+                    (await connection.execute(text("SELECT id FROM hospitals ORDER BY id")))
+                    .scalars()
+                    .all()
+                )
+        finally:
+            await lister.dispose()
+    engine = create_async_engine(settings.migrations_database_url)
+    unreadable = 0
+    try:
+        for current in hospital_ids:
+            print(f"Hospital {current} (current key {ring.current_id}):")
+            async with engine.begin() as connection:
+                await set_hospital_scope(connection, current)
+                reports = await reencrypt_hospital(
+                    connection,
+                    hospital_id=current,
+                    ring=ring,
+                    apply=apply,
+                    batch=batch,
+                    progress=print,
+                )
+                unreadable += sum(report.unreadable for report in reports.values())
+                if apply:
+                    await connection.execute(
+                        text(
+                            "INSERT INTO audit_log (id, hospital_id, actor_type, action, "
+                            "resource_type, request_id, meta) VALUES (:id, :hospital_id, "
+                            "'system', 'key_rotation.reencrypted', 'hospital', 'operator-cli', "
+                            "CAST(:meta AS jsonb))"
+                        ),
+                        {
+                            "id": uuid7(),
+                            "hospital_id": current,
+                            "meta": json.dumps(
+                                {
+                                    "key_id": ring.current_id,
+                                    "resealed": sum(r.resealed for r in reports.values()),
+                                    "unreadable": sum(r.unreadable for r in reports.values()),
+                                }
+                            ),
+                        },
+                    )
+    finally:
+        await engine.dispose()
+    return unreadable
 
 
 async def _reset_mfa(*, hospital_id: UUID, email: str, operator: str) -> UUID:
@@ -341,10 +401,13 @@ async def _demo_checkin(*, hospital_id: UUID, label: str) -> str:
     try:
         async with engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
-            if await connection.scalar(
-                text("SELECT id FROM hospitals WHERE id = :hospital_id"),
-                {"hospital_id": hospital_id},
-            ) is None:
+            if (
+                await connection.scalar(
+                    text("SELECT id FROM hospitals WHERE id = :hospital_id"),
+                    {"hospital_id": hospital_id},
+                )
+                is None
+            ):
                 raise SystemExit("Hospital does not exist; run seed-demo first.")
             point = (
                 (
@@ -549,8 +612,8 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                         await connection.execute(
                             text(
                                 "UPDATE users SET department_id = :department_id "
-                            "WHERE hospital_id = :hospital_id AND lower(email) = :email "
-                            "AND role = 'doctor' AND deleted_at IS NULL"
+                                "WHERE hospital_id = :hospital_id AND lower(email) = :email "
+                                "AND role = 'doctor' AND deleted_at IS NULL"
                             ),
                             {
                                 "department_id": department_id,
@@ -1381,6 +1444,13 @@ def main() -> None:
         action="store_true",
         help="Start with no departments (the administrator creates them)",
     )
+    reencrypt = commands.add_parser(
+        "reencrypt",
+        help="Re-seal records with the current data key after a rotation (dry run by default)",
+    )
+    reencrypt.add_argument("--hospital-id", type=UUID)
+    reencrypt.add_argument("--apply", action="store_true", help="Write the re-sealed values")
+    reencrypt.add_argument("--batch", type=int, default=500)
     reset_mfa = commands.add_parser(
         "reset-mfa",
         help="Break-glass: remove a staff member's two-step sign-in (audited)",
@@ -1462,18 +1532,14 @@ def main() -> None:
         return
     if args.command == "demo-kiosk":
         demo_hospital = stable_uuid7("opd-saathi:demo-nagpur-government")
-        code = asyncio.run(
-            _create_kiosk(hospital_id=demo_hospital, label="Demo kiosk", reuse=True)
-        )
+        code = asyncio.run(_create_kiosk(hospital_id=demo_hospital, label="Demo kiosk", reuse=True))
         base = str(args.web_url).split(",")[0].rstrip("/")
         print("Open this link once on the kiosk device to activate it:")
         print(f"  {base}/kiosk?activate={code}")
         return
     if args.command == "demo-checkin":
         demo_hospital = stable_uuid7("opd-saathi:demo-nagpur-government")
-        code = asyncio.run(
-            _demo_checkin(hospital_id=demo_hospital, label="Waiting hall phone QR")
-        )
+        code = asyncio.run(_demo_checkin(hospital_id=demo_hospital, label="Waiting hall phone QR"))
         base = str(args.web_url).split(",")[0].rstrip("/")
         print("Phones on the hospital Wi-Fi check in at:")
         print(f"  {base}/m/{code}")
@@ -1535,6 +1601,18 @@ def main() -> None:
             "Next: sign in at /staff, then use Settings to add staff accounts and to "
             "register each kiosk (each one gets its own activation code)."
         )
+        return
+    if args.command == "reencrypt":
+        unreadable = asyncio.run(
+            _reencrypt(hospital_id=args.hospital_id, apply=args.apply, batch=args.batch)
+        )
+        if not args.apply:
+            print("Dry run: nothing was changed. Run again with --apply to re-seal.")
+        if unreadable:
+            raise SystemExit(
+                f"{unreadable} value(s) could not be read with the keys in the ring. Do not "
+                "retire any key until they are explained (docs/runbooks/key-rotation.md)."
+            )
         return
     if args.command == "reset-mfa":
         if len(args.operator.strip()) < 3:
