@@ -13,7 +13,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
 from app.api.v1.auth import (
-    SESSION_USER_COLUMNS,
     _clear_refresh_cookie,
     _error,
     _limit_request,
@@ -67,7 +66,9 @@ async def _account(connection: Any, hospital_id: UUID, user_id: UUID) -> dict[st
         (
             await connection.execute(
                 text(
-                    f"SELECT {SESSION_USER_COLUMNS}, password_hash, mfa_secret_enc, "
+                    "SELECT id, hospital_id, role, name, email, is_active, "
+                    "must_change_password, mfa_enabled_at, "
+                    "password_hash, mfa_secret_enc, "
                     "mfa_last_step, mfa_recovery_hashes, password_changed_at, "
                     "(SELECT name FROM hospitals WHERE id = :hospital_id) AS hospital_name "
                     "FROM users WHERE hospital_id = :hospital_id AND id = :user_id "
@@ -186,7 +187,10 @@ async def change_password(
             # End the old access tokens before issuing the new one.
             await end_staff_sessions(request, user_id)
             session = await start_session(
-                connection, request, response, {**account, "must_change_password": False}
+                connection,
+                request,
+                response,
+                {**account, "must_change_password": False},  # nosec B105 - a flag
             )
             await audit(
                 connection,
@@ -218,9 +222,7 @@ async def start_mfa_setup(
         await set_hospital_scope(connection, hospital_id)
         account = await _account(connection, hospital_id, user_id)
         if account["mfa_enabled_at"] is not None:
-            raise _error(
-                409, "MFA_ALREADY_ON", "Two-step sign-in is on", "It is already set up."
-            )
+            raise _error(409, "MFA_ALREADY_ON", "Two-step sign-in is on", "It is already set up.")
         await connection.execute(
             text(
                 "UPDATE users SET mfa_secret_enc = :secret WHERE hospital_id = :hospital_id "

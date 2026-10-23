@@ -30,7 +30,7 @@ class TokenPurpose(StrEnum):
 class Restriction(StrEnum):
     """What a staff member must do before their session can do anything else."""
 
-    PASSWORD_CHANGE = "password_change"
+    PASSWORD_CHANGE = "password_change"  # nosec B105 - a step name, not a password
     MFA_SETUP = "mfa_setup"
 
 

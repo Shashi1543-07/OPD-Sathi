@@ -106,10 +106,6 @@ def _error(
 
 _LEGACY_REFRESH_COOKIE = "osa_refresh"
 MFA_CHALLENGE_MINUTES = 5
-# Columns every session decision reads (restrictions, MFA, the profile returned).
-SESSION_USER_COLUMNS = (
-    "id, hospital_id, role, name, email, is_active, must_change_password, mfa_enabled_at"
-)
 
 
 def device_label(user_agent: str) -> str:
@@ -532,8 +528,10 @@ async def verify_mfa(
             (
                 await connection.execute(
                     text(
-                        f"SELECT {SESSION_USER_COLUMNS}, failed_logins, locked_until, "
-                        "mfa_secret_enc, mfa_last_step, mfa_recovery_hashes FROM users "
+                        "SELECT id, hospital_id, role, name, email, is_active, "
+                        "must_change_password, mfa_enabled_at, "
+                        "failed_logins, locked_until, mfa_secret_enc, mfa_last_step, "
+                        "mfa_recovery_hashes FROM users "
                         "WHERE hospital_id = :hospital_id AND id = :user_id "
                         "AND deleted_at IS NULL FOR UPDATE"
                     ),
@@ -629,12 +627,8 @@ async def verify_mfa(
             "Too many failed sign-in attempts. Wait 15 minutes before trying again.",
         )
     if session is None:
-        raise _error(
-            401, "INVALID_MFA_CODE", "Code not accepted", "Check the code and try again."
-        )
-    await request.app.state.redis_state.set(
-        used_key, "1", ex=(MFA_CHALLENGE_MINUTES + 1) * 60
-    )
+        raise _error(401, "INVALID_MFA_CODE", "Code not accepted", "Check the code and try again.")
+    await request.app.state.redis_state.set(used_key, "1", ex=(MFA_CHALLENGE_MINUTES + 1) * 60)
     return session
 
 
@@ -736,7 +730,9 @@ async def refresh(
                     (
                         await connection.execute(
                             text(
-                                f"SELECT {SESSION_USER_COLUMNS} FROM users "
+                                "SELECT id, hospital_id, role, name, email, is_active, "
+                                "must_change_password, mfa_enabled_at "
+                                "FROM users "
                                 "WHERE id = :user_id"
                             ),
                             {"user_id": token["user_id"]},
@@ -1067,9 +1063,7 @@ async def activate_kiosk(
             "Ask an administrator for a new one.",
         )
     return {
-        **_kiosk_token_response(
-            settings, kiosk_id=claims["id"], hospital_id=claims["hospital_id"]
-        ),
+        **_kiosk_token_response(settings, kiosk_id=claims["id"], hospital_id=claims["hospital_id"]),
         "kiosk_id": str(claims["id"]),
         "hospital_name": claims["hospital_name"],
         "device_secret": device_secret,

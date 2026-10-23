@@ -439,7 +439,7 @@ async def _create(
         payload = {
             **payload,
             "password_hash": hash_password(payload.pop("password")),
-            "must_change_password": True,
+            "must_change_password": True,  # nosec B105 - a flag, not a password
         }
     if device_kiosk:
         payload = {

@@ -2399,7 +2399,7 @@ class AdminRepository:
                 {
                     "id": resource_id,
                     "hospital_id": hospital_id,
-                    "must_change_password": False,
+                    "must_change_password": False,  # nosec B105 - a flag
                     **values,
                 },
             )
