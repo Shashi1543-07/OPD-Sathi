@@ -72,3 +72,11 @@ status request on the idle stack takes 38 ms (median, 68 patients waiting), so t
 came from the load generator and stack competing for the VM's memory and CPU. Capacity per
 server size is measured on the nightly runner and on staging hardware before the pilot
 (task 7.8.1), and recorded here.
+
+**GitHub runner (23 Oct 2026; 4 vCPU, 16 GB; stack and k6 on the same machine), 15 minutes at
+300 check-ins an hour, 20 boards, 200 status pages, 8 doctors:** all thresholds met. 18,102
+requests, 0.02% failed; 135 tokens issued, none twice; no worker error. p95 per step: check-in
+29 ms, staff board 16 ms, call next 165 ms, status page 959 ms. The API's own p95 was at most
+194 ms on every route (sign-in, which hashes the password). Memory and connections steady:
+API 224 to 244 MiB, PostgreSQL 53 to 96 MiB, 12 to 17 database connections. This is the
+district-hospital peak on a server smaller than the one recommended for it.
