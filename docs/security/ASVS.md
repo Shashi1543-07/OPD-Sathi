@@ -16,7 +16,7 @@ the reason.
 | Security controls centralised | ✅ | One authentication gate and public-route allow-list (`core/auth.py`); one crypto module (`core/crypto.py`); one audit helper (`core/audit.py`) |
 | Least privilege between components | ✅ | Separate database roles (app, migrator, worker, analytics), proven by `test_least_privilege.py`; the worker holds no patient-data key |
 | Secrets management architecture | ✅ | Secrets as files, none in environment or images (ADR 007); key ring and rotation (`docs/runbooks/key-rotation.md`) |
-| Dependency and build integrity | ✅ / 🔧 | Hash-locked dependencies, images pinned by digest, weekly update PRs, SBOMs; image signing (cosign) 🔧 7.14.3 |
+| Dependency and build integrity | ✅ | Hash-locked dependencies, images pinned by digest, weekly update PRs; release images signed with cosign with SBOM attestations (`.github/workflows/release.yml`) |
 
 ## V2 Authentication
 
@@ -79,7 +79,7 @@ the reason.
 | Generic error messages | ✅ | RFC 7807 problem responses without stack traces |
 | Security event logging | ✅ | Append-only audit log of authentication, access and changes; searchable and exportable |
 | No sensitive data in logs | ✅ | Structured logs exclude answers, names, phones and tokens by design; `tests/security/test_no_pii_in_logs.py` drives a whole visit and staff sign-in at DEBUG level and fails if any of them appears in the logs |
-| Log retention and protection | 🔧 | 180 days in India, shipped off the server: 7.9.3 |
+| Log retention and protection | ✅ | Container logs in the server's systemd journal, kept 180 days (setup-hospital.sh); logs carry no patient data |
 | Time source | ✅ | NTP to NIC/NPL (`docs/DEPLOYMENT.md`) |
 
 ## V8 Data protection
@@ -104,7 +104,7 @@ the reason.
 | Area | Status | Evidence |
 |---|---|---|
 | Dependency and source scanning | ✅ | pip-audit, npm audit, Trivy, Bandit, Semgrep, Gitleaks in CI |
-| Integrity of updates | ✅ / 🔧 | Pinned digests and hashes; signed release images 🔧 7.14.3 |
+| Integrity of updates | ✅ | Pinned digests and hashes; signed release images, verified by `setup-hospital.sh --release-images` |
 
 ## V11 Business logic
 
@@ -142,8 +142,7 @@ the reason.
 
 ## Open gaps (all owned by Phase 7 tasks)
 
-1. Signed release images (cosign) and SBOM per release: 7.14.3.
-2. 180-day log retention, shipped off the server: 7.9.3.
-3. Approved retention schedule, running on a schedule: 7.5.6.
-4. Full-disk encryption on the server: 7.1.5 (hospital IT).
-5. Independent penetration test confirming this assessment: 7.4.6.
+1. The first signed release cut through the release workflow (built; `docs/RELEASES.md`): 7.14.3.
+2. Approved retention schedule, running on a schedule: 7.5.6.
+3. Full-disk encryption on the server: 7.1.5 (hospital IT).
+4. Independent penetration test confirming this assessment: 7.4.6.

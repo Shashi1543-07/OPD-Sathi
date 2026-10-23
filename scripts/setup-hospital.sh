@@ -182,6 +182,19 @@ if command -v timedatectl >/dev/null; then
   fi
 fi
 
+step "Logs kept 180 days"
+# Containers log to the systemd journal (docker-compose.prod.yml); keep it on disk for 180
+# days (CERT-In, task 7.9.3), within a size cap. Logs carry no patient data by design.
+install -d -m 0755 /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/opd-saathi.conf <<JOURNAL
+[Journal]
+Storage=persistent
+MaxRetentionSec=180day
+SystemMaxUse=${OSA_LOG_MAX:-20G}
+JOURNAL
+systemctl restart systemd-journald
+echo "  journal kept for 180 days (at most ${OSA_LOG_MAX:-20G})"
+
 step "Alerts to hospital IT"
 ALERTMANAGER_CONFIG=/etc/opd-saathi/alertmanager.yml
 if [[ ! -s "$ALERTMANAGER_CONFIG" ]]; then

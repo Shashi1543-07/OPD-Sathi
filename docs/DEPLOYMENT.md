@@ -134,7 +134,7 @@ From `/opt/opd-saathi`, with `C="docker compose -f docker-compose.yml -f docker-
 | Task | How |
 |---|---|
 | Status | `docker compose -f docker-compose.yml -f docker-compose.prod.yml ps` |
-| Logs (no patient data by design) | `... logs --tail 200 api worker web` |
+| Logs (no patient data by design; kept 180 days in the journal) | `$C logs --tail 200 api worker web`, or older: `journalctl SYSLOG_IDENTIFIER=opd-saathi/<container> --since "2026-11-01"` |
 | Restart | `sudo systemctl restart opd-saathi` |
 | Back up now | `$C exec backup backup-loop run full` (and a logical dump: `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml BACKUP_DIR=/var/backups/opd-saathi scripts/backup.sh`) |
 | Restore | `docs/runbooks/restore.md` |

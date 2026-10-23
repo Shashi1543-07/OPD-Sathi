@@ -24,9 +24,13 @@ x-hardened: &hardened
   security_opt: ["no-new-privileges:true"]
   cap_drop: [ALL]
   read_only: true
+  # Logs (no patient data by design; tests/security/test_no_pii_in_logs.py) go to the host's
+  # systemd journal, kept 180 days by setup-hospital.sh (task 7.9.3; CERT-In). Read them with
+  # `journalctl SYSLOG_IDENTIFIER=opd-saathi/<container> --since ...`. OSA_LOG_DRIVER=json-file
+  # where there is no journald (Docker Desktop, the local smoke test).
   logging:
-    driver: json-file
-    options: { max-size: "20m", max-file: "10" }
+    driver: ${OSA_LOG_DRIVER:-journald}
+    options: { tag: "opd-saathi/{{.Name}}" }
 
 # Secrets the API and worker read through <NAME>_FILE (app/config.py). The plain variables are
 # blanked so no value from .env can reach the container's environment.

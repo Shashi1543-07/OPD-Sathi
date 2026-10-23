@@ -66,6 +66,8 @@ OSA_CERTS_DIR=$(host_path "$CERTS")
 OSA_SUBNET=172.31.250.0/24
 WEB_PROXY_IP=172.31.250.10
 OSA_ALERTMANAGER_CONFIG=$(host_path "$WORK/alertmanager.yml")
+# Production logs to journald; Docker Desktop has none, CI's runner does.
+OSA_LOG_DRIVER=${OSA_LOG_DRIVER:-json-file}
 ENV
 # Smoke-test ports only; a hospital install publishes 443 and 80.
 cat > "$WORK/ports.yml" <<YAML

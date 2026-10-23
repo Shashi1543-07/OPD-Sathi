@@ -151,6 +151,9 @@ jobs:
           cache-dependency-path: services/api/requirements.lock.txt
       - run: pip install --require-hashes -r services/api/requirements.lock.txt
       - run: bash scripts/prod_smoke.sh
+        env:
+          # As on a hospital server: container logs to the systemd journal.
+          OSA_LOG_DRIVER: journald
 
   # The images as shipped: scanned for fixable high and critical vulnerabilities, with a
   # CycloneDX SBOM for each (tasks 7.4.3, 7.14.3). Unfixed upstream issues are reported in the
