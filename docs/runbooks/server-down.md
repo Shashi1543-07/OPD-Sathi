@@ -50,11 +50,12 @@ page works. Patients must still be registered, seen in order, and recognised if 
 
 ## The paper pack (kept at every OPD desk)
 
-- Printed intake forms in English, Hindi and Marathi (from `docs/paper/`), at least one day's
-  patients for the department.
-- The six danger-sign questions on a laminated card.
-- A numbered token roll per department, starting at P-001.
-- "Check-in is on paper today" signs for the kiosks.
+- Printed intake forms in English, Hindi and Marathi (`docs/paper/intake-form-en.html`,
+  `-hi`, `-mr`; open in a browser and print on A4), at least one day's patients for the
+  department. They ask the kiosk's own danger-sign and core questions.
+- The six danger-sign questions on a laminated card (the boxed section of the form).
+- A numbered token roll per department, starting at P-001 (`docs/paper/token-roll.html`).
+- "Check-in is on paper today" signs for the kiosks (`docs/paper/kiosk-sign.html`).
 - This runbook, and IT's phone numbers.
 
 The pack is checked every month by the OPD in-charge, and rehearsed once before go-live and

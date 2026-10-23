@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<title>ओपीडी नोंदणी फॉर्म (कागद)</title>
+<style>
+@page { size: A4; margin: 12mm; }
+* { box-sizing: border-box; }
+body { font: 11pt/1.35 "Noto Sans", "Noto Sans Devanagari", "Nirmala UI", Mangal, sans-serif;
+  color: #000; background: #fff; margin: 0; }
+h1 { font-size: 16pt; margin: 0 0 2pt; } h2 { font-size: 11.5pt; margin: 6pt 0 2pt;
+  border-bottom: 1.5pt solid #000; padding-bottom: 1pt; }
+.note { font-size: 9pt; margin: 0 0 6pt; }
+.head, .row { display: flex; gap: 10pt; flex-wrap: wrap; }
+.field { flex: 1 1 30%; min-width: 45mm; border-bottom: 1pt solid #000; padding-top: 10pt;
+  font-size: 9pt; }
+.danger { border: 2pt solid #000; padding: 4pt 6pt; }
+.danger strong { display: block; margin-bottom: 3pt; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 3pt 2pt; border-bottom: 0.5pt solid #666; vertical-align: top; }
+td.box { width: 22mm; white-space: nowrap; }
+.tick { display: inline-block; width: 10pt; height: 10pt; border: 1pt solid #000;
+  margin-right: 4pt; vertical-align: -1pt; }
+.options { columns: 2; column-gap: 12pt; }
+.options > span { display: block; break-inside: avoid; padding: 1pt 0; }
+.scale span { display: inline-block; width: 15pt; height: 15pt; border: 1pt solid #000;
+  text-align: center; margin-right: 2pt; font-size: 9pt; line-height: 15pt; }
+.lines { border-bottom: 1pt solid #000; height: 14pt; }
+.nurse { border: 1pt dashed #000; padding: 4pt 6pt; margin-top: 8pt; }
+.footer { font-size: 7.5pt; margin-top: 6pt; color: #333; }
+.roll { display: grid; grid-template-columns: repeat(5, 1fr); }
+.roll div { border: 1pt dashed #000; height: 18mm; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; font-size: 15pt; font-weight: 700; }
+.roll small { font-size: 7pt; font-weight: 400; }
+.sign { text-align: center; padding-top: 30mm; }
+.sign h1 { font-size: 30pt; margin: 6mm 0 2mm; } .sign p { font-size: 16pt; margin: 0 0 14mm; }
+</style>
+</head>
+<body>
+
+<h1>ओपीडी नोंदणी फॉर्म (कागद)</h1>
+<p class="note">फक्त संगणक प्रणाली बंद असताना. कर्मचारी नंतर प्रणालीत नोंद करतील.</p>
+<div class="head">
+  <div class="field">कागदी टोकन: P-______</div>
+  <div class="field">विभाग</div>
+  <div class="field">येण्याची तारीख आणि वेळ</div>
+</div>
+<h2>1 · तुम्हाला आत्ता यापैकी काही होत आहे का?</h2>
+<div class="danger"><strong>आधी विचारा. कोणत्याही प्रश्नाचे उत्तर होय असल्यास रुग्णाला लगेच परिचारिकेकडे न्या.</strong>
+<table><tr><td>छातीत त्रास</td><td class="box"><span class="tick"></span>होय &nbsp; <span class="tick"></span>नाही</td></tr><tr><td>श्वास घेण्यास त्रास</td><td class="box"><span class="tick"></span>होय &nbsp; <span class="tick"></span>नाही</td></tr><tr><td>खूप रक्तस्राव होणे</td><td class="box"><span class="tick"></span>होय &nbsp; <span class="tick"></span>नाही</td></tr><tr><td>बेशुद्ध पडणे किंवा जागे राहता न येणे</td><td class="box"><span class="tick"></span>होय &nbsp; <span class="tick"></span>नाही</td></tr><tr><td>अचानक अशक्तपणा किंवा बोलण्यात त्रास</td><td class="box"><span class="tick"></span>होय &nbsp; <span class="tick"></span>नाही</td></tr><tr><td>आत्ता झटका येणे</td><td class="box"><span class="tick"></span>होय &nbsp; <span class="tick"></span>नाही</td></tr></table></div>
+<h2>2 · रुग्णाविषयी</h2>
+<div class="row">
+  <div class="field" style="flex-basis:100%">रुग्णाचे पूर्ण नाव</div>
+  <div class="field">वय (वर्षांमध्ये)</div>
+  <div class="field">लिंग: <span class="tick"></span>स्त्री &nbsp; <span class="tick"></span>पुरुष &nbsp; <span class="tick"></span>इतर</div>
+  <div class="field">मोबाईल क्रमांक (पर्यायी)</div>
+  <div class="field">ओपीडी क्रमांक (उदा. 26-000123)</div>
+</div>
+<h2>3 · आज तुम्ही कोणत्या मुख्य त्रासासाठी आला आहात?</h2>
+<p class="note">मुख्य त्रास (एकावर खूण करा किंवा लिहा)</p>
+<div class="options"><span><span class="tick"></span>ताप</span><span><span class="tick"></span>खोकला</span><span><span class="tick"></span>श्वास घेण्यास त्रास</span><span><span class="tick"></span>पोटदुखी</span><span><span class="tick"></span>उलट्या किंवा जुलाब</span><span><span class="tick"></span>डोकेदुखी</span><span><span class="tick"></span>अंगदुखी किंवा सांधेदुखी</span><span><span class="tick"></span>त्वचेवर पुरळ किंवा खाज</span><span><span class="tick"></span>लघवी करताना जळजळ</span><span><span class="tick"></span>अशक्तपणा किंवा थकवा</span><span><span class="tick"></span>दुखापत किंवा पडणे</span><span><span class="tick"></span>इतर: ____________</span></div>
+<h2>4 · हा त्रास कधीपासून आहे?</h2>
+<div class="options"><span><span class="tick"></span>आजपासून</span><span><span class="tick"></span>1 ते 3 दिवस</span><span><span class="tick"></span>4 ते 7 दिवस</span><span><span class="tick"></span>1 ते 4 आठवडे</span><span><span class="tick"></span>एका महिन्यापेक्षा जास्त</span></div>
+<h2>5 · आत्ता हा त्रास किती आहे? 0 म्हणजे अजिबात नाही, 10 म्हणजे सर्वात जास्त.</h2>
+<div class="scale"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+<h2>6 · डॉक्टरांना आणखी काही सांगायचे असल्यास</h2>
+<div class="lines"></div><div class="lines"></div>
+<div class="nurse"><strong>परिचारिकेसाठी</strong>
+<div class="row">
+  <div class="field">तातडी:
+    <span class="tick"></span>नेहमीचे
+    <span class="tick"></span>प्राधान्य
+    <span class="tick"></span>तातडीचे</div>
+  <div class="field">प्रणालीत नोंदवलेला टोकन</div>
+  <div class="field">नोंद करणारे</div>
+</div></div>
+<p class="footer">OPD Saathi · docs/paper · scripts/make_paper_forms.py · mr</p>
+
+</body>
+</html>
