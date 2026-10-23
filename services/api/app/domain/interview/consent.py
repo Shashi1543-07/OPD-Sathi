@@ -4,7 +4,8 @@ import hashlib
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from app.domain.interview.bank import REVIEW_STATUS, Language
+from app.domain.interview.bank import Language
+from app.domain.review import check_review
 
 CONSENT_DIRECTORY = Path(__file__).with_name("consent")
 # "care": the history is collected for the clinic team (required to continue).
@@ -26,10 +27,22 @@ def get_consent_copy(language: Language, purpose: ConsentPurpose = "care") -> Co
     parts = raw.split("---", maxsplit=2)
     if len(parts) != 3:
         raise ValueError("consent copy must contain front matter")
-    metadata = dict(line.split(":", maxsplit=1) for line in parts[1].splitlines() if ":" in line)
-    if metadata.get("review_status", "").strip() != REVIEW_STATUS:
-        raise ValueError("consent copy must remain marked for clinician review")
-    version = metadata.get("version", "").strip()
+    metadata = {
+        key.strip(): value.strip()
+        for key, value in (
+            line.split(":", maxsplit=1) for line in parts[1].splitlines() if ":" in line
+        )
+    }
+    version = metadata.get("version", "")
+    # Reviewers are separated by ";" (their names carry qualifications with commas).
+    record = {
+        "reviewed_by": [
+            name for name in metadata.get("reviewed_by", "").split(";") if name.strip()
+        ],
+        "reviewed_on": metadata.get("reviewed_on"),
+        "content_version": version,
+    }
+    check_review(f"consent/{name}", metadata.get("review_status"), record)
     text = parts[2].strip()
     if not version or not text or len(text.split()) > 60:
         raise ValueError("consent copy must have a version and contain at most 60 words")
@@ -46,8 +59,7 @@ def load_danger_tiles() -> dict[str, dict[Language, str]]:
 
     path = Path(__file__).with_name("bank") / "danger_tiles.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("review_status") != REVIEW_STATUS:
-        raise ValueError("danger tiles must remain marked for clinician review")
+    check_review("bank/danger_tiles.json", payload.get("review_status"), payload.get("review"))
     tiles = payload.get("tiles")
     if not isinstance(tiles, dict) or not tiles:
         raise ValueError("danger tile list is empty")

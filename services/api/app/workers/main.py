@@ -1,6 +1,7 @@
 """Queue outbox relay and Redis read-model repair worker."""
 
 import asyncio
+import time
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
@@ -19,6 +20,7 @@ from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import queue_score
 from app.notifications.providers import build_notification_provider
 from app.notifications.queue import deliver_pending_once, record_queue_event_intents
+from app.workers.health import STALE_AFTER_SECONDS, heartbeat_key
 
 logger = structlog.get_logger(__name__)
 
@@ -286,13 +288,20 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
 
 
 async def relay_queue_outbox(ctx: dict[str, Any]) -> None:
-    async with ctx["engine"].begin() as connection:
-        count = await relay_once(connection, ctx["redis"], settings=ctx["settings"])
-    async with ctx["engine"].begin() as connection:
-        sent, failed = await deliver_pending_once(
-            connection,
-            settings=ctx["settings"],
-            provider=ctx["notification_provider"],
+    try:
+        async with ctx["engine"].begin() as connection:
+            count = await relay_once(connection, ctx["redis"], settings=ctx["settings"])
+        async with ctx["engine"].begin() as connection:
+            sent, failed = await deliver_pending_once(
+                connection,
+                settings=ctx["settings"],
+                provider=ctx["notification_provider"],
+            )
+    finally:
+        # The container health check (app.workers.health) reads this: a tick that ran,
+        # even one that failed, shows the worker's loop is alive.
+        await ctx["redis"].set(
+            heartbeat_key(ctx["settings"].app_env), str(time.time()), ex=STALE_AFTER_SECONDS * 5
         )
     if count:
         logger.info("queue_outbox_processed", count=count)

@@ -85,6 +85,8 @@ $webUrl = "http://localhost:$WebPort"
 $env:WEB_PORT = "$WebPort"
 $env:WEB_ORIGIN = "http://localhost:5173,http://127.0.0.1:5173,$webUrl,http://127.0.0.1:$WebPort"
 $env:PROVIDER_MODE = "standard"
+# The demo signs in without two-step codes; real installations require them for administrators.
+$env:MFA_REQUIRED_ROLES = "none"
 
 # Patients scan the token QR code with their phone, which cannot open "localhost". Use this
 # PC's Wi-Fi/LAN address for the QR link and let phones on the same network reach the app.

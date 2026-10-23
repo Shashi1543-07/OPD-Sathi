@@ -8684,3 +8684,176 @@
   font-weight: 600;
   margin-top: var(--space-3);
 }
+
+/* ---- Staff account: password, two-step sign-in, sessions (Phase 7, 7.3) ---- */
+.acct {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 44rem;
+}
+.acct-who {
+  color: var(--text-muted);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.acct-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.acct-card h3 {
+  margin: 0;
+}
+.acct-form {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 26rem;
+}
+.acct-form label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.acct-form input,
+.acct-form select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0 var(--space-3);
+}
+.acct-form small {
+  color: var(--text-muted);
+}
+.acct-form .ui-button {
+  justify-self: start;
+}
+.acct-error {
+  color: var(--urgent-ink);
+  font-weight: 600;
+  margin: 0;
+}
+.acct-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.acct-check {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-2);
+}
+.acct-qr {
+  background: #fff;
+  border-radius: var(--radius-md);
+  justify-self: start;
+  padding: var(--space-2);
+}
+.acct-secret code,
+.acct-code-list code,
+.adm-code code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: var(--font-size-md);
+  overflow-wrap: anywhere;
+}
+.acct-code-list {
+  display: grid;
+  gap: var(--space-1) var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  margin: 0;
+  padding-left: 1.5rem;
+}
+.acct-sessions {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.acct-sessions li {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+  padding-top: var(--space-2);
+}
+.acct-sessions li > span {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.acct-sessions small {
+  color: var(--text-muted);
+}
+.adm-flag {
+  background: var(--priority-tint);
+  color: var(--priority-ink);
+  margin-left: var(--space-1);
+}
+.adm-code {
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+  margin: 0;
+  padding: var(--space-3);
+  text-align: center;
+}
+@media print {
+  .staff-sidebar,
+  .staff-topbar,
+  .acct-card:not(:has(.acct-codes)),
+  .acct-actions {
+    display: none !important;
+  }
+}
+
+/* ---- Audit log (Phase 7, 7.3.10) ---- */
+.audit-filters {
+  align-items: end;
+  display: grid;
+  gap: var(--space-2) var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+}
+.audit-filters label {
+  color: var(--text-muted);
+  display: grid;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  gap: var(--space-1);
+}
+.audit-filters input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: inherit;
+  min-height: 2.5rem;
+  min-width: 0;
+  padding: 0 var(--space-2);
+}
+.audit-filters .acct-actions {
+  grid-column: 1 / -1;
+}
+.audit-table code {
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+.audit-id {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--font-size-xs);
+  margin-left: var(--space-1);
+  padding: 0.1rem 0.35rem;
+}

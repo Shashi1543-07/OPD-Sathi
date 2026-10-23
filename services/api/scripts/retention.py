@@ -161,7 +161,7 @@ async def _process_hospital(
         for patient_id in candidates:
             anonymised_name = encrypt_field(
                 "Anonymous",
-                key=settings.app_data_key_bytes,
+                key=settings.app_data_keyring,
                 associated_data=f"patients:name_enc:{patient_id}",
             )
             await connection.execute(

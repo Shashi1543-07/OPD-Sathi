@@ -131,6 +131,11 @@ ADMIN_PROBES = (
     Probe("POST", "/admin/kiosks/{resource}/checkin-link", ("admin",)),
     Probe("DELETE", "/admin/kiosks/{resource}", ("admin",)),
     Probe("DELETE", "/admin/users/{resource}", ("admin",)),
+    Probe("POST", "/admin/users/{resource}/password-reset", ("admin",)),
+    Probe("POST", "/admin/users/{resource}/unlock", ("admin",)),
+    Probe("POST", "/admin/users/{resource}/mfa-reset", ("admin",)),
+    Probe("GET", "/admin/users/{resource}/sessions", ("admin",)),
+    Probe("POST", "/admin/users/{resource}/sessions/end", ("admin",)),
     Probe("DELETE", "/admin/departments/{resource}", ("admin",)),
 )
 # A patient's own session: the patient token names exactly one visit.
@@ -338,6 +343,11 @@ async def test_another_hospital_cannot_reach_any_record() -> None:
             targets = {
                 "/admin/departments/{resource}": str(hospital.departments["ORTHO"]),
                 "/admin/users/{resource}": str(hospital.users["nurse"]),
+                "/admin/users/{resource}/password-reset": str(hospital.users["nurse"]),
+                "/admin/users/{resource}/unlock": str(hospital.users["nurse"]),
+                "/admin/users/{resource}/mfa-reset": str(hospital.users["nurse"]),
+                "/admin/users/{resource}/sessions": str(hospital.users["nurse"]),
+                "/admin/users/{resource}/sessions/end": str(hospital.users["nurse"]),
                 "/admin/kiosks/{resource}": str(hospital.kiosk_id),
                 "/admin/kiosks/{resource}/activation-code": str(hospital.kiosk_id),
                 "/admin/kiosks/{resource}/checkin-link": point.json()["id"],

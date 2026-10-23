@@ -10,8 +10,17 @@ ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 RUN npx vite build
 
-FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+# Runs as an unprivileged user (uid 101) and listens on 8080; production mounts
+# infra/web/nginx.tls.conf as default.conf and serves HTTPS on 8443.
+FROM nginxinc/nginx-unprivileged:1.30.6-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03
+# Alpine security updates published since the base image was built.
+USER root
+RUN apk upgrade --no-cache
 COPY infra/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY infra/web/security-headers.conf /etc/nginx/conf.d/security-headers.inc
+COPY infra/web/api-proxy.inc /etc/nginx/conf.d/api-proxy.inc
+COPY infra/web/tls-headers.inc /etc/nginx/conf.d/tls-headers.inc
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+# Explicit, so a base-image change can never run the server as root.
+USER 101
+EXPOSE 8080 8443

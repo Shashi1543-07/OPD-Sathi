@@ -1,21 +1,7 @@
-fastapi
-gunicorn
-uvicorn-worker
-uvicorn[standard]<0.54
-pydantic-settings
-structlog
-sqlalchemy[asyncio]
-asyncpg
-alembic
-redis
-arq
-google-genai==2.28.0
-jsonschema
-# IANA time zones for zoneinfo on hosts without a system database (Windows)
-tzdata
+# Everything for development and CI: the run-time set plus test and analysis tools.
+-r requirements-runtime.in
 
 # Test and development tooling
-httpx
 pytest
 pytest-asyncio
 pytest-cov
@@ -24,8 +10,3 @@ ruff
 mypy
 bandit
 pip-audit
-PyJWT
-argon2-cffi
-cryptography
-weasyprint>=70,<71
-pypdf

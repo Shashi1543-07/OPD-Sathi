@@ -84,6 +84,8 @@ async def test_login_normalizes_identity_and_rotates_credentials_on_success(monk
         "failed_logins": 3,
         "locked_until": None,
         "is_active": True,
+        "must_change_password": False,
+        "mfa_enabled_at": None,
     }
     connection = Connection(hospital_id, row)
     request = request_for(connection)
@@ -135,6 +137,8 @@ async def test_login_increments_failed_attempts_without_exposing_account_state(m
         "failed_logins": 1,
         "locked_until": None,
         "is_active": True,
+        "must_change_password": False,
+        "mfa_enabled_at": None,
     }
     connection = Connection(hospital_id, row)
     audits: list[dict[str, object]] = []

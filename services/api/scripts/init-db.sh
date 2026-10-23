@@ -1,6 +1,15 @@
 #!/bin/sh
 set -eu
 
+# A password may come from <NAME>_FILE (production mounts secrets as files, task 7.3.7).
+from_file() {
+  eval "file=\${${1}_FILE:-}"
+  if [ -n "$file" ]; then
+    value=$(cat "$file")
+    export "$1=$value"
+  fi
+}
+for name in OSA_APP_PASSWORD OSA_MIGRATOR_PASSWORD OSA_WORKER_PASSWORD; do from_file "$name"; done
 : "${OSA_APP_PASSWORD:?OSA_APP_PASSWORD must be set}"
 : "${OSA_MIGRATOR_PASSWORD:?OSA_MIGRATOR_PASSWORD must be set}"
 : "${OSA_WORKER_PASSWORD:?OSA_WORKER_PASSWORD must be set}"

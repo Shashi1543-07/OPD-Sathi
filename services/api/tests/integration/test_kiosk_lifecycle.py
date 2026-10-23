@@ -30,6 +30,8 @@ def _database_settings() -> Settings:
         update={
             "database_url": app_url,
             "migrations_database_url": migrator_url,
+            # These flows predate two-step sign-in; test_staff_accounts.py covers it.
+            "mfa_required_roles": "",
             # CI has no .env; use fixed test-only key material when none is configured.
             "app_data_key": base.app_data_key or base64.b64encode(b"d" * 32).decode(),
             "app_hmac_key": base.app_hmac_key or base64.b64encode(b"h" * 32).decode(),

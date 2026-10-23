@@ -15,6 +15,7 @@ import yaml
 
 from app.domain.interview.bank import QUESTIONS
 from app.domain.redflags.engine import RULES, RedFlag
+from app.domain.review import check_review
 
 Level = Literal["routine", "priority", "urgent"]
 WEIGHTS_PATH = Path(__file__).with_name("weights.yaml")
@@ -23,8 +24,9 @@ LEVEL_ORDER: tuple[Level, ...] = ("routine", "priority", "urgent")
 
 def _load(path: Path = WEIGHTS_PATH) -> dict[str, Any]:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict) or raw.get("review_status") != "draft_needs_clinician_review":
-        raise ValueError("triage weights must stay marked draft_needs_clinician_review")
+    if not isinstance(raw, dict):
+        raise ValueError("triage weights must be a mapping")
+    check_review("triage/weights.yaml", raw.get("review_status"), raw.get("review"))
     rule_ids = {rule.id for rule in RULES}
     for key in [*raw["signals"], *raw["option_flags"]]:
         question_id, _, option_id = key.partition(".")

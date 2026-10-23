@@ -178,4 +178,52 @@ describe("Phase 7.6 administrator console", () => {
       ),
     );
   });
+
+  it("resets a password, shows the temporary one once, and shows account flags", async () => {
+    signedInAdmin();
+    const user = userEvent.setup();
+    const request = vi.spyOn(staffAuth, "request").mockImplementation(async (path, init) => {
+      if (path.startsWith("/admin/departments")) return json({ items: [department], next_cursor: null });
+      if (path === "/admin/users?limit=100") {
+        return json({
+          items: [
+            person("admin-1", "Synthetic Administrator", "admin", { mfa_enabled_at: "2026-10-22T10:00:00Z" }),
+            person("doc-1", "Synthetic Doctor", "doctor", {
+              locked_until: new Date(Date.now() + 600_000).toISOString(),
+            }),
+          ],
+          next_cursor: null,
+        });
+      }
+      if (path === "/admin/users/doc-1/password-reset" && init?.method === "POST") {
+        return json({ id: "doc-1", temporary_password: "abcd-efgh-jkmn-pqrs" });
+      }
+      return json({}, 404);
+    });
+    renderConsole();
+
+    const row = (await screen.findByText("Synthetic Doctor")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("Locked")).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: /More actions for Synthetic Doctor/ }));
+    expect(screen.getByRole("button", { name: /Unlock account/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Reset password/ }));
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "Temporary password for Synthetic Doctor",
+    });
+    expect(within(dialog).getByText("abcd-efgh-jkmn-pqrs")).toBeInTheDocument();
+    expect(request).toHaveBeenCalledWith(
+      "/admin/users/doc-1/password-reset",
+      expect.objectContaining({ method: "POST" }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    expect(screen.queryByText("abcd-efgh-jkmn-pqrs")).not.toBeInTheDocument();
+
+    // An administrator's own row offers no reset of their own password or two-step sign-in.
+    const own = screen.getByText("Synthetic Administrator").closest("tr") as HTMLElement;
+    expect(within(own).getByText("Two-step")).toBeInTheDocument();
+    await user.click(within(own).getByRole("button", { name: /More actions for Synthetic Administrator/ }));
+    expect(screen.queryByRole("button", { name: /Reset password/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reset two-step sign-in/ })).not.toBeInTheDocument();
+  });
 });

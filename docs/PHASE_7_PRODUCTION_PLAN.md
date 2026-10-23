@@ -434,13 +434,13 @@ Signed by the medical superintendent or clinical lead, hospital IT, the DPO or l
 
 | Workstream | Tasks | Status |
 |---|---|---|
-| 7.0 Fix what the analysis found | 7.0.1–7.0.6 | not started |
-| 7.1 Production configuration and packaging | 7.1.1–7.1.8 | not started |
-| 7.2 Network, HTTPS and the edge | 7.2.1–7.2.8 | not started |
-| 7.3 Accounts, access and keys | 7.3.1–7.3.10 | not started |
-| 7.4 Security verification | 7.4.1–7.4.9 | not started |
+| 7.0 Fix what the analysis found | 7.0.1–7.0.6 | 7.0.1–7.0.5 done (G0, PR #17); 7.0.6 open |
+| 7.1 Production configuration and packaging | 7.1.1–7.1.8 | 7.1.1–7.1.4, 7.1.6 done (G1); 7.1.5 needs 7.8 results; 7.1.7, 7.1.8 open |
+| 7.2 Network, HTTPS and the edge | 7.2.1–7.2.8 | 7.2.1, 7.2.3–7.2.5, 7.2.7 done (G1); 7.2.2, 7.2.6 with hospital IT; 7.2.8 policy |
+| 7.3 Accounts, access and keys | 7.3.1–7.3.10 | 7.3.1–7.3.10 done (G1); kiosk lockdown hardware with hospital IT |
+| 7.4 Security verification | 7.4.1–7.4.9 | 7.4.1–7.4.5, 7.4.7, 7.4.9 done (G1); 7.4.6 external auditor; 7.4.8 with G2 alerts |
 | 7.5 Privacy and legal | 7.5.1–7.5.11 | not started |
-| 7.6 Clinical safety and governance | 7.6.1–7.6.7 | not started |
+| 7.6 Clinical safety and governance | 7.6.1–7.6.7 | 7.6.1 loaders and gate done (G1), sign-off by clinicians open; 7.6.3, 7.6.4 drafted; others open |
 | 7.7 Reliability, backup and recovery | 7.7.1–7.7.9 | not started |
 | 7.8 Scaling and performance | 7.8.1–7.8.10 | not started |
 | 7.9 Monitoring and operations | 7.9.1–7.9.7 | not started |

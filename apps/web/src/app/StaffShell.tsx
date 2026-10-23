@@ -4,13 +4,16 @@ import { useTranslation } from "react-i18next";
 import "../locales/staff";
 import { Button, ConnectionIndicator, Toast } from "../components/ui";
 import { apiOrigin } from "../lib/api";
-import { staffAuth, StaffUser } from "../lib/auth";
+import { staffAuth, StaffUser, type MfaChallenge } from "../lib/auth";
+import { AccountSetupGate } from "./AccountForms";
 import { navigationByRole, type StaffPageId } from "./staffAccess";
 import {
   BarChart3,
   ClipboardList,
+  FileSearch,
   HeartPulse,
   LogOut,
+  ShieldCheck,
   UserPlus,
   Settings,
   Stethoscope,
@@ -24,6 +27,7 @@ const NAV_ICONS: Record<StaffPageId, LucideIcon> = {
   patients: ClipboardList,
   reports: BarChart3,
   settings: Settings,
+  audit: FileSearch,
 };
 
 function initials(name: string) {
@@ -54,6 +58,10 @@ export function StaffShell() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // After a right password on an account with two-step sign-in: waiting for the code.
+  const [challenge, setChallenge] = useState<MfaChallenge | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [useRecovery, setUseRecovery] = useState(false);
   const hadSession = useRef(false);
   const signingOut = useRef(false);
 
@@ -88,12 +96,26 @@ export function StaffShell() {
     };
   }, []);
 
+  function signInError(code: string) {
+    return code === "ACCOUNT_LOCKED"
+      ? t("accountLocked", { ns: "staff" })
+      : code === "RATE_LIMITED"
+        ? t("rateLimited", { ns: "staff" })
+        : code === "DEPENDENCY_UNAVAILABLE"
+          ? t("serviceUnavailable", { ns: "staff" })
+          : code === "INVALID_MFA_CODE"
+            ? t("mfaCodeRejected", { ns: "staff" })
+            : code === "MFA_CHALLENGE_EXPIRED"
+              ? t("mfaChallengeExpired", { ns: "staff" })
+              : t("invalidCredentials", { ns: "staff" });
+  }
+
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setSubmitting(true);
     try {
-      await staffAuth.login(hospitalId.trim(), email.trim(), password);
+      const pending = await staffAuth.login(hospitalId.trim(), email.trim(), password);
       try {
         localStorage.setItem(lastHospitalKey, hospitalId.trim());
       } catch {
@@ -101,17 +123,35 @@ export function StaffShell() {
       }
       setPassword("");
       setError("");
+      setChallenge(pending);
+    } catch (cause) {
+      setError(signInError(cause instanceof Error ? cause.message : "SIGN_IN_FAILED"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!challenge) return;
+    setError("");
+    setSubmitting(true);
+    try {
+      const answer = mfaCode.trim();
+      await staffAuth.verifyMfa(
+        challenge,
+        useRecovery ? { recoveryCode: answer } : { code: answer.replace(/\s/g, "") },
+      );
+      setChallenge(null);
+      setMfaCode("");
+      setUseRecovery(false);
     } catch (cause) {
       const code = cause instanceof Error ? cause.message : "SIGN_IN_FAILED";
-      setError(
-        code === "ACCOUNT_LOCKED"
-          ? t("accountLocked", { ns: "staff" })
-          : code === "RATE_LIMITED"
-            ? t("rateLimited", { ns: "staff" })
-            : code === "DEPENDENCY_UNAVAILABLE"
-              ? t("serviceUnavailable", { ns: "staff" })
-              : t("invalidCredentials", { ns: "staff" }),
-      );
+      if (code === "MFA_CHALLENGE_EXPIRED" || code === "ACCOUNT_LOCKED") {
+        setChallenge(null);
+        setMfaCode("");
+      }
+      setError(signInError(code));
     } finally {
       setSubmitting(false);
     }
@@ -199,6 +239,10 @@ export function StaffShell() {
             >
               {t("signOut", { ns: "staff" })}
             </Button>
+            <NavLink className="staff-switch-account" to="/staff/account">
+              <ShieldCheck aria-hidden="true" size={14} />
+              {t("myAccount", { ns: "staff" })}
+            </NavLink>
             <button
               type="button"
               className="staff-switch-account"
@@ -232,6 +276,8 @@ export function StaffShell() {
         >
           {checkingSession ? (
             <p role="status">{t("checkingSession", { ns: "staff" })}</p>
+          ) : user && staffAuth.restrictions.length > 0 ? (
+            <AccountSetupGate />
           ) : user ? (
             <>
               {isStaffRoot && (
@@ -257,6 +303,47 @@ export function StaffShell() {
             <section className="staff-login-card">
               <h2>{t("staffWelcome", { ns: "staff" })}</h2>
               <p>{t("staffSubtitle", { ns: "staff" })}</p>
+              {challenge ? (
+                <form onSubmit={submitCode}>
+                  <p>{useRecovery ? t("mfaRecoveryPrompt", { ns: "staff" }) : t("mfaPrompt", { ns: "staff" })}</p>
+                  <label htmlFor="staff-mfa-code">
+                    {useRecovery ? t("recoveryCode", { ns: "staff" }) : t("mfaCode", { ns: "staff" })}
+                  </label>
+                  <input
+                    id="staff-mfa-code"
+                    inputMode={useRecovery ? "text" : "numeric"}
+                    autoComplete="one-time-code"
+                    autoFocus
+                    required
+                    value={mfaCode}
+                    onChange={(event) => setMfaCode(event.target.value)}
+                  />
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? t("signingIn", { ns: "staff" }) : t("verifyCode", { ns: "staff" })}
+                  </Button>
+                  <button
+                    type="button"
+                    className="staff-switch-account"
+                    onClick={() => {
+                      setUseRecovery((current) => !current);
+                      setMfaCode("");
+                    }}
+                  >
+                    {useRecovery ? t("useAuthenticator", { ns: "staff" }) : t("useRecoveryCode", { ns: "staff" })}
+                  </button>
+                  <button
+                    type="button"
+                    className="staff-switch-account"
+                    onClick={() => {
+                      setChallenge(null);
+                      setMfaCode("");
+                      setError("");
+                    }}
+                  >
+                    {t("backToSignIn", { ns: "staff" })}
+                  </button>
+                </form>
+              ) : (
               <form onSubmit={submitLogin}>
                 <label htmlFor="hospital-id">
                   {t("hospitalId", { ns: "staff" })}
@@ -312,6 +399,7 @@ export function StaffShell() {
                     : t("signIn", { ns: "staff" })}
                 </Button>
               </form>
+              )}
               <div className="staff-notice" aria-live="polite">
                 {error ? (
                   <Toast tone="info">{error}</Toast>

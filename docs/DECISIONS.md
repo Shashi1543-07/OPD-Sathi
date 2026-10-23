@@ -50,3 +50,24 @@
 - **Decision:** CI audits the Semgrep lock with `--ignore-vuln` for exactly this advisory (both of its IDs). The application lock is still audited with no exceptions, and any other advisory in the Semgrep lock still fails CI.
 - **Review:** when Semgrep's `mcp` pin moves, regenerate the lock with the command in its header and delete the two `--ignore-vuln` arguments from `.github/workflows/ci.yml`.
 - **Amendment, 23 Oct 2026:** pip-audit reports CVE-2026-114603 for `opentelemetry-api`, fixed in 1.45.1. The application lock now uses 1.45.1. The Semgrep lock cannot: every Semgrep release, including 1.182.1 (the newest on 23 Oct 2026), requires `opentelemetry-api~=1.37.0`, which Semgrep uses only for its own optional telemetry during the scan. The same reasoning applies as for `mcp`: the package exists only in the CI-only scanner lock, never in the application, its images or any deployment. CI waives exactly this advisory for the Semgrep lock (`--ignore-vuln CVE-2026-114603`); the application lock is audited with no exceptions. Remove the waiver when Semgrep allows `opentelemetry-api` 1.45.1 or later.
+
+## ADR 007 — Production configuration: an overlay, secrets as files, HTTPS in the existing nginx
+
+- **Status:** accepted on 22 Oct 2026 (Phase 7, tasks 7.1.1, 7.2.1, 7.3.7).
+- **Decision:** Production runs the same images as development with `docker-compose.prod.yml` laid over `docker-compose.yml`. It sets `APP_ENV=production`, publishes only ports 443 and 80 (redirect), hardens every container (no new privileges, capabilities dropped, read-only root filesystems, resource limits, rotated logs, `restart: always`) and reads every secret from a file in a root-only directory (`/etc/opd-saathi/secrets`) mounted as a Compose secret. The API's settings accept `<NAME>_FILE` for any setting; the plain variables are blanked, so `docker inspect` and `ps` show no secret. Redis receives its password through a generated config file on a private tmpfs, not its command line. HTTPS terminates in the web container's nginx (now `nginx-unprivileged`, uid 101), with Mozilla's "intermediate" TLS profile.
+- **Reason:** ADR 001 rules out a new proxy or orchestrator. One set of images keeps what is tested and what runs identical; the overlay changes only how it is run.
+- **Consequences:** Installation on Linux uses `scripts/setup-hospital.sh` and a systemd unit; Windows keeps `setup-hospital.ps1`. A CI job starts the stack with the overlay and checks it refuses development values (task 7.1.2).
+
+## ADR 008 — Time-based one-time codes for staff sign-in (`pyotp`)
+
+- **Status:** accepted on 22 Oct 2026 by the owner (Phase 7, task 7.3.2).
+- **Decision:** Use `pyotp` (RFC 6238 TOTP, SHA-1, 6 digits, 30-second step, one step of clock drift either way) for a second sign-in step. Administrators must enrol; doctors and nurses may (the hospital decides whether to require it, section 6 of the Phase 7 plan). The TOTP secret is stored encrypted with `APP_DATA_KEY`, bound to the user. Ten single-use recovery codes are shown once and stored as Argon2id hashes. A code cannot be used twice (the last accepted time step is stored). Enrolment, use, recovery and reset are audited. The break-glass path is `python -m app.cli reset-mfa`, run on the server, which is audited and requires the operator's name.
+- **Reason:** A small, dependency-free library implementing a standard every authenticator app supports; writing TOTP by hand would be new security-critical code without benefit.
+- **Consequences:** Staff need an authenticator app on a phone. Losing both the phone and the recovery codes needs an administrator (or, for the last administrator, the server operator) to reset it.
+
+## ADR 009 — CI-only security scanners: Trivy, OWASP ZAP, Schemathesis, cosign
+
+- **Status:** accepted on 22 Oct 2026 by the owner (Phase 7, tasks 7.4.3–7.4.5, 7.14.3).
+- **Decision:** Trivy scans the repository and the built images on every pull request and fails on a high or critical finding without a written waiver in `.trivyignore` (each with a reason and a review date, as in ADR 006). OWASP ZAP (baseline and API scan from the OpenAPI file) and Schemathesis (stateful API fuzzing) run nightly against the production-mode stack. Release images are signed with cosign (keyless, GitHub OIDC) and carry a CycloneDX SBOM. All four run only in GitHub Actions, pinned by version or digest; none enters the application or its images.
+- **Reason:** These close the gaps in finding F11 with standard, widely used tools; running them only in CI keeps the product unchanged.
+- **Consequences:** Nightly jobs need the production smoke stack (task 7.1.2). A finding blocks merging until fixed or waived in writing.

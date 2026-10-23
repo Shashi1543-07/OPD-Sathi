@@ -6,9 +6,10 @@ from typing import Literal, NotRequired, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.review import check_review
+
 Language = Literal["en", "hi", "mr"]
 Sex = Literal["female", "male", "other", "unknown"]
-REVIEW_STATUS = "draft_needs_clinician_review"
 BANK_DIRECTORY = Path(__file__).with_name("bank")
 # Symptom and history modules, each in its own file next to core.json.
 MODULE_COUNT = 15
@@ -114,6 +115,7 @@ class Question(Applicability):
 
 class TriggerConfiguration(TypedDict):
     review_status: str
+    review: NotRequired[dict[str, object]]
     always: list[str]
     max_triggered_modules: int
     keywords: dict[str, list[str]]
@@ -155,8 +157,8 @@ def load_question_bank(
     questions: dict[str, Question] = {}
     for path in files:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        if raw.get("review_status") != REVIEW_STATUS:
-            raise ValueError(f"{path.name} must remain marked {REVIEW_STATUS}")
+        check_review(f"bank/{path.relative_to(directory).as_posix()}",
+                     raw.get("review_status"), raw.get("review"))
         entries = raw.get("questions")
         if not isinstance(entries, list) or not entries:
             raise ValueError(f"{path.name} must contain at least one question")
@@ -186,9 +188,9 @@ def load_question_bank(
     if not isinstance(raw_triggers, dict):
         raise ValueError("trigger configuration must be an object")
     triggers = cast(TriggerConfiguration, raw_triggers)
+    check_review("bank/triggers.json", triggers.get("review_status"), raw_triggers.get("review"))
     if (
-        triggers.get("review_status") != REVIEW_STATUS
-        or not isinstance(triggers.get("always"), list)
+        not isinstance(triggers.get("always"), list)
         or not isinstance(triggers.get("max_triggered_modules"), int)
         or not isinstance(triggers.get("keywords"), dict)
     ):

@@ -2,16 +2,56 @@
 
 import base64
 import binascii
+import os
 from functools import lru_cache
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from pydantic import model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+if TYPE_CHECKING:
+    from app.core.crypto import KeyRing
+
+STAFF_ROLES = ("admin", "doctor", "nurse")
+
+
+class _FileReferenceSource(PydanticBaseSettingsSource):
+    """``<NAME>_FILE=/run/secrets/name``: read a setting from a file (Compose secrets).
+
+    Production mounts every secret as a file so none appears in the container's environment,
+    ``docker inspect`` or the process list (Phase 7, task 7.3.7). A file reference wins over
+    the plain variable of the same name.
+    """
+
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        values: dict[str, Any] = {}
+        for name in self.settings_cls.model_fields:
+            reference = os.environ.get(f"{name.upper()}_FILE", "")
+            if not reference:
+                continue
+            try:
+                values[name] = Path(reference).read_text(encoding="utf-8").strip()
+            except OSError as exc:
+                raise ValueError(f"{name.upper()}_FILE points to an unreadable file") from exc
+        return values
 
 
 class Settings(BaseSettings):
     """Runtime configuration; secrets are supplied outside source control."""
 
     app_env: str = "development"
+    # Which process reads these settings: the API holds the patient-data keys, the worker
+    # must not (docker-compose.yml sets PROCESS_ROLE=worker for it).
+    process_role: str = "api"
     provider_mode: str = "standard"
     demo_story: str = "hindi-fever"
     web_origin: str = "http://localhost:5173"
@@ -32,10 +72,18 @@ class Settings(BaseSettings):
     redis_cache_url: str = "redis://:local-only@localhost:6379/1"
     jwt_secret: str = "development-only-signing-secret-change-before-deploy"
     jwt_kid: str = "k1"
+    # During a signing-key rotation, tokens signed with the previous key are still accepted
+    # until they expire (docs/runbooks/key-rotation.md). Empty outside a rotation.
+    jwt_previous_secret: str = ""
+    jwt_previous_kid: str = ""
     jwt_issuer: str = "opd-saathi"
     jwt_audience: str = "opd-saathi-api"
     cursor_hmac_key: str = "development-only-cursor-key-change-before-deploy"
     app_data_key: str = ""
+    # Key ring for rotating APP_DATA_KEY: the current key's id, and earlier keys still needed
+    # to read old records, as "id:base64,id:base64" (docs/runbooks/key-rotation.md).
+    app_data_key_id: str = "1"
+    app_data_previous_keys: str = ""
     app_hmac_key: str = ""
     # Encrypts only the phone numbers of patients who opted in to queue messages. The worker
     # holds this key and never APP_DATA_KEY, so a compromised worker exposes nothing clinical.
@@ -73,6 +121,8 @@ class Settings(BaseSettings):
     kiosk_token_hours: int = 12
     # How long a one-time kiosk activation code can be used before an admin must issue another.
     kiosk_activation_code_hours: int = 24
+    # A kiosk's device secret is replaced this often, at a token renewal (task 7.3.9).
+    kiosk_secret_rotation_days: int = 30
     patient_session_hours: int = 2
     max_request_body_bytes: int = 1_048_576
     # Lets the staff sign-in page offer a hospital picker instead of a raw ID field.
@@ -83,7 +133,30 @@ class Settings(BaseSettings):
     vulnerable_bonus_min: int = 15
     default_consult_min: float = 4.0
 
+    # Roles that must use two-step sign-in (ADR 008); doctors and nurses may opt in.
+    mfa_required_roles: str = "admin"
+    # Before live patients: refuse to start while any clinical content is still a draft
+    # (task 7.6.1; docs/CLINICIAN_REVIEW.md, docs/GO_LIVE_CHECKLIST.md).
+    clinical_content_approval_required: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            _FileReferenceSource(settings_cls),
+            env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
@@ -165,7 +238,15 @@ class Settings(BaseSettings):
             raise ValueError("production JWT_SECRET must contain at least 32 random bytes")
         if self.app_env == "production" and len(self.cursor_hmac_key.encode("utf-8")) < 32:
             raise ValueError("production CURSOR_HMAC_KEY must contain at least 32 random bytes")
-        if self.app_env == "production":
+        if self.process_role not in {"api", "worker"}:
+            raise ValueError("PROCESS_ROLE must be api or worker")
+        if self.app_env == "production" and self.process_role == "worker":
+            # The worker never holds patient-data keys (task 7.0.1): refuse to start if given.
+            if self.app_data_key or self.app_hmac_key:
+                raise ValueError(
+                    "the production worker must not be given APP_DATA_KEY or APP_HMAC_KEY"
+                )
+        elif self.app_env == "production":
             for setting_name, encoded in (
                 ("APP_DATA_KEY", self.app_data_key),
                 ("APP_HMAC_KEY", self.app_hmac_key),
@@ -178,8 +259,22 @@ class Settings(BaseSettings):
                     ) from exc
                 if len(key) != 32:
                     raise ValueError(f"production {setting_name} must decode to exactly 32 bytes")
+        if self.jwt_previous_secret and (
+            not self.jwt_previous_kid or self.jwt_previous_kid == self.jwt_kid
+        ):
+            raise ValueError("JWT_PREVIOUS_KID must name the previous key and differ from JWT_KID")
+        if not set(self.mfa_required_role_set) <= set(STAFF_ROLES):
+            raise ValueError("MFA_REQUIRED_ROLES may list only admin, doctor and nurse")
+        if self.app_env == "production" and "admin" not in self.mfa_required_role_set:
+            raise ValueError("administrators must use two-step sign-in in production")
+        key_id = self.app_data_key_id
+        if not key_id or len(key_id) > 16 or ":" in key_id:
+            raise ValueError("APP_DATA_KEY_ID must have 1-16 characters and no colon")
+        self._previous_data_keys()
         if not self.jwt_kid or len(self.jwt_kid) > 64:
             raise ValueError("JWT_KID must contain between 1 and 64 characters")
+        if not 1 <= self.kiosk_secret_rotation_days <= 365:
+            raise ValueError("KIOSK_SECRET_ROTATION_DAYS must be between 1 and 365")
         if not 1 <= self.db_pool_min <= self.db_pool_max <= 200:
             raise ValueError("DB_POOL_MIN and DB_POOL_MAX must satisfy 1 <= min <= max <= 200")
         if self.max_request_body_bytes < 1024:
@@ -225,6 +320,36 @@ class Settings(BaseSettings):
     @property
     def app_data_key_bytes(self) -> bytes:
         return _decode_key(self.app_data_key, "APP_DATA_KEY")
+
+    @property
+    def mfa_required_role_set(self) -> frozenset[str]:
+        # "none" (or empty) means no role is required to use it, e.g. the local demo.
+        return frozenset(
+            role.strip()
+            for role in self.mfa_required_roles.split(",")
+            if role.strip() and role.strip() != "none"
+        )
+
+    def _previous_data_keys(self) -> dict[str, bytes]:
+        keys: dict[str, bytes] = {}
+        for entry in self.app_data_previous_keys.split(","):
+            if not entry.strip():
+                continue
+            key_id, separator, encoded = entry.strip().partition(":")
+            if not separator or not key_id or key_id == self.app_data_key_id:
+                raise ValueError("APP_DATA_PREVIOUS_KEYS entries are id:base64 with other ids")
+            keys[key_id] = _decode_key(encoded, f"APP_DATA_PREVIOUS_KEYS[{key_id}]")
+        return keys
+
+    @property
+    def app_data_keyring(self) -> "KeyRing":
+        """The current data key, for writing, and every key that can still read old records."""
+        from app.core.crypto import KeyRing
+
+        return KeyRing(
+            current_id=self.app_data_key_id,
+            keys={**self._previous_data_keys(), self.app_data_key_id: self.app_data_key_bytes},
+        )
 
     @property
     def app_hmac_key_bytes(self) -> bytes:

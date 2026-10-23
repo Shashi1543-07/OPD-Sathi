@@ -76,3 +76,50 @@ it("renews the tab's own account and never turns a tab into another user", async
   expect(await staffAuth.refresh()).toBeNull();
   expect(staffAuth.user).toBeNull();
 });
+
+it("stops at a challenge for two-step sign-in and adopts the session after the code", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      if (url.endsWith("/auth/login")) {
+        return new Response(
+          JSON.stringify({ mfa_required: true, mfa_token: "synthetic-challenge", expires_in: 300 }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith("/auth/mfa/verify")) {
+        return new Response(
+          JSON.stringify({ ...authResponse, restrictions: [], user: { ...authResponse.user, mfa_enabled: true } }),
+          { status: 200 },
+        );
+      }
+      return new Response("{}", { status: 404 });
+    }),
+  );
+
+  const challenge = await staffAuth.login("hospital", "admin@example.test", "synthetic-password");
+  expect(challenge).toEqual({ mfaToken: "synthetic-challenge" });
+  expect(staffAuth.user).toBeNull();
+  await staffAuth.verifyMfa(challenge!, { recoveryCode: "abcd-efgh-jkmn" });
+  expect(bodies.at(-1)).toEqual({ mfa_token: "synthetic-challenge", recovery_code: "abcd-efgh-jkmn" });
+  expect(staffAuth.user?.mfa_enabled).toBe(true);
+  expect(staffAuth.restrictions).toEqual([]);
+});
+
+it("keeps a restricted session's steps until a new session lifts them", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      new Response(JSON.stringify({ ...authResponse, restrictions: ["password_change"] }), {
+        status: 200,
+      }),
+    ),
+  );
+  expect(await staffAuth.login("hospital", "admin@example.test", "temporary")).toBeNull();
+  expect(staffAuth.restrictions).toEqual(["password_change"]);
+  staffAuth.adopt({ ...authResponse, token_type: "bearer", restrictions: [] } as never);
+  expect(staffAuth.restrictions).toEqual([]);
+});

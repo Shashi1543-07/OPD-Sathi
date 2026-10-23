@@ -1,16 +1,23 @@
 """Bearer-token dependencies and the explicit public-route inventory."""
 
 import re
+import time
 from collections.abc import Callable, Coroutine
 from typing import Any, cast
+from uuid import UUID
 
+import structlog
 from fastapi import Request
+from redis.exceptions import RedisError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
 from app.config import Settings, get_settings
 from app.core.errors import ApiProblemError, api_problem_exception_handler
-from app.core.security import AuthenticationTokenError, decode_access_token
+from app.core.security import AuthenticationTokenError, Restriction, decode_access_token
+
+logger = structlog.get_logger(__name__)
+STAFF_ROLES = frozenset({"admin", "doctor", "nurse"})
 
 PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
@@ -19,6 +26,8 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/metrics"),
         ("GET", "/auth/hospitals"),
         ("POST", "/auth/login"),
+        # The second sign-in step: carries its own short-lived challenge token in the body.
+        ("POST", "/auth/mfa/verify"),
         ("POST", "/auth/refresh"),
         ("POST", "/auth/logout"),
         ("POST", "/kiosks/activate"),
@@ -50,6 +59,35 @@ def _unauthenticated() -> ApiProblemError:
     )
 
 
+# What a restricted staff session may still do: finish the required step, or leave.
+_RESTRICTED_ROUTES: dict[str, frozenset[tuple[str, str]]] = {
+    Restriction.PASSWORD_CHANGE.value: frozenset(
+        {("POST", "/auth/password"), ("GET", "/auth/me"), ("POST", "/auth/logout")}
+    ),
+    Restriction.MFA_SETUP.value: frozenset(
+        {
+            ("POST", "/auth/mfa/setup"),
+            ("POST", "/auth/mfa/enable"),
+            ("POST", "/auth/password"),
+            ("GET", "/auth/me"),
+            ("POST", "/auth/logout"),
+        }
+    ),
+}
+_RESTRICTION_PROBLEMS = {
+    Restriction.PASSWORD_CHANGE.value: (
+        "PASSWORD_CHANGE_REQUIRED",
+        "Choose a new password",
+        "Your password was reset. Choose a new password to continue.",
+    ),
+    Restriction.MFA_SETUP.value: (
+        "MFA_SETUP_REQUIRED",
+        "Set up two-step sign-in",
+        "Your role needs two-step sign-in. Set it up to continue.",
+    ),
+}
+
+
 def _request_token(request: Request) -> dict[str, Any]:
     authorization = request.headers.get("authorization", "")
     scheme, separator, token = authorization.partition(" ")
@@ -57,11 +95,61 @@ def _request_token(request: Request) -> dict[str, Any]:
         raise _unauthenticated()
     try:
         settings: Settings = getattr(request.app.state, "settings", None) or get_settings()
-        claims = decode_access_token(token, settings=settings)
+        claims = decode_access_token(token, settings=settings, allow_restricted=True)
     except AuthenticationTokenError as exc:
         raise _unauthenticated() from exc
+    for restriction in claims.get("rst") or ():
+        allowed = _RESTRICTED_ROUTES.get(restriction, frozenset())
+        if (request.method.upper(), request.url.path) not in allowed:
+            code, title, detail = _RESTRICTION_PROBLEMS.get(
+                restriction, ("FORBIDDEN", "Permission denied", "Finish signing in first.")
+            )
+            raise ApiProblemError(status=403, code=code, title=title, detail=detail)
     request.state.principal = claims
     return claims
+
+
+def staff_revocation_key(app_env: str, user_id: UUID | str) -> str:
+    return f"osa:{app_env}:staff-sessions-ended:{UUID(str(user_id)).hex}"
+
+
+async def end_staff_sessions(request: Request, user_id: UUID) -> None:
+    """Make every access token this person already holds stop working now.
+
+    Refresh tokens are revoked in the database by the caller; this covers the access tokens
+    (up to 10 minutes old) that would otherwise keep working until they expire.
+    """
+    settings: Settings = request.app.state.settings
+    try:
+        await request.app.state.redis_state.set(
+            staff_revocation_key(settings.app_env, user_id),
+            str(int(time.time() * 1000)),
+            ex=settings.access_token_minutes * 60 + 120,
+        )
+    except RedisError:
+        logger.warning("staff_session_end_not_recorded", user_id=str(user_id))
+
+
+async def _ensure_session_not_ended(request: Request, claims: dict[str, Any]) -> None:
+    if claims.get("role") not in STAFF_ROLES:
+        return
+    settings: Settings = request.app.state.settings
+    try:
+        ended = await request.app.state.redis_state.get(
+            staff_revocation_key(settings.app_env, claims["sub"])
+        )
+    except (RedisError, AttributeError):
+        # Fail open: the token still expires within 10 minutes, and refresh is checked
+        # against the database.
+        return
+    issued_ms = int(claims.get("iatm") or int(claims["iat"]) * 1000)
+    if ended is not None and issued_ms < int(ended):
+        raise ApiProblemError(
+            status=401,
+            code="UNAUTHENTICATED",
+            title="Signed out",
+            detail="This session was ended. Sign in again.",
+        )
 
 
 def current_principal(request: Request) -> dict[str, Any]:
@@ -98,7 +186,7 @@ async def authentication_gate(request: Request) -> None:
         for allowed, pattern in PUBLIC_CODE_ROUTES
     ):
         return
-    _request_token(request)
+    await _ensure_session_not_ended(request, _request_token(request))
 
 
 class AuthenticationGateMiddleware(BaseHTTPMiddleware):

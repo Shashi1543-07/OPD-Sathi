@@ -1,14 +1,12 @@
 - id: RF_DS_TILE
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Patient selected a danger-sign help tile.
   conditions:
     tile_any: [DS_CHEST, DS_BREATH, DS_BLEED, DS_FIT, DS_INJURY, DS_PREG, DS_STROKE, DS_POISON]
 - id: RF_CHEST_PAIN_ASSOC
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Chest discomfort with another concerning symptom was reported.
   all_groups:
     - any:
@@ -24,7 +22,6 @@
 - id: RF_CHEST_PAIN
   level: priority
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Chest pain or pressure was reported.
   all_groups:
     - any:
@@ -35,7 +32,6 @@
 - id: RF_BREATH_SEVERE
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Severe difficulty breathing was reported.
   all_groups:
     - any:
@@ -46,7 +42,6 @@
 - id: RF_STROKE_SIGNS
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: A sudden neurological change was reported.
   all_groups:
     - any:
@@ -57,7 +52,6 @@
 - id: RF_BLEEDING_HEAVY
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Heavy bleeding or blood in vomit or stool was reported.
   all_groups:
     - any:
@@ -68,7 +62,6 @@
 - id: RF_PREGNANCY_DANGER
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: A concerning symptom was reported during pregnancy.
   conditions:
     pregnant: true
@@ -81,7 +74,6 @@
 - id: RF_CHILD_FEVER
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Fever was reported for a child under one year; staff review is needed.
   conditions:
     max_age: 0
@@ -94,7 +86,6 @@
 - id: RF_CHILD_FEVER_ASSOC
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Fever with a concerning symptom was reported for a child under five; staff review is needed.
   conditions:
     max_age: 4
@@ -112,7 +103,6 @@
 - id: RF_SEIZURE_FAINT
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Seizure, loss of consciousness, or fainting was reported.
   all_groups:
     - any:
@@ -123,7 +113,6 @@
 - id: RF_SELF_HARM
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: A statement about self-harm needs private staff follow-up.
   visible_to_patient: false
   all_groups:
@@ -135,7 +124,6 @@
 - id: RF_TRAUMA_MAJOR
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: A serious injury or head injury symptom was reported.
   all_groups:
     - any:
@@ -146,7 +134,6 @@
 - id: RF_ALLERGY_SEVERE
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Swelling or hives with breathing difficulty was reported.
   all_groups:
     - any:
@@ -157,7 +144,6 @@
 - id: RF_POISON_BITE
   level: urgent
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Possible poisoning, overdose, or venomous bite was reported.
   all_groups:
     - any:
@@ -170,7 +156,6 @@
 - id: RF_HIGH_FEVER
   level: priority
   status: draft_needs_clinician_review
-  reviewed_by: null
   reason_en: Very high fever was reported; staff review is needed.
   all_groups:
     - any:

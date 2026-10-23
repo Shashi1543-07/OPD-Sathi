@@ -198,13 +198,18 @@ async function kioskToken(force = false): Promise<string | null> {
   if (!force && token && expiresAt !== null && expiresAt - Date.now() > RENEW_BEFORE_MS) {
     return token;
   }
-  renewal ??= call<{ access_token: string; hospital_name?: string }>("/kiosks/token", {
-    method: "POST",
-    body: JSON.stringify({ device_secret: secret }),
-  })
+  renewal ??= call<{ access_token: string; hospital_name?: string; device_secret?: string }>(
+    "/kiosks/token",
+    {
+      method: "POST",
+      body: JSON.stringify({ device_secret: secret }),
+    },
+  )
     .then((response) => {
       setKioskToken(response.access_token);
       rememberHospital(response.hospital_name);
+      // The server rotates the device secret every few weeks; keep the new one.
+      if (response.device_secret) writeKioskValue(deviceKey, response.device_secret);
       return response.access_token;
     })
     .catch((cause: unknown) => {

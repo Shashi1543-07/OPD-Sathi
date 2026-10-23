@@ -3,8 +3,10 @@
 import argparse
 import asyncio
 import getpass
+import json
 import os
 import random
+import sys
 from datetime import UTC, date, datetime, timedelta
 from time import monotonic
 from typing import Any
@@ -17,6 +19,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.config import get_settings
 from app.core.crypto import encrypt_field
 from app.core.ids import stable_uuid7, uuid7
+from app.core.passwords import password_problem
 from app.core.security import create_opaque_secret, digest_secret, hash_password
 from app.db.repositories import CaseSheetRepository, DocumentRepository, PatientRepository
 from app.db.session import set_hospital_scope
@@ -59,8 +62,7 @@ async def _create_admin(
                     async with connection.begin_nested():
                         await connection.execute(
                             text(
-                                "INSERT INTO hospitals (id, name, code) "
-                                "VALUES (:id, :name, :code)"
+                                "INSERT INTO hospitals (id, name, code) VALUES (:id, :name, :code)"
                             ),
                             {
                                 "id": selected_hospital_id,
@@ -100,6 +102,116 @@ async def _create_admin(
     finally:
         await engine.dispose()
     return selected_hospital_id
+
+
+async def _reencrypt(*, hospital_id: UUID | None, apply: bool, batch: int) -> int:
+    """Re-seal records still encrypted with an older data key (docs/runbooks/key-rotation.md)."""
+    from app.rekey import reencrypt_hospital
+
+    settings = get_settings()
+    ring = settings.app_data_keyring
+    if hospital_id is not None:
+        hospital_ids = [hospital_id]
+    else:
+        # The worker role may list every hospital; each is then processed in its own scope.
+        lister = create_async_engine(settings.worker_database_url or settings.database_url)
+        try:
+            async with lister.connect() as connection:
+                hospital_ids = list(
+                    (await connection.execute(text("SELECT id FROM hospitals ORDER BY id")))
+                    .scalars()
+                    .all()
+                )
+        finally:
+            await lister.dispose()
+    engine = create_async_engine(settings.migrations_database_url)
+    unreadable = 0
+    try:
+        for current in hospital_ids:
+            print(f"Hospital {current} (current key {ring.current_id}):")
+            async with engine.begin() as connection:
+                await set_hospital_scope(connection, current)
+                reports = await reencrypt_hospital(
+                    connection,
+                    hospital_id=current,
+                    ring=ring,
+                    apply=apply,
+                    batch=batch,
+                    progress=print,
+                )
+                unreadable += sum(report.unreadable for report in reports.values())
+                if apply:
+                    await connection.execute(
+                        text(
+                            "INSERT INTO audit_log (id, hospital_id, actor_type, action, "
+                            "resource_type, request_id, meta) VALUES (:id, :hospital_id, "
+                            "'system', 'key_rotation.reencrypted', 'hospital', 'operator-cli', "
+                            "CAST(:meta AS jsonb))"
+                        ),
+                        {
+                            "id": uuid7(),
+                            "hospital_id": current,
+                            "meta": json.dumps(
+                                {
+                                    "key_id": ring.current_id,
+                                    "resealed": sum(r.resealed for r in reports.values()),
+                                    "unreadable": sum(r.unreadable for r in reports.values()),
+                                }
+                            ),
+                        },
+                    )
+    finally:
+        await engine.dispose()
+    return unreadable
+
+
+async def _reset_mfa(*, hospital_id: UUID, email: str, operator: str) -> UUID:
+    """Remove a staff member's two-step sign-in, from the server, with an audit entry.
+
+    For when the last administrator has lost both their phone and their recovery codes; any
+    other case goes through another administrator (Settings -> Users -> Reset two-step).
+    """
+    settings = get_settings()
+    engine = create_async_engine(settings.migrations_database_url)
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            user_id = await connection.scalar(
+                text(
+                    "UPDATE users SET mfa_enabled_at = NULL, mfa_secret_enc = NULL, "
+                    "mfa_last_step = NULL, mfa_recovery_hashes = '[]'::jsonb "
+                    "WHERE hospital_id = :hospital_id AND lower(email) = :email "
+                    "AND deleted_at IS NULL RETURNING id"
+                ),
+                {"hospital_id": hospital_id, "email": email.strip().lower()},
+            )
+            if user_id is None:
+                raise SystemExit("No staff account with that email at that hospital.")
+            await connection.execute(
+                text(
+                    "UPDATE refresh_tokens SET revoked_at = now() WHERE hospital_id = "
+                    ":hospital_id AND user_id = :user_id AND revoked_at IS NULL"
+                ),
+                {"hospital_id": hospital_id, "user_id": user_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO audit_log "
+                    "(id, hospital_id, actor_type, action, resource_type, resource_id, "
+                    "request_id, meta) VALUES (:id, :hospital_id, 'system', "
+                    "'break_glass.mfa_reset', 'user', :user_id, 'operator-cli', "
+                    "CAST(:meta AS jsonb))"
+                ),
+                {
+                    "id": uuid7(),
+                    "hospital_id": hospital_id,
+                    "user_id": user_id,
+                    "meta": json.dumps({"operator": operator}),
+                },
+            )
+    finally:
+        await engine.dispose()
+    return UUID(str(user_id))
 
 
 async def _setup_hospital(
@@ -163,15 +275,26 @@ async def _setup_hospital(
     return hospital_id
 
 
-def _read_new_password() -> str:
-    """ADMIN_PASSWORD (for scripted installs) or an interactive, confirmed prompt."""
+def _read_new_password(*, from_stdin: bool = False) -> str:
+    """The first line of stdin, ADMIN_PASSWORD, or an interactive, confirmed prompt.
+
+    Scripted installs should pipe the password in (``--admin-password-stdin``): unlike an
+    environment variable it never shows in ``docker inspect`` or the process list.
+    """
+    if from_stdin:
+        password = sys.stdin.readline().rstrip("\r\n")
+        if problem := password_problem(password):
+            raise SystemExit(f"The administrator password on stdin is refused: {problem}")
+        return password
     password = os.getenv("ADMIN_PASSWORD", "")
     if password:
+        if problem := password_problem(password):
+            raise SystemExit(f"ADMIN_PASSWORD is refused: {problem}")
         return password
     while True:
         password = getpass.getpass("Administrator password (12+ characters): ")
-        if len(password) < 12:
-            print("Use at least 12 characters.")
+        if problem := password_problem(password):
+            print(problem)
             continue
         if getpass.getpass("Type it again: ") == password:
             return password
@@ -278,10 +401,13 @@ async def _demo_checkin(*, hospital_id: UUID, label: str) -> str:
     try:
         async with engine.begin() as connection:
             await set_hospital_scope(connection, hospital_id)
-            if await connection.scalar(
-                text("SELECT id FROM hospitals WHERE id = :hospital_id"),
-                {"hospital_id": hospital_id},
-            ) is None:
+            if (
+                await connection.scalar(
+                    text("SELECT id FROM hospitals WHERE id = :hospital_id"),
+                    {"hospital_id": hospital_id},
+                )
+                is None
+            ):
                 raise SystemExit("Hospital does not exist; run seed-demo first.")
             point = (
                 (
@@ -486,8 +612,8 @@ async def _seed_demo() -> tuple[UUID, list[str]]:
                         await connection.execute(
                             text(
                                 "UPDATE users SET department_id = :department_id "
-                            "WHERE hospital_id = :hospital_id AND lower(email) = :email "
-                            "AND role = 'doctor' AND deleted_at IS NULL"
+                                "WHERE hospital_id = :hospital_id AND lower(email) = :email "
+                                "AND role = 'doctor' AND deleted_at IS NULL"
                             ),
                             {
                                 "department_id": department_id,
@@ -576,7 +702,7 @@ async def _seed_bulk(*, visits: int) -> None:
             if not patient_ids:
                 now = datetime.now(UTC)
                 patient_ids = [uuid7() for _ in range(1000)]
-                encryption_key = settings.app_data_key_bytes
+                encryption_key = settings.app_data_keyring
                 await connection.execute(
                     text(
                         "INSERT INTO patients (id, hospital_id, name_enc, year_of_birth, sex, "
@@ -800,7 +926,7 @@ async def _seed_demo_workflow() -> None:
                             "hospital_id": hospital_id,
                             "name_enc": encrypt_field(
                                 name,
-                                key=settings.app_data_key_bytes,
+                                key=settings.app_data_keyring,
                                 associated_data=f"patients:name_enc:{patient_id}",
                             ),
                             "year": today.year - age,
@@ -1062,7 +1188,7 @@ async def _seed_demo_returning(
                         "hospital_id": hospital_id,
                         "name_enc": encrypt_field(
                             _RETURNING_NAME,
-                            key=settings.app_data_key_bytes,
+                            key=settings.app_data_keyring,
                             associated_data=f"patients:name_enc:{patient_id}",
                         ),
                         "year": service_day.year - _RETURNING_AGE,
@@ -1309,9 +1435,34 @@ def main() -> None:
     setup.add_argument("--admin-name")
     setup.add_argument("--admin-email")
     setup.add_argument(
+        "--admin-password-stdin",
+        action="store_true",
+        help="Read the administrator's password from the first line of stdin (unattended)",
+    )
+    setup.add_argument(
         "--no-standard-departments",
         action="store_true",
         help="Start with no departments (the administrator creates them)",
+    )
+    reencrypt = commands.add_parser(
+        "reencrypt",
+        help="Re-seal records with the current data key after a rotation (dry run by default)",
+    )
+    reencrypt.add_argument("--hospital-id", type=UUID)
+    reencrypt.add_argument("--apply", action="store_true", help="Write the re-sealed values")
+    reencrypt.add_argument("--batch", type=int, default=500)
+    commands.add_parser(
+        "content-status",
+        help="List each clinical content file and whether it is approved or still a draft",
+    )
+    reset_mfa = commands.add_parser(
+        "reset-mfa",
+        help="Break-glass: remove a staff member's two-step sign-in (audited)",
+    )
+    reset_mfa.add_argument("--hospital-id", type=UUID, required=True)
+    reset_mfa.add_argument("--email", required=True)
+    reset_mfa.add_argument(
+        "--operator", required=True, help="Full name of the person running this (recorded)"
     )
     kiosk = commands.add_parser("create-kiosk", help="Create a one-time kiosk activation code")
     kiosk.add_argument("--hospital-id", type=UUID, required=True)
@@ -1359,6 +1510,15 @@ def main() -> None:
         "clear-bulk", help="Remove seed-bulk load-test visits from the demo hospital"
     )
     args = parser.parse_args()
+    if args.command == "content-status":
+        from app.domain.content_status import content_status
+
+        statuses = content_status()
+        for source, status in statuses.items():
+            print(f"{status:<30} {source}")
+        drafts = sum(status != "approved" for status in statuses.values())
+        print(f"{len(statuses) - drafts} approved, {drafts} awaiting clinical sign-off")
+        return
     if args.command == "queue-rebuild":
         import redis.asyncio as redis
 
@@ -1385,18 +1545,14 @@ def main() -> None:
         return
     if args.command == "demo-kiosk":
         demo_hospital = stable_uuid7("opd-saathi:demo-nagpur-government")
-        code = asyncio.run(
-            _create_kiosk(hospital_id=demo_hospital, label="Demo kiosk", reuse=True)
-        )
+        code = asyncio.run(_create_kiosk(hospital_id=demo_hospital, label="Demo kiosk", reuse=True))
         base = str(args.web_url).split(",")[0].rstrip("/")
         print("Open this link once on the kiosk device to activate it:")
         print(f"  {base}/kiosk?activate={code}")
         return
     if args.command == "demo-checkin":
         demo_hospital = stable_uuid7("opd-saathi:demo-nagpur-government")
-        code = asyncio.run(
-            _demo_checkin(hospital_id=demo_hospital, label="Waiting hall phone QR")
-        )
+        code = asyncio.run(_demo_checkin(hospital_id=demo_hospital, label="Waiting hall phone QR"))
         base = str(args.web_url).split(",")[0].rstrip("/")
         print("Phones on the hospital Wi-Fi check in at:")
         print(f"  {base}/m/{code}")
@@ -1436,7 +1592,7 @@ def main() -> None:
         admin_email = args.admin_email or input("Administrator's email: ").strip()
         if not all((hospital_name, hospital_code, admin_name, admin_email)):
             raise SystemExit("Hospital name, code, administrator name and email are required.")
-        password = _read_new_password()
+        password = _read_new_password(from_stdin=args.admin_password_stdin)
         try:
             hospital_id = asyncio.run(
                 _setup_hospital(
@@ -1459,6 +1615,29 @@ def main() -> None:
             "register each kiosk (each one gets its own activation code)."
         )
         return
+    if args.command == "reencrypt":
+        unreadable = asyncio.run(
+            _reencrypt(hospital_id=args.hospital_id, apply=args.apply, batch=args.batch)
+        )
+        if not args.apply:
+            print("Dry run: nothing was changed. Run again with --apply to re-seal.")
+        if unreadable:
+            raise SystemExit(
+                f"{unreadable} value(s) could not be read with the keys in the ring. Do not "
+                "retire any key until they are explained (docs/runbooks/key-rotation.md)."
+            )
+        return
+    if args.command == "reset-mfa":
+        if len(args.operator.strip()) < 3:
+            raise SystemExit("--operator must name the person running this command.")
+        user_id = asyncio.run(
+            _reset_mfa(
+                hospital_id=args.hospital_id, email=args.email, operator=args.operator.strip()
+            )
+        )
+        print(f"Two-step sign-in removed for {args.email} ({user_id}); their sessions ended.")
+        print("They set it up again at their next sign-in. This was recorded in the audit log.")
+        return
     if args.command == "create-admin":
         hospital_name = args.hospital_name
         hospital_code = args.hospital_code
@@ -1467,7 +1646,7 @@ def main() -> None:
             hospital_code = hospital_code or input("Unique hospital code: ").strip()
         name = args.name or input("Administrator name: ").strip()
         email = args.email or input("Administrator email: ").strip()
-        password = getpass.getpass("Initial password (12+ characters): ")
+        password = _read_new_password()
         hospital_id = asyncio.run(
             _create_admin(
                 hospital_id=args.hospital_id,

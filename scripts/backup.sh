@@ -12,8 +12,9 @@ docker compose exec -T postgres sh -c \
   'pg_dump --format=custom --no-owner --no-acl --username="$POSTGRES_USER" "$POSTGRES_DB"' \
   > "$archive_dir/postgres.dump"
 
+# The password comes from the environment (development) or the secret file (production).
 docker compose exec -T redis sh -c \
-  'redis-cli -a "$REDIS_PASSWORD" --rdb /tmp/osa-state.rdb >/dev/null 2>&1 && cat /tmp/osa-state.rdb && rm -f /tmp/osa-state.rdb' \
+  'REDISCLI_AUTH="${REDIS_PASSWORD:-$(cat /run/secrets/redis_password 2>/dev/null)}" redis-cli --rdb /tmp/osa-state.rdb >/dev/null 2>&1 && cat /tmp/osa-state.rdb && rm -f /tmp/osa-state.rdb' \
   > "$archive_dir/redis-state.rdb"
 
 docker compose exec -T postgres sh -c \

@@ -1,5 +1,6 @@
 """Audited, tenant-scoped administrator CRUD for core reference data."""
 
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -9,11 +10,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app.api.v1.account import list_sessions
 from app.config import Settings
 from app.core.audit import audit
-from app.core.auth import require_role
+from app.core.auth import end_staff_sessions, require_role
 from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
+from app.core.passwords import password_problem
 from app.core.security import create_opaque_secret, digest_secret, hash_password
 from app.db.repositories import AdminRepository
 from app.db.session import set_hospital_scope
@@ -422,7 +425,22 @@ async def _create(
     device_kiosk = resource == "kiosks" and payload.get("kind", "device") == "device"
     activation_code = create_opaque_secret() if device_kiosk else None
     if resource == "users":
-        payload = {**payload, "password_hash": hash_password(payload.pop("password"))}
+        problem = password_problem(
+            payload["password"], personal=(payload["name"], payload["email"])
+        )
+        if problem:
+            raise ApiProblemError(
+                status=422,
+                code="PASSWORD_TOO_WEAK",
+                title="Choose a stronger password",
+                detail=problem,
+            )
+        # The person chooses their own password at their first sign-in.
+        payload = {
+            **payload,
+            "password_hash": hash_password(payload.pop("password")),
+            "must_change_password": True,  # nosec B105 - a flag, not a password
+        }
     if device_kiosk:
         payload = {
             **payload,
@@ -529,6 +547,9 @@ async def _patch(
                 raise _unknown_department() from exc
             if updated is None:
                 raise _not_found()
+            if resource == "users" and payload.get("is_active") is False:
+                await _revoke_refresh_tokens(connection, hospital_id, resource_id)
+                await end_staff_sessions(request, resource_id)
             await audit(
                 connection,
                 request,
@@ -806,6 +827,8 @@ async def delete_resource(
                 resource, hospital_id=hospital_id, resource_id=resource_id
             ):
                 raise _not_found()
+            if resource == "users":
+                await end_staff_sessions(request, resource_id)
             await audit(
                 connection,
                 request,
@@ -825,3 +848,229 @@ async def delete_resource(
         body={},
         operation=operation,
     )
+
+
+async def _revoke_refresh_tokens(connection: Any, hospital_id: UUID, user_id: UUID) -> int:
+    result = await connection.execute(
+        text(
+            "UPDATE refresh_tokens SET revoked_at = now() WHERE hospital_id = :hospital_id "
+            "AND user_id = :user_id AND revoked_at IS NULL"
+        ),
+        {"hospital_id": hospital_id, "user_id": user_id},
+    )
+    return int(result.rowcount or 0)
+
+
+async def _staff_account(connection: Any, hospital_id: UUID, user_id: UUID) -> dict[str, Any]:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT id, role, name, email, is_active, mfa_enabled_at FROM users "
+                    "WHERE hospital_id = :hospital_id AND id = :user_id "
+                    "AND deleted_at IS NULL FOR UPDATE"
+                ),
+                {"hospital_id": hospital_id, "user_id": user_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise _not_found()
+    return dict(row)
+
+
+def _temporary_password() -> str:
+    """Easy to read aloud and type once: four groups of four, no look-alike characters."""
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+    return "-".join("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(4))
+
+
+@router.post("/users/{resource_id}/password-reset")
+async def reset_staff_password(
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Give a staff member a temporary password (shown once) for a forgotten one.
+
+    They must choose their own at the next sign-in. Every session they have ends now, and a
+    lockout is lifted. Administrators change their own password from their account page.
+    """
+    user_id = resource_id
+    hospital_id, actor_id = _identity(principal)
+    _refuse_self("users", user_id, actor_id, "reset the password of")
+    temporary = _temporary_password()
+
+    async def operation() -> dict[str, Any]:
+        async with request.app.state.engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            account = await _staff_account(connection, hospital_id, user_id)
+            if not account["is_active"]:
+                raise _conflict(
+                    "ACCOUNT_INACTIVE", "Account is turned off", "Turn the account on first."
+                )
+            await connection.execute(
+                text(
+                    "UPDATE users SET password_hash = :password_hash, "
+                    "must_change_password = true, failed_logins = 0, locked_until = NULL "
+                    "WHERE hospital_id = :hospital_id AND id = :user_id"
+                ),
+                {
+                    "password_hash": hash_password(temporary),
+                    "hospital_id": hospital_id,
+                    "user_id": user_id,
+                },
+            )
+            ended = await _revoke_refresh_tokens(connection, hospital_id, user_id)
+            await end_staff_sessions(request, user_id)
+            await audit(
+                connection,
+                request,
+                hospital_id=hospital_id,
+                actor_type="user",
+                actor_id=actor_id,
+                action="admin.users.password_reset",
+                resource_type="user",
+                resource_id=user_id,
+                meta={"sessions_ended": ended},
+            )
+            return {"id": str(user_id), "temporary_password": temporary}
+
+    return await IdempotencyStore(request.app.state.redis_state).execute(
+        request,
+        hospital_id=hospital_id,
+        actor_id=actor_id,
+        body={"user_id": str(user_id), "action": "password-reset"},
+        operation=operation,
+        response_fields_once=frozenset({"temporary_password"}),
+    )
+
+
+@router.post("/users/{resource_id}/unlock")
+async def unlock_staff_account(
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Lift a sign-in lockout before its 15 minutes are up."""
+    user_id = resource_id
+    hospital_id, actor_id = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _staff_account(connection, hospital_id, user_id)
+        await connection.execute(
+            text(
+                "UPDATE users SET failed_logins = 0, locked_until = NULL "
+                "WHERE hospital_id = :hospital_id AND id = :user_id"
+            ),
+            {"hospital_id": hospital_id, "user_id": user_id},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.users.unlocked",
+            resource_type="user",
+            resource_id=user_id,
+        )
+    return {"id": str(user_id), "locked": False}
+
+
+@router.post("/users/{resource_id}/mfa-reset")
+async def reset_staff_mfa(
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Remove a staff member's two-step sign-in (lost phone and recovery codes).
+
+    Never one's own: one stolen administrator account cannot remove its second factor.
+    The person sets it up again at the next sign-in if their role requires it.
+    """
+    user_id = resource_id
+    hospital_id, actor_id = _identity(principal)
+    _refuse_self("users", user_id, actor_id, "reset two-step sign-in of")
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        account = await _staff_account(connection, hospital_id, user_id)
+        await connection.execute(
+            text(
+                "UPDATE users SET mfa_enabled_at = NULL, mfa_secret_enc = NULL, "
+                "mfa_last_step = NULL, mfa_recovery_hashes = '[]'::jsonb "
+                "WHERE hospital_id = :hospital_id AND id = :user_id"
+            ),
+            {"hospital_id": hospital_id, "user_id": user_id},
+        )
+        ended = await _revoke_refresh_tokens(connection, hospital_id, user_id)
+        await end_staff_sessions(request, user_id)
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.users.mfa_reset",
+            resource_type="user",
+            resource_id=user_id,
+            meta={"was_enabled": account["mfa_enabled_at"] is not None, "sessions_ended": ended},
+        )
+    return {"id": str(user_id), "mfa_enabled": False}
+
+
+@router.get("/users/{resource_id}/sessions")
+async def staff_sessions(
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    user_id = resource_id
+    hospital_id, actor_id = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _staff_account(connection, hospital_id, user_id)
+        items = await list_sessions(
+            connection, hospital_id=hospital_id, user_id=user_id, current=None
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.users.sessions_viewed",
+            resource_type="user",
+            resource_id=user_id,
+        )
+    return {"items": items}
+
+
+@router.post("/users/{resource_id}/sessions/end")
+async def end_staff_sessions_now(
+    resource_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Sign a staff member out everywhere, at once (for example a lost or shared device)."""
+    user_id = resource_id
+    hospital_id, actor_id = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _staff_account(connection, hospital_id, user_id)
+        ended = await _revoke_refresh_tokens(connection, hospital_id, user_id)
+        await end_staff_sessions(request, user_id)
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.users.sessions_ended",
+            resource_type="user",
+            resource_id=user_id,
+            meta={"sessions_ended": ended},
+        )
+    return {"id": str(user_id), "ended": ended}

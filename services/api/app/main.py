@@ -25,6 +25,7 @@ from app.ai.providers.llm.mock import MockLLM
 from app.ai.providers.stt.factory import build_stt_provider
 from app.ai.providers.tts.factory import build_tts_provider
 from app.ai.speech import SpeechService
+from app.api.v1 import account as account_api
 from app.api.v1 import admin as admin_api
 from app.api.v1 import analytics as analytics_api
 from app.api.v1 import audio as audio_api
@@ -47,6 +48,7 @@ from app.core.errors import (
 from app.core.logging import configure_logging
 from app.core.ratelimit import InMemorySlidingWindow
 from app.db.session import create_engine, ping_database
+from app.domain.content_status import require_approved_content
 from app.pdf import warm_pdf_renderer
 
 logger = structlog.get_logger(__name__)
@@ -144,6 +146,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"
         )
         response.headers.setdefault("Permissions-Policy", "microphone=(self)")
+        response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
         if request.app.state.settings.app_env == "production":
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
@@ -202,6 +205,8 @@ def create_app(
     """Create the API with injectable connections for isolated tests."""
     configured = settings or get_settings()
     configure_logging(configured.log_level)
+    if configured.clinical_content_approval_required:
+        require_approved_content()
 
     def pooled_engine(url: str) -> AsyncEngine:
         return create_engine(url, pool_min=configured.db_pool_min, pool_max=configured.db_pool_max)
@@ -332,6 +337,7 @@ def create_app(
     app.add_exception_handler(ApiProblemError, cast(handler_type, api_problem_exception_handler))
 
     app.include_router(auth_api.router)
+    app.include_router(account_api.router)
     app.include_router(audit_api.router)
     app.include_router(admin_api.router)
     app.include_router(analytics_api.router)
