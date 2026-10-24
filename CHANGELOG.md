@@ -47,6 +47,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   now", in three languages, using the screens' own words.
 - **Fixed:** changing your password while the page renewed its sign-in could sign you out
   with an error.
+- **Fast on a hospital with years of visits**: the visit register, the audit log search by
+  record or by person, and the end-of-day close-out were measured on a million visits and no
+  longer slow down as the history grows.
 
 ### Technical
 
@@ -105,6 +108,15 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - `scripts/make_print_pack.py` writes `docs/print`; CI fails when it is stale. The operator
   guide (`docs/DEPLOYMENT.md`) gains a check of the installation and sends Windows Server to a
   Hyper-V Linux virtual machine (there was never a `setup-hospital.ps1`).
+- Index review on a million visits (task 7.8.4; `docs/SCALING.md`,
+  `services/api/tests/perf/index_review.py`): migration `0034_index_review` adds partial
+  indexes on open visits and on numbers kept for queue messages, the register by time, and the
+  audit log by record and by person. The close-out goes from 395 to 9 ms, the register
+  newest-first from 266 to 12 ms, audit search by record from 100 to 11 ms. The upgrade builds
+  them in about 5 seconds per million visits. Query-count gates for the queue, case-sheet and
+  report screens (`tests/integration/test_query_counts.py`) fail on a query per row or a
+  statement over budget. Measured and left for task 7.8.5: the 5-minute analytics rollup
+  refresh recomputes the whole history (10 s at a million visits).
 
 ## [0.7.0]
 

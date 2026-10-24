@@ -1,10 +1,11 @@
 """Index review on a million visits (Phase 7, task 7.8.4). A tool, not a test: run by hand.
 
 Seeds a synthetic hospital with a busy district hospital's history (VISITS visits over DAYS
-days, their patients, case sheets, consents, timelines and audit trail) straight into a
-scratch database, puts a few patients through the real kiosk interview, then drives every
-hot route and worker job through the real application. PostgreSQL's pg_stat_statements
-reports each statement's mean and worst time; auto_explain logs the plans of slow ones.
+days, their patients, case sheets, consents, interviews, timelines and audit trail) straight
+into a scratch database, gives it a waiting queue today, puts a few patients through the real
+kiosk interview, then drives every hot route and worker job through the real application.
+PostgreSQL's pg_stat_statements reports each statement's mean and worst time; auto_explain
+logs the plans of slow ones.
 
 Needs a throwaway PostgreSQL 16 started with
   shared_preload_libraries=pg_stat_statements,auto_explain
@@ -12,6 +13,7 @@ Needs a throwaway PostgreSQL 16 started with
 the roles from scripts/init-db.sh and the migrations applied, plus a Redis. Settings come
 from the environment as for the integration tests (TEST_DATABASE_URL, ...), and
 SCALE_SUPERUSER_URL (postgresql://postgres:...@host:port/osa) seeds past row-level security.
+A later run reuses the seeded hospital; on a new day it adds only that day's queue.
 
     cd services/api && python -m tests.perf.index_review
 
@@ -21,9 +23,10 @@ Synthetic data only; never point it at a hospital's database.
 import asyncio
 import os
 import time
-from datetime import date
+from datetime import datetime
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import asyncpg
 import redis.asyncio as redis
@@ -37,6 +40,7 @@ from app.workers.main import (
     close_previous_days,
     collect_operational_metrics,
     rebuild_all,
+    refresh_analytics,
     relay_once,
 )
 from tests.integration.synthetic import (
@@ -64,9 +68,107 @@ CREATE OR REPLACE FUNCTION pg_temp.uuid7_at(ts timestamptz) RETURNS uuid AS $$
 $$ LANGUAGE sql VOLATILE
 """
 
+# Each past visit's records, as the application writes them. Old case sheets and answers are
+# unreadable here (not real ciphertext): the routes treat a sheet they cannot decrypt as
+# absent, and no route reads another visit's answers.
+HISTORY_RECORDS = (
+    "INSERT INTO case_sheets (id, hospital_id, visit_id, schema_version, data, "
+    "confirmed_by_patient, confirmed_at, created_at) SELECT gen_random_uuid(), "
+    "hospital_id, id, '1.0', jsonb_build_object('ciphertext', 'v1:history'), true, "
+    "registered_at, registered_at FROM visits WHERE hospital_id = $1",
+    "INSERT INTO consents (id, hospital_id, visit_id, language, text_version, "
+    "text_sha256, granted, granted_at, channel, purpose, created_at) SELECT "
+    "gen_random_uuid(), hospital_id, id, language, 'consent-1.0', repeat('a', 64), "
+    "true, registered_at, 'kiosk', 'care', registered_at FROM visits "
+    "WHERE hospital_id = $1",
+    # 8 to 15 answers a visit, as a kiosk interview gives; every fourth one spoken.
+    "INSERT INTO interview_turns (id, hospital_id, visit_id, turn_index, question_id, "
+    "input_mode, text_original, stt_provider, stt_confidence, created_at) SELECT "
+    "gen_random_uuid(), v.hospital_id, v.id, s.i, 'q' || s.i, CASE WHEN s.i % 4 = 3 "
+    "THEN 'voice' ELSE 'touch' END, 'v1:' || md5(v.id::text || s.i) || md5(s.i || "
+    "v.id::text), CASE WHEN s.i % 4 = 3 THEN 'sarvam' END, CASE WHEN s.i % 4 = 3 THEN 0.9 "
+    "END, v.registered_at + s.i * interval '8 seconds' FROM visits v CROSS JOIN LATERAL "
+    "generate_series(0, 7 + (hashtext(v.id::text) & 7)) AS s(i) WHERE v.hospital_id = $1",
+    "INSERT INTO visit_events (id, hospital_id, visit_id, from_status, to_status, "
+    "actor_type, actor_id, created_at) SELECT gen_random_uuid(), v.hospital_id, v.id, "
+    "e.f, e.t, e.a, CASE WHEN e.a = 'user' THEN v.called_by END, v.registered_at "
+    "+ e.offset_ FROM visits v CROSS JOIN (VALUES ('awaiting_confirmation', 'queued', "
+    "'patient', interval '2 minutes'), ('queued', 'called', 'user', "
+    "interval '40 minutes'), ('called', 'in_consult', 'user', interval '45 minutes'), "
+    "('in_consult', 'done', 'user', interval '55 minutes')) AS e(f, t, a, offset_) "
+    "WHERE v.hospital_id = $1 AND v.status = 'done'",
+    "INSERT INTO audit_log (id, hospital_id, actor_type, actor_id, action, "
+    "resource_type, resource_id, request_id, created_at) SELECT gen_random_uuid(), "
+    "v.hospital_id, a.actor_type, CASE WHEN a.actor_type = 'user' THEN v.called_by END, "
+    "a.action, 'visit', v.id, md5(v.id::text || a.action), v.registered_at + a.offset_ "
+    "FROM visits v CROSS JOIN (VALUES ('patient', 'intake.confirmed', "
+    "interval '2 minutes'), ('user', 'queue.called', interval '40 minutes'), ('user', "
+    "'case_sheet.viewed', interval '46 minutes')) AS a(actor_type, action, offset_) "
+    "WHERE v.hospital_id = $1 AND v.called_by IS NOT NULL",
+    "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, "
+    "evidence, acknowledged_by, acknowledged_at, created_at) SELECT gen_random_uuid(), "
+    "hospital_id, id, 'tile', 'chest_pain', 'urgent', 'chest_pain', called_by, "
+    "registered_at + interval '3 minutes', registered_at FROM visits "
+    "WHERE hospital_id = $1 AND urgency = 'urgent'",
+)
+
+# Today's waiting line and what each waiting visit already has: its case sheet, consent,
+# answers and arrival on the timeline, and an urgent danger sign nobody has acknowledged.
+TODAY_QUEUE = """
+WITH waiting AS (
+  INSERT INTO visits (id, hospital_id, patient_id, department_id, status, urgency,
+    token_number, token_label, service_date, language, age_years, registered_at, queued_at)
+  SELECT pg_temp.uuid7_at(t.at), $1, p.id, dep.id, 'queued',
+    CASE WHEN s.n % 31 = 0 THEN 'urgent' WHEN s.n % 7 = 0 THEN 'priority' ELSE 'routine' END,
+    500 + s.n, dep.token_prefix || '-' || (500 + s.n), (now() AT TIME ZONE 'Asia/Kolkata')::date,
+    (ARRAY['hi','mr','en'])[1 + s.n % 3], 1 + (s.n * 7) % 90, t.at, t.at
+  FROM (SELECT id, token_prefix, row_number() OVER (ORDER BY id) AS di
+        FROM departments WHERE id = ANY($2::uuid[])) dep
+  CROSS JOIN generate_series(1, $3) AS s(n)
+  CROSS JOIN LATERAL (SELECT now() - s.n * interval '20 seconds' AS at) t
+  JOIN pids p ON p.rn = 1 + ((s.n * 31 + dep.di * 7) % $4)
+  RETURNING id, hospital_id, language, urgency, registered_at
+), sheets AS (
+  INSERT INTO case_sheets (id, hospital_id, visit_id, schema_version, data,
+    confirmed_by_patient, confirmed_at, created_at)
+  SELECT gen_random_uuid(), hospital_id, id, '1.0',
+    jsonb_build_object('ciphertext', 'v1:today'), true, registered_at, registered_at
+  FROM waiting
+), consents AS (
+  INSERT INTO consents (id, hospital_id, visit_id, language, text_version, text_sha256,
+    granted, granted_at, channel, purpose, created_at)
+  SELECT gen_random_uuid(), hospital_id, id, language, 'consent-1.0', repeat('a', 64), true,
+    registered_at, 'kiosk', 'care', registered_at
+  FROM waiting
+), answers AS (
+  INSERT INTO interview_turns (id, hospital_id, visit_id, turn_index, question_id,
+    input_mode, text_original, created_at)
+  SELECT gen_random_uuid(), w.hospital_id, w.id, s.i, 'q' || s.i, 'touch',
+    'v1:' || md5(w.id::text || s.i), w.registered_at + s.i * interval '8 seconds'
+  FROM waiting w CROSS JOIN generate_series(0, 11) AS s(i)
+), arrivals AS (
+  INSERT INTO visit_events (id, hospital_id, visit_id, from_status, to_status, actor_type,
+    created_at)
+  SELECT gen_random_uuid(), hospital_id, id, 'awaiting_confirmation', 'queued', 'patient',
+    registered_at
+  FROM waiting
+), alerts AS (
+  INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, evidence,
+    created_at)
+  SELECT gen_random_uuid(), hospital_id, id, 'tile', 'chest_pain', 'urgent', 'chest_pain',
+    registered_at
+  FROM waiting WHERE urgency = 'urgent'
+)
+SELECT count(*) FROM waiting
+"""
+
 
 def phone(index: int) -> str:
     return f"9{index:09d}"[:10]
+
+
+def this_year() -> int:
+    return datetime.now(ZoneInfo("Asia/Kolkata")).year
 
 
 async def attach_or_create(superuser_url: str, settings: Any) -> SyntheticHospital:
@@ -129,6 +231,16 @@ async def attach_or_create(superuser_url: str, settings: Any) -> SyntheticHospit
     )
 
 
+async def number_patients(connection: asyncpg.Connection, hospital_id: UUID) -> None:
+    """pids(rn, id): the hospital's patients numbered 1..n, to spread visits over them."""
+    await connection.execute(
+        "CREATE TEMP TABLE IF NOT EXISTS pids AS SELECT row_number() OVER (ORDER BY id) AS rn, "
+        "id FROM patients WHERE hospital_id = $1",
+        hospital_id,
+    )
+    await connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS pids_rn ON pids (rn)")
+
+
 async def seed(superuser_url: str, hospital: Any) -> dict[str, Any]:
     """The history, written as the database owner (COPY and bulk INSERT skip the API)."""
     settings = hospital.settings
@@ -141,7 +253,7 @@ async def seed(superuser_url: str, hospital: Any) -> dict[str, Any]:
     try:
         await connection.execute(UUID7)
         # Patients, with real encryption and phone digests so lookups behave as in production.
-        year = date.today().year % 100
+        year = this_year() % 100
         rows = []
         for index in range(PATIENTS):
             patient_id = uuid7()
@@ -172,13 +284,8 @@ async def seed(superuser_url: str, hospital: Any) -> dict[str, Any]:
             ],
         )
         print(f"patients: {PATIENTS} in {time.perf_counter() - started:.0f} s", flush=True)
-        await connection.execute(
-            "CREATE TEMP TABLE pids AS SELECT row_number() OVER (ORDER BY id) AS rn, id "
-            "FROM patients WHERE hospital_id = $1",
-            hospital_id,
-        )
-        await connection.execute("CREATE UNIQUE INDEX ON pids (rn)")
-        # Visits: past days all closed (seen, absent or cancelled); today a waiting queue.
+        await number_patients(connection, hospital_id)
+        # Past days, all closed: seen, absent or cancelled.
         await connection.execute(
             """
             INSERT INTO visits (id, hospital_id, patient_id, department_id, status, urgency,
@@ -201,7 +308,8 @@ async def seed(superuser_url: str, hospital: Any) -> dict[str, Any]:
               CASE WHEN s.n % 20 = 0 OR s.n % 29 = 0 THEN NULL ELSE $2::uuid END,
               CASE WHEN s.n % 29 = 0 THEN NULL ELSE $2::uuid END,
               (s.n * 13) % 100
-            FROM (SELECT g AS ago, current_date - g AS day FROM generate_series(1, $3) g) d
+            FROM (SELECT g AS ago, (now() AT TIME ZONE 'Asia/Kolkata')::date - g AS day
+                  FROM generate_series(1, $3) g) d
             CROSS JOIN (SELECT id, token_prefix, row_number() OVER (ORDER BY id) AS di
                         FROM departments WHERE id = ANY($4::uuid[])) dep
             CROSS JOIN generate_series(1, $5) AS s(n)
@@ -211,75 +319,35 @@ async def seed(superuser_url: str, hospital: Any) -> dict[str, Any]:
             """,
             hospital_id, doctor, DAYS, departments, per_day, PATIENTS,
         )
-        await connection.execute(
-            """
-            INSERT INTO visits (id, hospital_id, patient_id, department_id, status, urgency,
-              token_number, token_label, service_date, language, age_years, registered_at,
-              queued_at)
-            SELECT pg_temp.uuid7_at(t.at), $1, p.id, dep.id, 'queued',
-              CASE WHEN s.n % 31 = 0 THEN 'urgent' WHEN s.n % 7 = 0 THEN 'priority'
-                   ELSE 'routine' END,
-              500 + s.n, dep.token_prefix || '-' || (500 + s.n), current_date,
-              (ARRAY['hi','mr','en'])[1 + s.n % 3], 1 + (s.n * 7) % 90, t.at, t.at
-            FROM (SELECT id, token_prefix, row_number() OVER (ORDER BY id) AS di
-                  FROM departments WHERE id = ANY($2::uuid[])) dep
-            CROSS JOIN generate_series(1, $3) AS s(n)
-            CROSS JOIN LATERAL (SELECT now() - s.n * interval '20 seconds' AS at) t
-            JOIN pids p ON p.rn = 1 + ((s.n * 31 + dep.di * 7) % $4)
-            """,
-            hospital_id, departments, TODAY_QUEUED, PATIENTS,
-        )
         print(f"visits in {time.perf_counter() - started:.0f} s", flush=True)
-        # Each visit's records, as the application writes them (old case sheets unreadable
-        # here: the routes treat a sheet they cannot decrypt as absent).
-        statements = (
-            "INSERT INTO case_sheets (id, hospital_id, visit_id, schema_version, data, "
-            "confirmed_by_patient, confirmed_at, created_at) SELECT gen_random_uuid(), "
-            "hospital_id, id, '1.0', jsonb_build_object('ciphertext', 'v1:history'), true, "
-            "registered_at, registered_at FROM visits WHERE hospital_id = $1",
-            "INSERT INTO consents (id, hospital_id, visit_id, language, text_version, "
-            "text_sha256, granted, granted_at, channel, purpose, created_at) SELECT "
-            "gen_random_uuid(), hospital_id, id, language, 'consent-1.0', repeat('a', 64), "
-            "true, registered_at, 'kiosk', 'care', registered_at FROM visits "
-            "WHERE hospital_id = $1",
-            "INSERT INTO visit_events (id, hospital_id, visit_id, from_status, to_status, "
-            "actor_type, actor_id, created_at) SELECT gen_random_uuid(), v.hospital_id, v.id, "
-            "e.f, e.t, e.a, CASE WHEN e.a = 'user' THEN v.called_by END, v.registered_at "
-            "+ e.offset_ FROM visits v CROSS JOIN (VALUES ('awaiting_confirmation', 'queued', "
-            "'patient', interval '2 minutes'), ('queued', 'called', 'user', "
-            "interval '40 minutes'), ('called', 'in_consult', 'user', interval '45 minutes'), "
-            "('in_consult', 'done', 'user', interval '55 minutes')) AS e(f, t, a, offset_) "
-            "WHERE v.hospital_id = $1 AND v.status = 'done'",
-            "INSERT INTO audit_log (id, hospital_id, actor_type, actor_id, action, "
-            "resource_type, resource_id, request_id, created_at) SELECT gen_random_uuid(), "
-            "v.hospital_id, a.actor_type, CASE WHEN a.actor_type = 'user' THEN v.called_by END, "
-            "a.action, 'visit', v.id, md5(v.id::text || a.action), v.registered_at + a.offset_ "
-            "FROM visits v CROSS JOIN (VALUES ('patient', 'intake.confirmed', "
-            "interval '2 minutes'), ('user', 'queue.called', interval '40 minutes'), ('user', "
-            "'case_sheet.viewed', interval '46 minutes')) AS a(actor_type, action, offset_) "
-            "WHERE v.hospital_id = $1 AND v.called_by IS NOT NULL",
-            "INSERT INTO red_flag_events (id, hospital_id, visit_id, source, rule_id, level, "
-            "evidence, acknowledged_by, acknowledged_at, created_at) SELECT gen_random_uuid(), "
-            "hospital_id, id, 'tile', 'chest_pain', 'urgent', 'chest_pain', "
-            "CASE WHEN status <> 'queued' THEN called_by END, "
-            "CASE WHEN status <> 'queued' THEN registered_at + interval '3 minutes' END, "
-            "registered_at FROM visits WHERE hospital_id = $1 AND urgency = 'urgent'",
-        )
-        for statement in statements:
+        for statement in HISTORY_RECORDS:
             await connection.execute(statement, hospital_id)
             print(f"  {statement.split()[2]} in {time.perf_counter() - started:.0f} s", flush=True)
         await connection.execute("ANALYZE")
-        counts = {
-            table: await connection.fetchval(f"SELECT count(*) FROM {table}")  # noqa: S608
-            for table in ("patients", "visits", "case_sheets", "consents", "visit_events",
-                          "audit_log", "red_flag_events")
-        }
-        sample = await connection.fetchrow(
-            "SELECT p.mrn FROM visits v JOIN patients p ON p.id = v.patient_id "
-            "WHERE v.hospital_id = $1 AND v.service_date = current_date - 3 LIMIT 1",
-            hospital_id,
+        return {"seconds": time.perf_counter() - started}
+    finally:
+        await connection.close()
+
+
+async def queue_today(superuser_url: str, hospital: Any) -> int:
+    """Today's waiting line (tokens from 501), unless an earlier run made it; returns the
+    visits added."""
+    connection = await asyncpg.connect(superuser_url)
+    try:
+        if await connection.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM visits WHERE hospital_id = $1 AND token_number > 500 "
+            "AND service_date = (now() AT TIME ZONE 'Asia/Kolkata')::date)",
+            hospital.hospital_id,
+        ):
+            return 0
+        await connection.execute(UUID7)
+        await number_patients(connection, hospital.hospital_id)
+        added = await connection.fetchval(
+            TODAY_QUEUE, hospital.hospital_id, list(hospital.departments.values()), TODAY_QUEUED,
+            PATIENTS,
         )
-        return {"counts": counts, "mrn": sample["mrn"], "seconds": time.perf_counter() - started}
+        await connection.execute("ANALYZE")
+        return int(added)
     finally:
         await connection.close()
 
@@ -292,69 +360,101 @@ def timed(results: list[tuple[str, int, float]], label: str, call: Any) -> Any:
     return response
 
 
-async def drive(hospital: Any, facts: dict[str, Any]) -> list[tuple[str, int, float]]:
-    """Every hot route and worker job, once warm, as staff and the worker use them."""
-    settings = hospital.settings
-    results: list[tuple[str, int, float]] = []
-    medicine = hospital.departments["GENMED"]
-    with api_client(settings) as client:
-        visits = []
-        for complaint in ("fever and cough", "back pain", "headache", "loose motions", "rash"):
-            session = start_kiosk_session(client, activate_kiosk(client, hospital))
-            complete_intake(session, complaint=complaint, phone=phone(7))
-            assert session.confirm().status_code == 200
-            visits.append(session.visit_id)
-        visit = visits[0]
-        doctor, nurse, admin = (hospital.staff(name) for name in ("doctor", "nurse", "admin"))
-        for _ in range(2):  # the second round is the warm one that counts
-            results.clear()
-            timed(results, "queue", lambda: client.get(
-                f"/queue?department_id={medicine}&limit=50", headers=nurse))
-            timed(results, "queue waiting", lambda: client.get(
-                f"/queue?department_id={medicine}&status=queued&limit=50", headers=nurse))
-            timed(results, "alerts", lambda: client.get(
-                f"/alerts?acknowledged=false&department_id={medicine}", headers=nurse))
-            timed(results, "register today", lambda: client.get(
-                "/patients?limit=50&days=1", headers=admin))
-            timed(results, "register 30 days", lambda: client.get(
-                "/patients?limit=50&days=30", headers=admin))
-            timed(results, "register newest", lambda: client.get(
-                "/patients?limit=50", headers=nurse))
-            timed(results, "lookup OPD card", lambda: client.get(
-                f"/patients/lookup?opd_number={facts['mrn']}", headers=nurse))
-            timed(results, "lookup phone", lambda: client.get(
-                f"/patients/lookup?phone={phone(7)}", headers=nurse))
-            for path in ("case-sheet", "history", "transcript", "doctor-notes", "documents",
-                         "investigations", "queue-events", "fhir"):
-                timed(results, f"visit {path}", lambda path=path: client.get(
-                    f"/visits/{visit}/{path}", headers=doctor))
-            timed(results, "analytics summary", lambda: client.get(
-                "/analytics/summary?days=30", headers=admin))
-            timed(results, "analytics timeseries", lambda: client.get(
-                "/analytics/timeseries?days=30", headers=admin))
-            timed(results, "audit newest", lambda: client.get("/audit?limit=50", headers=admin))
-            timed(results, "audit by visit", lambda: client.get(
-                f"/audit?resource_id={visit}&limit=50", headers=admin))
-            timed(results, "system", lambda: client.get("/admin/system", headers=admin))
-            timed(results, "call next", lambda: client.post(
-                f"/queue/call-next?department_id={medicine}", headers=hospital.staff("doctor2")))
+async def worker_jobs(
+    settings: Any, names: tuple[str, ...], *, when: str
+) -> list[tuple[str, int, float]]:
+    """The named worker jobs, each in its own transaction, as the worker runs them."""
     engine = create_async_engine(settings.worker_database_url or settings.database_url)
     state = redis.from_url(settings.redis_state_url, decode_responses=True)  # type: ignore[no-untyped-call]
+    jobs = {
+        "close-out": lambda c: close_previous_days(c),
+        "monitoring gauges": lambda c: collect_operational_metrics(c),
+        "outbox relay": lambda c: relay_once(c, state, settings=settings),
+        "queue rebuild": lambda c: rebuild_all(c, state, settings=settings),
+    }
+    results: list[tuple[str, int, float]] = []
     try:
-        for label, job in (
-            ("worker: close-out", lambda c: close_previous_days(c)),
-            ("worker: monitoring gauges", lambda c: collect_operational_metrics(c)),
-            ("worker: outbox relay", lambda c: relay_once(c, state, settings=settings)),
-            ("worker: queue rebuild", lambda c: rebuild_all(c, state, settings=settings)),
-        ):
+        for name in names:
             started = time.perf_counter()
-            async with engine.begin() as connection:
-                await job(connection)
-            results.append((label, 0, (time.perf_counter() - started) * 1000))
+            if name == "analytics refresh":
+                await refresh_analytics({"engine": engine})
+            else:
+                async with engine.begin() as connection:
+                    await jobs[name](connection)
+            results.append((f"{when}: {name}", 0, (time.perf_counter() - started) * 1000))
     finally:
         await state.aclose()
         await engine.dispose()
     return results
+
+
+async def drive(hospital: Any, facts: dict[str, Any]) -> list[tuple[str, int, float]]:
+    """Every hot route and worker job, once warm, as staff, patients and the worker use them."""
+    settings = hospital.settings
+    # As at the worker's start: the queue rebuilt from the database, the rollup refreshed.
+    results = await worker_jobs(settings, ("queue rebuild", "analytics refresh"), when="start")
+    routes: list[tuple[str, int, float]] = []
+    medicine = hospital.departments["GENMED"]
+    with api_client(settings) as client:
+        visits, status_tokens = [], []
+        for complaint in ("fever and cough", "back pain", "headache", "loose motions", "rash"):
+            session = start_kiosk_session(client, activate_kiosk(client, hospital))
+            complete_intake(session, complaint=complaint, phone=phone(7))
+            confirmed = session.confirm()
+            assert confirmed.status_code == 200, confirmed.text
+            visits.append(session.visit_id)
+            status_tokens.append(confirmed.json()["status_token"])
+        visit = visits[0]
+        doctor, nurse, admin = (hospital.staff(name) for name in ("doctor", "nurse", "admin"))
+        for _ in range(2):  # the second round is the warm one that counts
+            routes.clear()
+            timed(routes, "status page", lambda: client.get(f"/status/{status_tokens[0]}"))
+            timed(routes, "queue", lambda: client.get(
+                f"/queue?department_id={medicine}&limit=50", headers=nurse))
+            timed(routes, "queue waiting", lambda: client.get(
+                f"/queue?department_id={medicine}&status=queued&limit=50", headers=nurse))
+            timed(routes, "queue all departments", lambda: client.get(
+                "/queue?limit=50", headers=admin))
+            timed(routes, "alerts", lambda: client.get(
+                f"/alerts?acknowledged=false&department_id={medicine}", headers=nurse))
+            timed(routes, "register today", lambda: client.get(
+                "/patients?limit=50&days=1", headers=admin))
+            timed(routes, "register 30 days", lambda: client.get(
+                "/patients?limit=50&days=30", headers=admin))
+            timed(routes, "register newest", lambda: client.get(
+                "/patients?limit=50", headers=nurse))
+            timed(routes, "lookup OPD card", lambda: client.get(
+                f"/patients/lookup?opd_number={facts['mrn']}", headers=nurse))
+            timed(routes, "lookup phone", lambda: client.get(
+                f"/patients/lookup?phone={phone(7)}", headers=nurse))
+            for path in ("case-sheet", "history", "transcript", "doctor-notes", "documents",
+                         "investigations", "queue-events", "fhir"):
+                timed(routes, f"visit {path}", lambda path=path: client.get(
+                    f"/visits/{visit}/{path}", headers=doctor))
+            timed(routes, "analytics summary", lambda: client.get(
+                "/analytics/summary?days=30", headers=admin))
+            timed(routes, "analytics timeseries", lambda: client.get(
+                "/analytics/timeseries?days=30", headers=admin))
+            timed(routes, "audit newest", lambda: client.get("/audit?limit=50", headers=admin))
+            timed(routes, "audit by visit", lambda: client.get(
+                f"/audit?record={visit}&limit=50", headers=admin))
+            timed(routes, "audit by person", lambda: client.get(
+                f"/audit?person={hospital.users['nurse']}&limit=50", headers=admin))
+            timed(routes, "system", lambda: client.get("/admin/system", headers=admin))
+            called = timed(routes, "call next", lambda: client.post(
+                f"/queue/call-next?department_id={medicine}", headers=hospital.staff("doctor2")))
+            assert called.status_code == 200, called.text
+            consult = called.json()["visit_id"]
+            timed(routes, "start consult", lambda consult=consult: client.post(
+                f"/queue/{consult}/start", headers=hospital.staff("doctor2")))
+            timed(routes, "complete consult", lambda consult=consult: client.post(
+                f"/queue/{consult}/complete", headers=hospital.staff("doctor2")))
+    # The day's recurring jobs: every 2 s (relay), 30 s (gauges), 5 min (rollup), 15 min.
+    return results + routes + await worker_jobs(
+        settings,
+        ("outbox relay", "monitoring gauges", "analytics refresh", "close-out", "queue rebuild"),
+        when="worker",
+    )
 
 
 async def statement_report(superuser_url: str) -> list[asyncpg.Record]:
@@ -366,7 +466,7 @@ async def statement_report(superuser_url: str) -> list[asyncpg.Record]:
             "regexp_replace(query, '\\s+', ' ', 'g') AS query FROM pg_stat_statements "
             "WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database()) "
             "AND query NOT ILIKE '%pg_stat_statements%' "
-            "ORDER BY mean_exec_time DESC LIMIT 25"
+            "ORDER BY mean_exec_time DESC LIMIT 30"
         )
     finally:
         await connection.close()
@@ -384,8 +484,8 @@ async def main() -> None:
     finally:
         await connection.close()
     if not seeded:
-        counts = await seed(superuser_url, hospital)
-        print("seeded", counts["counts"], f"in {counts['seconds']:.0f} s", flush=True)
+        print(f"seeded in {(await seed(superuser_url, hospital))['seconds']:.0f} s", flush=True)
+    print(f"queued today: {await queue_today(superuser_url, hospital)} added", flush=True)
     connection = await asyncpg.connect(superuser_url)
     try:
         # New OPD card numbers continue after the seeded ones.
@@ -394,28 +494,34 @@ async def main() -> None:
             "SELECT $1, $2, coalesce(max(split_part(mrn, '-', 2)::int), 0) FROM patients "
             "WHERE hospital_id = $1 AND mrn LIKE $3 ON CONFLICT (hospital_id, year) DO UPDATE "
             "SET last_value = GREATEST(patient_number_counters.last_value, EXCLUDED.last_value)",
-            hospital.hospital_id, date.today().year, f"{date.today().year % 100:02d}-%",
+            hospital.hospital_id, this_year(), f"{this_year() % 100:02d}-%",
         )
+        counts = {
+            table: await connection.fetchval(f"SELECT count(*) FROM {table}")  # noqa: S608
+            for table in ("patients", "visits", "case_sheets", "consents", "interview_turns",
+                          "visit_events", "audit_log", "red_flag_events")
+        }
+        print("rows:", counts, flush=True)
         mrn = await connection.fetchval(
             "SELECT p.mrn FROM visits v JOIN patients p ON p.id = v.patient_id "
-            "WHERE v.hospital_id = $1 AND v.service_date = current_date - 3 LIMIT 1",
+            "WHERE v.hospital_id = $1 AND v.service_date = (now() AT TIME ZONE "
+            "'Asia/Kolkata')::date - 3 LIMIT 1",
             hospital.hospital_id,
         )
         await connection.execute("SELECT pg_stat_statements_reset()")
     finally:
         await connection.close()
-    if True:
-        results = await drive(hospital, {"mrn": mrn})
-        print(f"\n{'route or job':<28}{'status':>8}{'ms':>10}")
-        for label, status, ms in results:
-            flag = "  <-- slow" if ms > 200 else ""
-            print(f"{label:<28}{status:>8}{ms:>10.1f}{flag}")
-        print(f"\nStatements by mean time (pg_stat_statements; slow means over {SLOW_MS} ms):")
-        for row in await statement_report(superuser_url):
-            flag = "SLOW " if float(row["mean_ms"]) > SLOW_MS else "     "
-            print(f"{flag}{row['mean_ms']:>8} ms mean {row['max_ms']:>8} ms max "
-                  f"{row['calls']:>5} calls  {row['query'][:220]}")
-        print("\nDone. Plans of slow statements: the server log (auto_explain).")
+    results = await drive(hospital, {"mrn": mrn})
+    print(f"\n{'route or job':<28}{'status':>8}{'ms':>10}")
+    for label, status, ms in results:
+        flag = "  <-- slow" if ms > 200 else ""
+        print(f"{label:<28}{status:>8}{ms:>10.1f}{flag}")
+    print(f"\nStatements by mean time (pg_stat_statements; slow means over {SLOW_MS} ms):")
+    for row in await statement_report(superuser_url):
+        flag = "SLOW " if float(row["mean_ms"]) > SLOW_MS else "     "
+        print(f"{flag}{row['mean_ms']:>8} ms mean {row['max_ms']:>8} ms max "
+              f"{row['calls']:>5} calls  {row['query'][:220]}")
+    print("\nDone. Plans of slow statements: the server log (auto_explain).")
 
 
 if __name__ == "__main__":
