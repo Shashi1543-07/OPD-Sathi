@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -128,8 +128,21 @@ class QueueSettingsPatch(Payload):
 
 
 class InterviewSettingsPatch(Payload):
+    """The switches to change; a switch left out keeps its value."""
+
     # Ask the six patient-reportable Ayurveda history questions in every interview.
-    ayurveda_module: bool
+    ayurveda_module: bool | None = None
+    # Ask the one-screen review of systems (other body systems) in every interview.
+    review_of_systems_module: bool | None = None
+
+    @model_validator(mode="after")
+    def one_switch(self) -> "InterviewSettingsPatch":
+        if self.ayurveda_module is None and self.review_of_systems_module is None:
+            raise ValueError("Change at least one interview setting.")
+        return self
+
+
+_INTERVIEW_SWITCHES = ("ayurveda_module", "review_of_systems_module")
 
 
 def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
@@ -310,7 +323,8 @@ async def _interview_settings(connection: Any, hospital_id: UUID) -> dict[str, A
         (
             await connection.execute(
                 text(
-                    "SELECT s.ayurveda_module, s.updated_at, u.name AS updated_by_name "
+                    "SELECT s.ayurveda_module, s.review_of_systems_module, s.updated_at, "
+                    "u.name AS updated_by_name "
                     "FROM hospital_interview_settings s LEFT JOIN users u "
                     "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
                     "WHERE s.hospital_id = :hospital_id"
@@ -322,9 +336,15 @@ async def _interview_settings(connection: Any, hospital_id: UUID) -> dict[str, A
         .first()
     )
     if row is None:
-        return {"ayurveda_module": False, "updated_at": None, "updated_by_name": None}
+        return {
+            "ayurveda_module": False,
+            "review_of_systems_module": False,
+            "updated_at": None,
+            "updated_by_name": None,
+        }
     return {
         "ayurveda_module": bool(row["ayurveda_module"]),
+        "review_of_systems_module": bool(row["review_of_systems_module"]),
         "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
         "updated_by_name": row["updated_by_name"],
     }
@@ -335,7 +355,7 @@ async def get_interview_settings(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(_admin_principal)],
 ) -> dict[str, Any]:
-    """Optional interview modules for this hospital (the Ayurveda history)."""
+    """Optional interview modules for this hospital (review of systems, Ayurveda history)."""
     hospital_id, _ = _identity(principal)
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
@@ -348,22 +368,29 @@ async def patch_interview_settings(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(_admin_principal)],
 ) -> dict[str, Any]:
-    """Turn the Ayurveda history on or off; it applies to interviews that start afterwards."""
+    """Turn optional modules on or off; changes apply to interviews that start afterwards."""
     hospital_id, actor_id = _identity(principal)
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         before = await _interview_settings(connection, hospital_id)
+        after = {
+            name: before[name] if getattr(payload, name) is None else getattr(payload, name)
+            for name in _INTERVIEW_SWITCHES
+        }
         await connection.execute(
             text(
                 "INSERT INTO hospital_interview_settings (hospital_id, ayurveda_module, "
-                "updated_by) VALUES (:hospital_id, :ayurveda, :actor_id) "
+                "review_of_systems_module, updated_by) "
+                "VALUES (:hospital_id, :ayurveda, :review_of_systems, :actor_id) "
                 "ON CONFLICT (hospital_id) DO UPDATE SET "
                 "ayurveda_module = EXCLUDED.ayurveda_module, "
+                "review_of_systems_module = EXCLUDED.review_of_systems_module, "
                 "updated_by = EXCLUDED.updated_by, updated_at = now()"
             ),
             {
                 "hospital_id": hospital_id,
-                "ayurveda": payload.ayurveda_module,
+                "ayurveda": after["ayurveda_module"],
+                "review_of_systems": after["review_of_systems_module"],
                 "actor_id": actor_id,
             },
         )
@@ -377,10 +404,9 @@ async def patch_interview_settings(
             resource_type="hospital_interview_settings",
             resource_id=hospital_id,
             meta={
-                "ayurveda_module": {
-                    "before": before["ayurveda_module"],
-                    "after": payload.ayurveda_module,
-                }
+                name: {"before": before[name], "after": after[name]}
+                for name in _INTERVIEW_SWITCHES
+                if getattr(payload, name) is not None
             },
         )
         return await _interview_settings(connection, hospital_id)

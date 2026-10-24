@@ -12,12 +12,20 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **The doctor's own notes** (Clinical notes tab): examination findings, assessment, plan and a
   follow-up date, written by the doctor and never by AI. Each save is a new version; earlier
   versions stay readable, and the latest is printed on the case sheet PDF.
+- **Review of systems** (Settings → Patient interview, off by default): one extra kiosk and
+  phone screen, "In the last month, have you had any of these?", with one choice per body
+  system, leaving out systems the interview already asked about. Ticked systems reach the
+  case sheet; "None of these" is recorded as a denial of each system shown. Wording awaits
+  clinical and native-speaker review.
 
 ### Technical
 
 - `GET`/`PUT /visits/{id}/doctor-notes` with `If-Match` versions; table `doctor_notes`
   (migration `0029_doctor_notes`, insert-only for the application, encrypted text included in
   key rotation and restore drills).
+- Question bank module `review_of_systems` (16 modules); `PATCH /admin/interview-settings`
+  changes only the switches it is sent; migration `0030_review_of_systems`. The golden
+  interview set includes one review-of-systems case per language.
 
 ## [0.7.0]
 

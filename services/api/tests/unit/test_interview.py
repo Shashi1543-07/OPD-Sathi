@@ -39,7 +39,7 @@ def _run(language: str, complaint: str, answers: list[str | None]) -> tuple[list
 
 
 def test_question_bank_and_consent_are_valid_draft_content() -> None:
-    assert validate_question_bank() == {"questions": 32, "modules": 15}
+    assert validate_question_bank() == {"questions": 33, "modules": 16}
     for language in ("en", "hi", "mr"):
         consent = get_consent_copy(language)  # type: ignore[arg-type]
         assert consent["text"]

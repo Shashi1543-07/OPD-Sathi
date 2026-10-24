@@ -7,6 +7,7 @@ All patient-facing consent, question-bank, danger-tile, and red-flag content bel
 | `services/api/app/domain/interview/consent/` | Clinical/legal consent wording and English, Hindi, and Marathi translations | Pending |
 | `services/api/app/domain/interview/bank/core.json` | Clinical relevance, neutral wording, translation parity | Pending |
 | `services/api/app/domain/interview/bank/modules/` | Clinical relevance, completeness, neutral wording, translation parity | Pending |
+| `services/api/app/domain/interview/bank/modules/review_of_systems.json` (task 7.11.2, off by default) | The body systems offered and their plain wording; which systems another module covers (hidden then); that "None of these" may be recorded as "Review of systems: denies" each system shown; the one-month window | Pending |
 | `services/api/app/domain/interview/bank/triggers.json` | Clinical appropriateness and whether complaint terms select suitable questions | Pending |
 | `services/api/app/domain/interview/bank/danger_tiles.json` | Emergency wording, escalation expectations, translation parity | Pending |
 | `services/api/app/domain/interview/engine.py` | Confirm deterministic field mapping and default routing are safe for history collection | Pending |

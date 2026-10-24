@@ -43,7 +43,13 @@ from app.db.repositories import (
 )
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
 from app.domain.checkin import checkin_code_digest, is_checkin_code
-from app.domain.interview.bank import AYURVEDA_MODULE, QUESTIONS, Language, Question
+from app.domain.interview.bank import (
+    AYURVEDA_MODULE,
+    QUESTIONS,
+    REVIEW_OF_SYSTEMS_MODULE,
+    Language,
+    Question,
+)
 from app.domain.interview.consent import DANGER_TILES, get_consent_copy
 from app.domain.interview.engine import (
     ALWAYS_MODULES,
@@ -251,18 +257,33 @@ async def _session_lock(request: Request, hospital_id: UUID, visit_id: UUID) -> 
             pass  # The lock expires by itself.
 
 
-async def _hospital_ayurveda_enabled(request: Request, hospital_id: UUID) -> bool:
-    """Whether this hospital adds the Ayurveda history questions (an AYUSH hospital)."""
+async def _hospital_modules(request: Request, hospital_id: UUID) -> tuple[str, ...]:
+    """The optional modules this hospital adds: review of systems, then Ayurveda history."""
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        enabled = await connection.scalar(
-            text(
-                "SELECT ayurveda_module FROM hospital_interview_settings "
-                "WHERE hospital_id = :hospital_id"
-            ),
-            {"hospital_id": hospital_id},
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT review_of_systems_module, ayurveda_module "
+                        "FROM hospital_interview_settings WHERE hospital_id = :hospital_id"
+                    ),
+                    {"hospital_id": hospital_id},
+                )
+            )
+            .mappings()
+            .first()
         )
-    return enabled is True
+    if row is None:
+        return ()
+    return tuple(
+        module
+        for module, enabled in (
+            (REVIEW_OF_SYSTEMS_MODULE, row["review_of_systems_module"]),
+            (AYURVEDA_MODULE, row["ayurveda_module"]),
+        )
+        if enabled is True
+    )
 
 
 async def _evaluate_visit(
@@ -1787,9 +1808,7 @@ async def save_danger_signs(
         red_flag_ids=tuple(payload.tile_ids),
         sex=context.get("sex"),
         age=context.get("age_years"),
-        extra_modules=(
-            (AYURVEDA_MODULE,) if await _hospital_ayurveda_enabled(request, hospital_id) else ()
-        ),
+        extra_modules=await _hospital_modules(request, hospital_id),
     )
     state["interview"] = interview_state.model_dump(mode="json")
     state["phase"] = "interview"

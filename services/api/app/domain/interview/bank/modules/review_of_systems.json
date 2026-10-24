@@ -1,0 +1,179 @@
+{
+  "review_status": "draft_needs_clinician_review",
+  "questions": [
+    {
+      "id": "ros_checklist",
+      "module": "review_of_systems",
+      "input": "text",
+      "optional": true,
+      "topic": "other body systems (review of systems)",
+      "prompt": {
+        "en": "In the last month, have you had any of these? Tap all that apply.",
+        "hi": "पिछले एक महीने में क्या आपको इनमें से कुछ हुआ है? जो भी लागू हो, सब चुनें।",
+        "mr": "गेल्या महिनाभरात तुम्हाला यापैकी काही झाले आहे का? लागू असलेले सर्व निवडा."
+      },
+      "options": [
+        {
+          "id": "general",
+          "label": {
+            "en": "Fever or weight loss",
+            "hi": "बुखार या वज़न कम होना",
+            "mr": "ताप किंवा वजन कमी होणे"
+          },
+          "hide_with_modules": [
+            "fever"
+          ]
+        },
+        {
+          "id": "eyes_ears",
+          "label": {
+            "en": "Trouble seeing or hearing",
+            "hi": "देखने या सुनने में परेशानी",
+            "mr": "दिसण्यात किंवा ऐकण्यात त्रास"
+          }
+        },
+        {
+          "id": "heart",
+          "label": {
+            "en": "Chest discomfort or racing heart",
+            "hi": "सीने में बेचैनी या तेज़ धड़कन",
+            "mr": "छातीत अस्वस्थता किंवा जलद धडधड"
+          }
+        },
+        {
+          "id": "breathing",
+          "label": {
+            "en": "Cough or breathlessness",
+            "hi": "खाँसी या साँस फूलना",
+            "mr": "खोकला किंवा धाप लागणे"
+          },
+          "hide_with_modules": [
+            "respiratory"
+          ]
+        },
+        {
+          "id": "stomach",
+          "label": {
+            "en": "Stomach pain or loose motions",
+            "hi": "पेट दर्द या दस्त",
+            "mr": "पोटदुखी किंवा जुलाब"
+          },
+          "hide_with_modules": [
+            "digestive"
+          ]
+        },
+        {
+          "id": "urine",
+          "label": {
+            "en": "Problem passing urine",
+            "hi": "पेशाब में परेशानी",
+            "mr": "लघवीला त्रास"
+          },
+          "hide_with_modules": [
+            "urinary"
+          ]
+        },
+        {
+          "id": "joints",
+          "label": {
+            "en": "Joint or back pain",
+            "hi": "जोड़ों या कमर में दर्द",
+            "mr": "सांधे किंवा पाठदुखी"
+          },
+          "hide_with_modules": [
+            "mobility"
+          ]
+        },
+        {
+          "id": "skin",
+          "label": {
+            "en": "Rash or itching",
+            "hi": "दाने या खुजली",
+            "mr": "पुरळ किंवा खाज"
+          },
+          "hide_with_modules": [
+            "skin"
+          ]
+        },
+        {
+          "id": "nerves",
+          "label": {
+            "en": "Headache or dizziness",
+            "hi": "सिरदर्द या चक्कर",
+            "mr": "डोकेदुखी किंवा चक्कर"
+          }
+        },
+        {
+          "id": "mood",
+          "label": {
+            "en": "Feeling low or worried",
+            "hi": "उदासी या चिंता",
+            "mr": "उदास किंवा काळजी वाटणे"
+          },
+          "hide_with_modules": [
+            "sleep_energy"
+          ]
+        },
+        {
+          "id": "periods",
+          "label": {
+            "en": "Change in periods",
+            "hi": "माहवारी में बदलाव",
+            "mr": "मासिक पाळीत बदल"
+          },
+          "only_sexes": [
+            "female"
+          ],
+          "min_age": 10,
+          "max_age": 55
+        },
+        {
+          "id": "none",
+          "label": {
+            "en": "None of these",
+            "hi": "इनमें से कुछ नहीं",
+            "mr": "यापैकी काहीही नाही"
+          },
+          "none": true,
+          "excludes": [
+            "general",
+            "eyes_ears",
+            "heart",
+            "breathing",
+            "stomach",
+            "urine",
+            "joints",
+            "skin",
+            "nerves",
+            "mood",
+            "periods",
+            "dont_know"
+          ]
+        },
+        {
+          "id": "dont_know",
+          "label": {
+            "en": "I don't know",
+            "hi": "पता नहीं",
+            "mr": "माहीत नाही"
+          },
+          "unknown": true,
+          "excludes": [
+            "general",
+            "eyes_ears",
+            "heart",
+            "breathing",
+            "stomach",
+            "urine",
+            "joints",
+            "skin",
+            "nerves",
+            "mood",
+            "periods"
+          ]
+        }
+      ],
+      "multi": true
+    }
+  ]
+}

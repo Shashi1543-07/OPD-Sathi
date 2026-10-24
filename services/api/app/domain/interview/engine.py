@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.domain.case_sheet import CaseSheet
 from app.domain.interview.bank import (
     AYURVEDA_MODULE,
+    HOSPITAL_MODULES,
     QUESTIONS,
     TRIGGERS,
     AnswerOption,
@@ -29,7 +30,7 @@ AI_MODULE = "ai_followup"
 CORE_ORDER = ("chief_concern", "duration", "severity")
 ALWAYS_MODULES: tuple[str, ...] = tuple(TRIGGERS["always"])
 # Modules a hospital may add to every interview, asked before the closing question.
-OPTIONAL_MODULES = frozenset({AYURVEDA_MODULE})
+OPTIONAL_MODULES = frozenset(HOSPITAL_MODULES)
 CLOSING_MODULE = "general_context"
 # Ayurveda answers fill the patient-reported part of the case sheet's AYUSH section.
 AYURVEDA_FIELDS = {
@@ -344,6 +345,9 @@ def _denial(question: Question, language: Language) -> dict[str, Any] | None:
         return None
     elif question_id == "family_history":
         text_en = "No family history of " + ", ".join(offered[:8])
+    elif question_id == "ros_checklist":
+        # Every system the patient was shown, so the negative is complete.
+        text_en = "Review of systems: denies " + ", ".join(offered)
     else:
         text_en = "Denies " + ", ".join(offered[:8])
     none_labels = [option.label[language] for option in question.options if option.none]

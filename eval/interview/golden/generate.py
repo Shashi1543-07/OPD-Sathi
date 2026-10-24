@@ -6,6 +6,8 @@ from pathlib import Path
 from app.domain.interview.engine import apply_answer, build_case_sheet, next_question, start
 
 OUTPUT = Path(__file__).with_name("interviews.jsonl")
+# The case per language asked at a hospital that adds the review of systems (task 7.11.2).
+REVIEW_OF_SYSTEMS_CASE = 4
 COMPLAINTS = {
     "en": [
         "fever for three days",
@@ -50,7 +52,12 @@ def main() -> None:
     cases: list[str] = []
     for language, complaints in COMPLAINTS.items():
         for index, complaint in enumerate(complaints):
-            state = start(language, red_flag_ids=("chest_pain",) if index == 2 else ())
+            extra_modules = ("review_of_systems",) if index == REVIEW_OF_SYSTEMS_CASE else ()
+            state = start(
+                language,
+                red_flag_ids=("chest_pain",) if index == 2 else (),
+                extra_modules=extra_modules,
+            )
             answers: list[dict[str, object]] = []
             while (question := next_question(state)) is not None:
                 if question.id == "chief_concern":
@@ -82,6 +89,7 @@ def main() -> None:
                         "language": language,
                         "complaint": complaint,
                         "red_flag_ids": state.red_flag_ids,
+                        "extra_modules": list(extra_modules),
                         "answers": answers,
                         "expected_case_sheet": build_case_sheet(state),
                     },

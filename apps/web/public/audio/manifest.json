@@ -695,6 +695,27 @@
       "duration_seconds": 0.12
     },
     {
+      "id": "question.ros_checklist",
+      "lang": "en",
+      "text_sha256": "8832201e88dca748987b4879bc9b46e9f393bc8d7cf99eb3f9073709a484b245",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ros_checklist",
+      "lang": "hi",
+      "text_sha256": "41418efe94fc5f9b6d57c6fd296384ed9e547e84c12e3860a91b8e5f98694542",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ros_checklist",
+      "lang": "mr",
+      "text_sha256": "d3f29cc277f0dc61c4f579790074b3381980bbb0111fd8319ae1e006f7d05aa8",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
       "id": "question.severity",
       "lang": "en",
       "text_sha256": "97f15ca2e10dcbf209bf82d0c3cdb16e72b7973031d00dbd53919ba8809f8d59",
@@ -5311,27 +5332,6 @@
       "id": "ui.kiosk.skipQuestion",
       "lang": "mr",
       "text_sha256": "6a0027d9ac40b54d0847971c4b497defa353fef0c7224d88a62f9a7d0d6ba2ba",
-      "file": "mr/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.smsOptIn",
-      "lang": "en",
-      "text_sha256": "fcb5289b17a7944d99c1b87c2c2a14313f9715db8eabf971c5ee42e4879c6faf",
-      "file": "en/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.smsOptIn",
-      "lang": "hi",
-      "text_sha256": "2ca10d0f2c58ec1a52037a47132b1969d20ca075ad90c6217ee361af7a379160",
-      "file": "hi/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.smsOptIn",
-      "lang": "mr",
-      "text_sha256": "e951d376a546b5311926b811d364576ae6cc58326907ecb1ff961af3dc826340",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },

@@ -7096,6 +7096,10 @@
   min-height: 0;
   width: 1.2rem;
 }
+.adm-form .adm-switch small {
+  display: block;
+  margin: 0.15rem 0 0 1.75rem;
+}
 .adm-form .adm-inline-field input {
   max-width: 7rem;
 }
