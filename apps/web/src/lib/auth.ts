@@ -95,9 +95,10 @@ function forgetAccount(userId: string | null) {
  * every renewal and treats a reused one as stolen, so two tabs renewing at the same moment
  * (for example after the laptop wakes) used to sign everyone out.
  */
-function oneTabAtATime<T>(name: string, work: () => Promise<T>): Promise<T> {
+async function oneTabAtATime<T>(name: string, work: () => Promise<T>): Promise<T> {
   const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
-  return locks ? locks.request(name, work) : work();
+  // The lock's promise resolves to what work() resolves to; await unwraps it for the type too.
+  return locks ? await locks.request(name, work) : await work();
 }
 
 function publish(user: StaffUser | null) {

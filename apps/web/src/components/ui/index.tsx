@@ -83,17 +83,21 @@ export function LanguageTile({
       className="ui-language-tile"
       type="button"
       aria-pressed={isSelected}
-      aria-label={displayLabel}
       onClick={() => setLanguage(language)}
     >
+      {/* The name is what the tile shows ("हिन्दी Hindi"), so someone using voice control
+          can say either word (WCAG 2.5.3); a subscript that repeats the label stays silent. */}
       <span
         className="ui-language-script"
         lang={language === "xa" ? "en" : language}
       >
         {displayLabel}
-      </span>
+      </span>{" "}
       {entry?.subLabel && (
-        <span className="ui-language-subscript" aria-hidden="true">
+        <span
+          className="ui-language-subscript"
+          aria-hidden={entry.subLabel === displayLabel ? true : undefined}
+        >
           {entry.subLabel}
         </span>
       )}
