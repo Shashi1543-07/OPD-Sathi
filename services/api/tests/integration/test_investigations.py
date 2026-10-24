@@ -10,6 +10,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from app.api.v1.visit_access import care_date
 from app.core.crypto import encrypt_field
 from tests.integration.synthetic import (
     PatientSession,
@@ -98,7 +99,9 @@ def _investigations(
 
 
 async def test_accepted_readings_from_every_visit_in_date_order_and_nothing_unreviewed() -> None:
-    today = date.today()
+    # The hospital's day (India): an undated paper takes its visit's date, and from 18:30 UTC
+    # that is already tomorrow on a runner whose clock is in UTC.
+    today = care_date()
     async with synthetic_hospital() as hospital:
         with api_client(hospital.settings) as client:
             kiosk = activate_kiosk(client, hospital)
@@ -171,7 +174,7 @@ async def test_accepted_readings_from_every_visit_in_date_order_and_nothing_unre
 
 
 async def test_earlier_visits_drop_out_once_the_patient_leaves_care() -> None:
-    today = date.today()
+    today = care_date()
     async with synthetic_hospital() as hospital:
         with api_client(hospital.settings) as client:
             kiosk = activate_kiosk(client, hospital)
