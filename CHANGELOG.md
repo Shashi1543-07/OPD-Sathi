@@ -17,6 +17,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   system, leaving out systems the interview already asked about. Ticked systems reach the
   case sheet; "None of these" is recorded as a denial of each system shown. Wording awaits
   clinical and native-speaker review.
+- **Results over time** (Old papers tab): test results a doctor accepted, from this and earlier
+  visits, oldest first, each compared with the range printed on its own paper. Readings still
+  awaiting a decision are counted but never shown there.
 
 ### Technical
 
@@ -26,6 +29,8 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - Question bank module `review_of_systems` (16 modules); `PATCH /admin/interview-settings`
   changes only the switches it is sent; migration `0030_review_of_systems`. The golden
   interview set includes one review-of-systems case per language.
+- `GET /visits/{id}/investigations`: accepted readings only, built on the server; earlier
+  visits follow the same "under care" rule as the papers list; audited.
 
 ## [0.7.0]
 

@@ -451,7 +451,7 @@ export interface paths {
         };
         /**
          * Get Interview Settings
-         * @description Optional interview modules for this hospital (the Ayurveda history).
+         * @description Optional interview modules for this hospital (review of systems, Ayurveda history).
          */
         get: operations["get_interview_settings_admin_interview_settings_get"];
         put?: never;
@@ -461,7 +461,7 @@ export interface paths {
         head?: never;
         /**
          * Patch Interview Settings
-         * @description Turn the Ayurveda history on or off; it applies to interviews that start afterwards.
+         * @description Turn optional modules on or off; changes apply to interviews that start afterwards.
          */
         patch: operations["patch_interview_settings_admin_interview_settings_patch"];
         trace?: never;
@@ -1967,6 +1967,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/visits/{visit_id}/investigations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Investigations
+         * @description Prior investigations: accepted readings from this and earlier visits, in date order.
+         *
+         *     Earlier visits' papers follow the same rule as the papers list: shown while the patient
+         *     is under care (and to administrators). Audited.
+         */
+        get: operations["get_investigations_visits__visit_id__investigations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/capabilities": {
         parameters: {
             query?: never;
@@ -2426,10 +2449,31 @@ export interface components {
             sms_opt_in: boolean;
             sms_consent?: components["schemas"]["ConsentNoticeRef"] | null;
         };
-        /** InterviewSettingsPatch */
+        /**
+         * InterviewSettingsPatch
+         * @description The switches to change; a switch left out keeps its value.
+         */
         InterviewSettingsPatch: {
             /** Ayurveda Module */
-            ayurveda_module: boolean;
+            ayurveda_module?: boolean | null;
+            /** Review Of Systems Module */
+            review_of_systems_module?: boolean | null;
+        };
+        /** InvestigationsResponse */
+        InvestigationsResponse: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /** Papers */
+            papers: components["schemas"]["TimelinePaper"][];
+            /** Tests */
+            tests: components["schemas"]["LabTestHistory"][];
+            /** Earlier Shown */
+            earlier_shown: boolean;
+            /** Awaiting Review */
+            awaiting_review: number;
         };
         /** KioskActivationPayload */
         KioskActivationPayload: {
@@ -2494,6 +2538,30 @@ export interface components {
             printed_flag?: ("high" | "low") | null;
             /** Range Flag */
             range_flag?: ("above" | "below" | "within") | null;
+        };
+        /**
+         * LabTestHistory
+         * @description Every accepted result of one test, oldest first, each with the range printed beside it.
+         */
+        LabTestHistory: {
+            /** Test */
+            test: string;
+            /** Results */
+            results: components["schemas"]["LabTestResult"][];
+        };
+        /** LabTestResult */
+        LabTestResult: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            result: components["schemas"]["LabResult"];
         };
         /** LanguagePayload */
         LanguagePayload: {
@@ -3002,6 +3070,52 @@ export interface components {
             text_en: string;
             /** Confidence */
             confidence?: number | null;
+        };
+        /**
+         * TimelinePaper
+         * @description One accepted paper, at the date printed on it (or its visit's date when none was read).
+         */
+        TimelinePaper: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Date Source
+             * @enum {string}
+             */
+            date_source: "printed" | "visit";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "prescription" | "lab_report" | "discharge_summary" | "other";
+            /**
+             * Facility
+             * @default
+             */
+            facility: string;
+            /** Reviewed By */
+            reviewed_by?: string | null;
+            /** Diagnoses */
+            diagnoses?: string[];
+            /** Medicines */
+            medicines?: components["schemas"]["Medicine"][];
+            /** Procedures */
+            procedures?: string[];
+            /** Lab Results */
+            lab_results?: components["schemas"]["LabResult"][];
         };
         /** TranscriptResponse */
         TranscriptResponse: {
@@ -6618,6 +6732,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffDocument"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_investigations_visits__visit_id__investigations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationsResponse"];
                 };
             };
             /** @description Validation Error */

@@ -246,6 +246,37 @@ async function signedInDoctor(page: Page) {
       },
     }),
   );
+  // Results over time: only accepted readings (task 7.11.3).
+  await page.route(`**/visits/${visitId}/investigations`, (route) => {
+    const accepted = reviewStatus === "accepted";
+    const results = paper(reviewStatus).reading.lab_results;
+    route.fulfill({
+      json: {
+        visit_id: visitId,
+        earlier_shown: true,
+        awaiting_review: accepted ? 0 : 1,
+        papers: accepted
+          ? [
+              {
+                document_id: "paper-1",
+                visit_id: visitId,
+                date: "2026-09-30",
+                date_source: "printed",
+                kind: "lab_report",
+                facility: "Synthetic Diagnostics",
+                lab_results: results,
+              },
+            ]
+          : [],
+        tests: accepted
+          ? results.map((result) => ({
+              test: result.test,
+              results: [{ date: "2026-09-30", document_id: "paper-1", result }],
+            }))
+          : [],
+      },
+    });
+  });
   await page.route(`**/visits/${visitId}/documents/paper-1/content`, (route) =>
     route.fulfill({ body: PNG, contentType: "image/png", headers: { "Cache-Control": "private, no-store" } }),
   );
@@ -266,7 +297,12 @@ test("a doctor compares what AI read with the photo and accepts it", async ({ pa
   await tab.click();
   await expect(page.getByRole("img", { name: "Photo of the paper: Test report" })).toBeVisible();
   await expect(page.getByText("AI reading · compare with the photo")).toBeVisible();
-  const table = page.getByRole("table");
+  const timeline = page.getByRole("region", { name: "Results over time" });
+  await expect(
+    timeline.getByText("1 paper is waiting for a doctor's decision and is not included."),
+  ).toBeVisible();
+  await expect(timeline.getByText("No accepted results yet.")).toBeVisible();
+  const table = page.locator(".dp-list").getByRole("table");
   await expect(table.getByRole("row", { name: /Haemoglobin/ })).toContainText(
     "Below the printed range · Marked low on the report",
   );
@@ -283,13 +319,17 @@ test("a doctor compares what AI read with the photo and accepts it", async ({ pa
   await page.getByRole("button", { name: "Matches the photo" }).click();
   await expect(page.getByText("Matches the photo · checked by Dr Rao")).toBeVisible();
   expect(reviews).toEqual([{ decision: "accepted" }]);
+  // The accepted reading joins the results over time.
+  await expect(timeline.getByRole("table", { name: "Haemoglobin" })).toContainText(
+    "Below the printed range",
+  );
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(
     accessibility.violations.filter((item) => ["critical", "serious"].includes(item.impact ?? "")),
   ).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("table")).toBeVisible();
+  await expect(table).toBeVisible();
   expect(
     await page.evaluate(
       () => document.scrollingElement!.scrollWidth - document.scrollingElement!.clientWidth,

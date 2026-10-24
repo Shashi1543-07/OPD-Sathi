@@ -8605,6 +8605,23 @@
 .dp-results-wrap {
   overflow-x: auto;
 }
+/* Prior investigations (task 7.11.3). */
+.dp-timeline .dp-results caption {
+  font-weight: 700;
+  padding: 0.5rem 0 0.25rem;
+  text-align: left;
+}
+.dp-timeline-papers {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.dp-timeline-detail {
+  color: var(--text-muted);
+  display: block;
+  font-size: var(--font-size-sm);
+}
 .dp-results {
   border-collapse: collapse;
   font-size: var(--font-size-sm);

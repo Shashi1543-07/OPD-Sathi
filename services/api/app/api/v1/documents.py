@@ -734,3 +734,149 @@ async def review_document_reading(
         rows = await repository.list_for_visit(hospital_id=hospital_id, visit_id=visit_id)
     updated = next(row for row in rows if row["id"] == document_id)
     return _staff_document(updated, now=datetime.now(UTC))
+
+
+class TimelinePaper(BaseModel):
+    """One accepted paper, at the date printed on it (or its visit's date when none was read)."""
+
+    document_id: UUID
+    visit_id: UUID
+    date: date
+    # "printed": the date on the paper; "visit": the paper had no readable date.
+    date_source: Literal["printed", "visit"]
+    kind: DocumentKind
+    facility: str = ""
+    reviewed_by: str | None = None
+    diagnoses: list[str] = Field(default_factory=list)
+    medicines: list[Medicine] = Field(default_factory=list)
+    procedures: list[str] = Field(default_factory=list)
+    lab_results: list[LabResult] = Field(default_factory=list)
+
+
+class LabTestResult(BaseModel):
+    date: date
+    document_id: UUID
+    result: LabResult
+
+
+class LabTestHistory(BaseModel):
+    """Every accepted result of one test, oldest first, each with the range printed beside it."""
+
+    test: str
+    results: list[LabTestResult]
+
+
+class InvestigationsResponse(BaseModel):
+    visit_id: UUID
+    # Oldest first. Only readings a doctor accepted; never unreviewed or rejected ones.
+    papers: list[TimelinePaper]
+    tests: list[LabTestHistory]
+    # Papers from earlier visits are included only while the patient is under care.
+    earlier_shown: bool
+    # Papers with a reading still waiting for a doctor's decision (not in this timeline).
+    awaiting_review: int
+
+
+def investigations_timeline(
+    rows: list[dict[str, Any]],
+) -> tuple[list[TimelinePaper], list[LabTestHistory], int]:
+    """Accepted readings in date order, and each test's results across them (task 7.11.3).
+
+    A reading counts only once a doctor accepted it and while the patient has not stopped AI
+    help for its visit. Flags are those printed on the same paper or computed from the range
+    printed beside the result; nothing is compared across laboratories.
+    """
+    papers: list[TimelinePaper] = []
+    awaiting = 0
+    for row in rows:
+        if row.get("ai_withdrawn"):
+            continue
+        reading = _reading(row.get("reading"))
+        if reading is None or not reading.readable:
+            continue
+        if row["review_status"] == "unreviewed":
+            awaiting += 1
+        if row["review_status"] != "accepted":
+            continue
+        printed = row.get("document_date")
+        papers.append(
+            TimelinePaper(
+                document_id=row["id"],
+                visit_id=row["visit_id"],
+                date=printed or row["service_date"],
+                date_source="printed" if printed else "visit",
+                kind=row["kind"],
+                facility=reading.facility,
+                reviewed_by=row.get("reviewed_by_name"),
+                diagnoses=reading.diagnoses,
+                medicines=reading.medicines,
+                procedures=reading.procedures,
+                lab_results=reading.lab_results,
+            )
+        )
+    papers.sort(key=lambda paper: (paper.date, str(paper.document_id)))
+    by_test: dict[str, LabTestHistory] = {}
+    for paper in papers:
+        for result in paper.lab_results:
+            name = " ".join(result.test.split())
+            if not name:
+                continue
+            history = by_test.setdefault(name.casefold(), LabTestHistory(test=name, results=[]))
+            history.results.append(
+                LabTestResult(date=paper.date, document_id=paper.document_id, result=result)
+            )
+    tests = sorted(by_test.values(), key=lambda history: history.test.casefold())
+    return papers, tests, awaiting
+
+
+@router.get("/visits/{visit_id}/investigations", response_model=InvestigationsResponse)
+async def get_investigations(
+    visit_id: UUID,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(require_role("doctor", "nurse", "admin"))],
+) -> InvestigationsResponse:
+    """Prior investigations: accepted readings from this and earlier visits, in date order.
+
+    Earlier visits' papers follow the same rule as the papers list: shown while the patient
+    is under care (and to administrators). Audited.
+    """
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    role = principal.get("role")
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await check_visit_department(
+            connection, hospital_id=hospital_id, visit_id=visit_id, actor_id=actor_id, role=role
+        )
+        repository = DocumentRepository(connection, request.app.state.settings)
+        rows = await repository.list_for_visit(hospital_id=hospital_id, visit_id=visit_id)
+        patient_id, in_care = await visit_in_care(
+            connection, hospital_id=hospital_id, visit_id=visit_id
+        )
+        earlier_shown = in_care or role == "admin"
+        if earlier_shown:
+            rows += await repository.list_earlier(
+                hospital_id=hospital_id,
+                patient_id=patient_id,
+                exclude_visit_id=visit_id,
+                limit=100,
+            )
+        papers, tests, awaiting = investigations_timeline(rows)
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="investigations.read",
+            resource_type="visit",
+            resource_id=visit_id,
+            meta={"papers": len(papers), "tests": len(tests)},
+        )
+    return InvestigationsResponse(
+        visit_id=visit_id,
+        papers=papers,
+        tests=tests,
+        earlier_shown=earlier_shown,
+        awaiting_review=awaiting,
+    )

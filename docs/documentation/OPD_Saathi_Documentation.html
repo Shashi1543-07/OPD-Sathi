@@ -2099,6 +2099,7 @@ docker compose run --rm api python -m app.cli setup-hospital</pre>
     <tr><td>GET · PATCH</td><td><code>/visits/{id}/case-sheet</code></td><td>Read; edit with If-Match (restricted JSON patch)</td></tr>
     <tr><td>GET</td><td><code>/visits/{id}/case-sheet.pdf</code> · <code>…/transcript</code> · <code>…/history</code></td><td>PDF; transcript; earlier visits (under-care rule)</td></tr>
     <tr><td>POST</td><td><code>/visits/{id}/ai-summary/review</code> · <code>…/ai-consent/withdraw</code></td><td>Accept, edit or reject the AI draft; staff withdraw AI consent</td></tr>
+    <tr><td>GET</td><td><code>/visits/{id}/investigations</code></td><td>Results over time: readings a doctor accepted, from this and earlier visits, in date order</td></tr>
     <tr><td>GET · PUT</td><td><code>/visits/{id}/doctor-notes</code></td><td>The doctor's own notes and their versions; save the next version (<code>If-Match</code>, 0 before the first)</td></tr>
     <tr><td>GET · POST</td><td><code>/visits/{id}/documents</code></td><td>Papers of this visit and earlier ones; staff add a photo</td></tr>
     <tr><td>GET · POST</td><td><code>/visits/{id}/documents/{document_id}/content</code> · <code>…/review</code></td><td>The photo (audited, no-store); the doctor's decision on the reading</td></tr>
