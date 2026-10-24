@@ -113,3 +113,10 @@
 - **Decision:** OPD Saathi does not check medicines for interactions, doses or contraindications, and never asks a language model to. Medicines appear as the patient stated them or as read from a paper a doctor accepted, labelled as such.
 - **Reason:** An interaction check is clinical decision support: it needs a maintained, licensed knowledge base, clinical review of what is shown and when, and probably a change in the regulatory classification (task 7.5.11). An unreviewed AI judgement here could do harm in both directions (missed interactions, alert fatigue).
 - **Consequences:** Doctors use their own references, as today. Adding checks later needs: a procured knowledge base (with its licence and update process), a clinical safety case and hazard-log entries, sign-off by the clinical lead, and this ADR replaced.
+
+## ADR 016 — Web test coverage with `@vitest/coverage-v8`
+
+- **Status:** accepted on 24 Oct 2026 by the owner (Phase 7, task 7.13.6).
+- **Decision:** The web unit tests run with Vitest's own V8 coverage plugin in CI (`npm run test:coverage`). Every file under `apps/web/src` counts, tested or not (the generated API types, the entry point and the tests themselves excluded). The thresholds in `vite.config.ts` are the level reached when the gate was added and are only ever raised.
+- **Reason:** The API has had a 95% coverage gate on its core and domain code; the web app had none, so untested screens could grow unnoticed. The plugin is maintained with Vitest, matches its version, and uses the coverage built into Node, with no instrumentation step.
+- **Consequences:** A development dependency only; nothing changes in the built app. A change that lowers coverage below the thresholds fails CI until tests are added.
