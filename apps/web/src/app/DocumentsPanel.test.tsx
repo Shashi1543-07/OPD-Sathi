@@ -237,4 +237,73 @@ describe("Old papers in the consultation", () => {
       "Papers could not be loaded. Today's case sheet is not affected.",
     );
   });
+
+  it("shows accepted results over time, oldest first, and says what still awaits review", async () => {
+    signedIn("doctor");
+    const result = (value: string, range_flag: "below" | "within") => ({
+      test: "Haemoglobin",
+      value,
+      unit: "g/dL",
+      reference_range: "12.0 - 15.0",
+      printed_flag: null,
+      range_flag,
+    });
+    const timeline = {
+      visit_id: "visit-1",
+      earlier_shown: true,
+      awaiting_review: 2,
+      papers: [
+        {
+          document_id: "old",
+          visit_id: "visit-0",
+          date: "2026-07-01",
+          date_source: "printed",
+          kind: "lab_report",
+          facility: "Synthetic Diagnostics",
+          lab_results: [result("9.8", "below")],
+        },
+        {
+          document_id: "new",
+          visit_id: "visit-1",
+          date: "2026-10-17",
+          date_source: "visit",
+          kind: "lab_report",
+          facility: "",
+          lab_results: [result("12.9", "within")],
+        },
+      ],
+      tests: [
+        {
+          test: "Haemoglobin",
+          results: [
+            { date: "2026-07-01", document_id: "old", result: result("9.8", "below") },
+            { date: "2026-10-17", document_id: "new", result: result("12.9", "within") },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(staffAuth, "request").mockImplementation((path) =>
+      Promise.resolve(
+        path.endsWith("/investigations")
+          ? new Response(JSON.stringify(timeline), { status: 200 })
+          : photoResponse(),
+      ),
+    );
+    renderPanel(papers());
+
+    const section = await screen.findByRole("region", { name: "Results over time" });
+    const table = within(section).getByRole("table", { name: "Haemoglobin" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.map((row) => within(row).getAllByRole("cell")[0].textContent)).toEqual([
+      "9.8 g/dL",
+      "12.9 g/dL",
+    ]);
+    expect(rows[0]).toHaveTextContent("Below the printed range");
+    expect(
+      within(section).getByText(
+        "2 papers are waiting for a doctor's decision and are not included.",
+      ),
+    ).toBeVisible();
+    expect(within(section).getByText(/visit date; no date read on the paper/)).toBeVisible();
+  });
 });

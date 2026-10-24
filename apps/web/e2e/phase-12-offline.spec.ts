@@ -10,9 +10,14 @@ test("offline short form stores encrypted data, warns on danger, and syncs once 
   let replayCount = 0;
   await page.route("**/intake/offline-submissions", async (route) => {
     replayCount += 1;
-    const body = route.request().postDataJSON() as { idempotency_key: string; danger_tile_ids: string[] };
+    const body = route.request().postDataJSON() as {
+      idempotency_key: string;
+      danger_tile_ids: string[];
+      answered_by: string;
+    };
     expect(route.request().headers()["idempotency-key"]).toBe(body.idempotency_key);
     expect(body.danger_tile_ids).toContain("breathing_difficulty");
+    expect(body.answered_by).toBe("guardian");
     await route.fulfill({
       status: 201,
       json: {
@@ -31,6 +36,7 @@ test("offline short form stores encrypted data, warns on danger, and syncs once 
   await expect(page.getByLabel("Age in years")).toBeVisible();
   await context.setOffline(true);
   await page.getByLabel("Age in years").fill("37");
+  await page.getByLabel("Who is answering?").selectOption("guardian");
   await page.getByLabel("What would you like the doctor to know?").fill("Synthetic breathing concern");
   await page.getByLabel("Trouble breathing").check();
   await expect(page.getByRole("alert").filter({ hasText: "Please go to the nurse desk now." })).toBeVisible();

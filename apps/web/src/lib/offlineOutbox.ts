@@ -13,6 +13,8 @@ export type OfflineSubmission = {
   medications: string;
   allergies: string;
   danger_tile_ids: string[];
+  /** Who answered the form: the patient, a parent or guardian, or someone helping. */
+  answered_by?: "patient" | "guardian" | "representative";
 };
 
 type StoredSubmission = {

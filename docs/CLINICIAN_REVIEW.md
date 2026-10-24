@@ -7,6 +7,7 @@ All patient-facing consent, question-bank, danger-tile, and red-flag content bel
 | `services/api/app/domain/interview/consent/` | Clinical/legal consent wording and English, Hindi, and Marathi translations | Pending |
 | `services/api/app/domain/interview/bank/core.json` | Clinical relevance, neutral wording, translation parity | Pending |
 | `services/api/app/domain/interview/bank/modules/` | Clinical relevance, completeness, neutral wording, translation parity | Pending |
+| `services/api/app/domain/interview/bank/modules/review_of_systems.json` (task 7.11.2, off by default) | The body systems offered and their plain wording; which systems another module covers (hidden then); that "None of these" may be recorded as "Review of systems: denies" each system shown; the one-month window | Pending |
 | `services/api/app/domain/interview/bank/triggers.json` | Clinical appropriateness and whether complaint terms select suitable questions | Pending |
 | `services/api/app/domain/interview/bank/danger_tiles.json` | Emergency wording, escalation expectations, translation parity | Pending |
 | `services/api/app/domain/interview/engine.py` | Confirm deterministic field mapping and default routing are safe for history collection | Pending |
@@ -15,6 +16,7 @@ All patient-facing consent, question-bank, danger-tile, and red-flag content bel
 | Red-flag patient messages in `services/api/app/api/v1/intake.py` | Confirm neutral wording and Hindi/Marathi translations | Pending |
 | Phase 14 judge-mode disclaimer and staff “How it works” panel | Clinician safety wording plus Hindi/Marathi translation review before localized use | Pending |
 
+| "Who is answering?" (kiosk consent and details screens, offline form; tasks 7.5.3 and 7.11.7) | Wording in Hindi and Marathi; with counsel: when a parent's or guardian's verifiable consent is needed and whether a child of 12 to 17 may answer alone (the kiosk allows it today when told so) | Pending |
 | `services/api/app/domain/triage/weights.yaml` | Every weight and threshold; that a patient's own rating cannot move them far | Pending |
 
 No clinical sign-off is implied by passing automated checks. Track reviewer names, dates, and approved content versions here after review.

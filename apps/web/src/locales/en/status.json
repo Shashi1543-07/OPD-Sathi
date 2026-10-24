@@ -49,5 +49,15 @@
     "done": "Your visit is complete. Thank you!",
     "no_show": "Please ask staff for help.",
     "cancelled": "Please ask staff for help."
-  }
+  },
+  "privacyTitle": "Privacy notice",
+  "privacyLink": "How we use your information (privacy notice)",
+  "privacyDraft": "Draft: this notice awaits approval by the hospital's legal adviser.",
+  "privacyContactTitle": "Grievance officer",
+  "privacyContactMissing": "Ask at the registration desk how to reach the grievance officer.",
+  "privacyUnavailable": "This privacy notice could not be loaded. Please ask at the registration desk.",
+  "privacyVersion": "Version {{version}}",
+  "privacyPosterTitle": "How we use your information",
+  "privacyPosterBody": "Scan to read the hospital's privacy notice: what we collect, why, who sees it, and your rights.",
+  "privacyPosterDesk": "Or ask at the registration desk for a printed copy."
 }

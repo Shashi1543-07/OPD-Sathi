@@ -10,3 +10,5 @@ ruff
 mypy
 bandit
 pip-audit
+# Validates the FHIR export in tests only (ADR 017); never installed in the images.
+fhir.resources

@@ -5,6 +5,7 @@ import {
   Camera,
   CheckCircle2,
   FileText,
+  History,
   ImageOff,
   Info,
   Loader2,
@@ -18,6 +19,7 @@ import type { StaffDocument, VisitDocuments } from "./visitDocuments";
 
 type DocumentKind = StaffDocument["kind"];
 type LabResult = components["schemas"]["LabResult"];
+type Investigations = components["schemas"]["InvestigationsResponse"];
 
 const KINDS: DocumentKind[] = ["prescription", "lab_report", "discharge_summary", "other"];
 
@@ -70,6 +72,13 @@ export function DocumentsPanel({
           onAdded={onChanged}
         />
       )}
+      <InvestigationsTimeline
+        // A doctor's decision on a paper changes the timeline: load it again.
+        key={[...documents.documents, ...documents.earlier]
+          .map((paper) => `${paper.id}:${paper.review_status}`)
+          .join(",")}
+        visitId={visitId}
+      />
       <section className="dp-group" aria-labelledby={`dp-today-${visitId}`}>
         <h4 id={`dp-today-${visitId}`}>{t("papersToday")}</h4>
         {documents.documents.length === 0 ? (
@@ -102,6 +111,117 @@ export function DocumentsPanel({
           </ol>
         )}
       </section>
+    </section>
+  );
+}
+
+/**
+ * Prior investigations (task 7.11.3): results a doctor accepted, from this and earlier visits,
+ * oldest first, each with the range printed on its own paper. Unreviewed readings never appear.
+ */
+function InvestigationsTimeline({ visitId }: { visitId: string }) {
+  const { t } = useTranslation("staff");
+  const formatDate = useDate();
+  const [data, setData] = useState<Investigations | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    staffAuth
+      .request(`/visits/${visitId}/investigations`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("timeline unavailable");
+        const body = (await response.json()) as Investigations;
+        if (active) setData(body);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [visitId]);
+
+  if (failed) {
+    return (
+      <p className="cx-none" role="alert">
+        {t("timelineLoadError")}
+      </p>
+    );
+  }
+  if (!data) return null;
+  const titleId = `dp-timeline-${visitId}`;
+  return (
+    <section className="dp-group dp-timeline" aria-labelledby={titleId}>
+      <h4 id={titleId}>
+        <History aria-hidden="true" size={16} /> {t("timelineTitle")}
+      </h4>
+      <p className="cx-panel-note">
+        <Info aria-hidden="true" size={15} /> {t("timelineNote")}
+      </p>
+      {data.awaiting_review > 0 && (
+        <p className="cx-panel-note">{t("timelineAwaiting", { count: data.awaiting_review })}</p>
+      )}
+      {data.papers.length === 0 ? (
+        <p className="cx-none">{t("timelineNone")}</p>
+      ) : (
+        <>
+          {data.tests.map((history) => (
+            <div key={history.test} className="dp-results-wrap">
+              <table className="dp-results">
+                <caption>{history.test}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("timelineDate")}</th>
+                    <th scope="col">{t("readingValue")}</th>
+                    <th scope="col">{t("readingRange")}</th>
+                    <th scope="col">{t("readingFlag")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.results.map(({ date, document_id, result }) => (
+                    <tr
+                      key={`${document_id}-${result.test}-${result.value}`}
+                      className={
+                        result.range_flag === "above" || result.range_flag === "below"
+                          ? "is-outside"
+                          : undefined
+                      }
+                    >
+                      <th scope="row">{formatDate(date)}</th>
+                      <td>{[result.value, result.unit].filter(Boolean).join(" ")}</td>
+                      <td>{result.reference_range || "—"}</td>
+                      <td>
+                        <ResultFlags result={result} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+          <h5>{t("timelinePapers")}</h5>
+          <ol className="dp-timeline-papers">
+            {data.papers.map((paper) => (
+              <li key={paper.document_id}>
+                <strong>{formatDate(paper.date)}</strong>
+                {paper.date_source === "visit" && <small> ({t("timelineVisitDate")})</small>}
+                {" · "}
+                {t(`paperKind_${paper.kind}`)}
+                {paper.facility && ` · ${paper.facility}`}
+                {(paper.diagnoses ?? []).length > 0 && (
+                  <span className="dp-timeline-detail">{(paper.diagnoses ?? []).join(", ")}</span>
+                )}
+                {(paper.medicines ?? []).length > 0 && (
+                  <span className="dp-timeline-detail">
+                    {(paper.medicines ?? []).map((medicine) => medicine.name).join(", ")}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
     </section>
   );
 }

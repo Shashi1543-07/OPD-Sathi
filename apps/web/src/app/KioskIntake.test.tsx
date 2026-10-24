@@ -229,6 +229,7 @@ describe("kiosk intake", () => {
         "9123456780",
         undefined,
         smsConsent,
+        "patient",
       ),
     );
   });
@@ -250,6 +251,30 @@ describe("kiosk intake", () => {
         "9876543210",
         undefined,
         undefined,
+        "patient",
+      ),
+    );
+  });
+
+  it("asks who is answering for a child and never assumes it is the child", async () => {
+    const user = userEvent.setup();
+    intakeMock.identity.mockResolvedValue({ next: "danger_signs" });
+    renderIntake("identity");
+    await user.type(screen.getByLabelText("How old are you?"), "7");
+    await user.click(screen.getByRole("radio", { name: "Male" }));
+    const next = screen.getByRole("button", { name: "Next" });
+    expect(screen.getByRole("radiogroup", { name: "Who is answering for this child?" })).toBeVisible();
+    expect(next).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: "I am a parent or guardian" }));
+    await user.click(next);
+    await waitFor(() =>
+      expect(intakeMock.identity).toHaveBeenCalledWith(
+        7,
+        "male",
+        undefined,
+        undefined,
+        undefined,
+        "guardian",
       ),
     );
   });

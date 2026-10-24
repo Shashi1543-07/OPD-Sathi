@@ -61,6 +61,46 @@ const runs = config.ci.collect.numberOfRuns;
 const failures = [];
 const summaries = [];
 
+// Thresholds apply to each page's median run, as Lighthouse CI recommends: on a shared CI
+// runner one run of the same build can score several points lower than the others (92, 89
+// and 84 for /kiosk in one job), while a real regression lowers them all.
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+function checkMedian(route) {
+  const measured = summaries.filter((summary) => summary.route === route);
+  const scores = Object.fromEntries(
+    categories.map((category) => [
+      category,
+      median(measured.map((summary) => summary.scores[category])),
+    ]),
+  );
+  const cls = median(measured.map((summary) => summary.cls));
+  console.log(
+    `${route} median of ${measured.length}: ${categories.map((category) => `${category} ${Math.round(scores[category] * 100)}`).join(", ")}, CLS ${cls.toFixed(4)}`,
+  );
+  for (const [assertion, [, threshold]] of Object.entries(assertions)) {
+    if (assertion.startsWith("categories:")) {
+      const category = assertion.slice("categories:".length);
+      const score = scores[category];
+      if (typeof score !== "number" || score < threshold.minScore) {
+        failures.push(
+          `${route} median: ${assertion} score ${score} is below ${threshold.minScore}.`,
+        );
+      }
+    } else if (
+      assertion === "cumulative-layout-shift" &&
+      cls > threshold.maxNumericValue
+    ) {
+      failures.push(
+        `${route} median: CLS ${cls} exceeds ${threshold.maxNumericValue}.`,
+      );
+    }
+  }
+}
+
 await mkdir(outputDir, { recursive: true });
 
 try {
@@ -100,29 +140,11 @@ try {
         console.log(
           `${route} run ${run}: ${categories.map((category) => `${category} ${Math.round(categoryScores[category] * 100)}`).join(", ")}, CLS ${cls.toFixed(4)}`,
         );
-
-        for (const [assertion, [, threshold]] of Object.entries(assertions)) {
-          if (assertion.startsWith("categories:")) {
-            const category = assertion.slice("categories:".length);
-            const score = report.categories[category]?.score;
-            if (typeof score !== "number" || score < threshold.minScore) {
-              failures.push(
-                `${route} run ${run}: ${assertion} score ${score} is below ${threshold.minScore}.`,
-              );
-            }
-          } else if (
-            assertion === "cumulative-layout-shift" &&
-            cls > threshold.maxNumericValue
-          ) {
-            failures.push(
-              `${route} run ${run}: CLS ${cls} exceeds ${threshold.maxNumericValue}.`,
-            );
-          }
-        }
       } finally {
         await chrome.kill();
       }
     }
+    checkMedian(route);
   }
   await writeFile(
     path.join(outputDir, "summary.json"),
@@ -140,6 +162,6 @@ if (failures.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    `\nAll Lighthouse thresholds passed across ${summaries.length} runs.`,
+    `\nAll Lighthouse thresholds passed on the median of ${runs} runs per page.`,
   );
 }

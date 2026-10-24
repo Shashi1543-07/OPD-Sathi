@@ -13,8 +13,10 @@ import redis.asyncio as redis
 import structlog
 from arq import cron
 from arq.connections import RedisSettings
-from arq.worker import run_worker
+from arq.worker import Worker, get_kwargs
 from prometheus_client import start_http_server
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -465,6 +467,24 @@ async def close_out_previous_days(ctx: dict[str, Any]) -> None:
             logger.info("previous_day_visits_closed", count=closed)
 
 
+class ResilientWorker(Worker):
+    """An ARQ worker that outlives a Redis outage.
+
+    ARQ polls Redis for its jobs and its cron ticks; on a lost connection it would exit, and
+    the restarting container would show as WorkerDown while the Redis gauge went stale. This
+    one stays up, keeps serving metrics with the Redis dependency down (alert RedisDown), and
+    resumes its jobs when Redis is back (task 7.7.8).
+    """
+
+    async def _poll_iteration(self) -> None:
+        try:
+            await super()._poll_iteration()
+        except (RedisConnectionError, RedisTimeoutError, OSError) as exc:
+            worker_metrics().dependency_up.labels("redis").set(0)
+            logger.warning("redis_unreachable", error_type=type(exc).__name__)
+            await asyncio.sleep(2)
+
+
 class WorkerSettings:
     """ARQ worker configuration; cron ticks on every even second."""
 
@@ -481,4 +501,4 @@ class WorkerSettings:
 
 
 if __name__ == "__main__":
-    run_worker(cast(Any, WorkerSettings))
+    ResilientWorker(**cast(dict[str, Any], get_kwargs(cast(Any, WorkerSettings)))).run()

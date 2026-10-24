@@ -794,7 +794,7 @@ figcaption b { color: var(--ink-2); }
 
 <h2>7.7 Interview transcript and clinical notes</h2>
 <figure><img src="img/consult-transcript.jpg" alt="Interview transcript with numbered turns, the original Hindi text, the English line and the input mode"><figcaption><b>Figure 7.9</b> The transcript: every question and the patient's exact answer in their language, with English, how it was given (tapped, voice with confidence, typed) and "AI follow-up" labels. This record cannot be changed.</figcaption></figure>
-<p><b>Clinical notes</b> lists staff edits to this case sheet, the version and its audit note, and the corrections the patient made before confirming. Examination findings, assessment and plan are not stored in OPD Saathi yet; doctors record them in the hospital's own record (Phase 7 task 7.11.1).</p>
+<p><b>Clinical notes</b> holds the doctor's own examination findings, assessment, plan and follow-up date, written by the doctor and never by AI. Each save is a new version, the earlier versions stay readable, and a save that does not start from the latest version is refused, so two doctors cannot overwrite each other. Doctors of the visit's department can write notes while the patient is under care (the visit is open, or it is today's); nurses and administrators read them. The latest version is printed on the case sheet PDF, apart from the history. Below the notes are staff edits to the case sheet, its version, and the corrections the patient made before confirming.</p>
 
 <h2>7.8 The PDF case sheet</h2>
 <p><b>PDF</b> or <b>Print</b> always produces the full case sheet, whichever tab is open: a compact, multilingual, history-only document rendered on the server (WeasyPrint, with Inter and Noto fonts so Hindi and Marathi print correctly). It includes the reviewed AI summary with the reviewer's name (never a rejected draft), open questions, the Ayurveda section when present, and the disclaimer "History only. Not a diagnosis."</p>
@@ -2099,6 +2099,10 @@ docker compose run --rm api python -m app.cli setup-hospital</pre>
     <tr><td>GET · PATCH</td><td><code>/visits/{id}/case-sheet</code></td><td>Read; edit with If-Match (restricted JSON patch)</td></tr>
     <tr><td>GET</td><td><code>/visits/{id}/case-sheet.pdf</code> · <code>…/transcript</code> · <code>…/history</code></td><td>PDF; transcript; earlier visits (under-care rule)</td></tr>
     <tr><td>POST</td><td><code>/visits/{id}/ai-summary/review</code> · <code>…/ai-consent/withdraw</code></td><td>Accept, edit or reject the AI draft; staff withdraw AI consent</td></tr>
+    <tr><td>GET</td><td><code>/visits/{id}/fhir</code></td><td>The visit as a FHIR R4 bundle for the hospital's systems; not ABDM-certified (doctor, admin)</td></tr>
+    <tr><td>POST</td><td><code>/patients/card/reissue</code></td><td>Give a patient who lost their OPD card a new PIN; the old PIN stops working (nurse, admin)</td></tr>
+    <tr><td>GET</td><td><code>/visits/{id}/investigations</code></td><td>Results over time: readings a doctor accepted, from this and earlier visits, in date order</td></tr>
+    <tr><td>GET · PUT</td><td><code>/visits/{id}/doctor-notes</code></td><td>The doctor's own notes and their versions; save the next version (<code>If-Match</code>, 0 before the first)</td></tr>
     <tr><td>GET · POST</td><td><code>/visits/{id}/documents</code></td><td>Papers of this visit and earlier ones; staff add a photo</td></tr>
     <tr><td>GET · POST</td><td><code>/visits/{id}/documents/{document_id}/content</code> · <code>…/review</code></td><td>The photo (audited, no-store); the doctor's decision on the reading</td></tr>
     <tr><td colspan="3"><b>Administration and reports</b></td></tr>

@@ -1,4 +1,4 @@
-"""Surgical, personal and Ayurveda history; "don't know" and "prefer not to say" stay open."""
+"""Surgical, personal, Ayurveda history and review of systems; non-answers stay open."""
 
 from typing import Any
 
@@ -139,3 +139,54 @@ def test_the_ayurveda_sleep_question_gives_way_to_the_sleep_module() -> None:
     asked, _ = _interview({}, complaint="trouble sleeping", extra_modules=("ayurveda",))
     assert "ayur_sleep" not in asked
     assert "ayur_appetite" in asked
+
+
+def test_the_review_of_systems_is_one_screen_asked_only_where_the_hospital_adds_it() -> None:
+    asked, _ = _interview({})
+    assert "ros_checklist" not in asked
+
+    asked, sheet = _interview(
+        {"ros_checklist": "Trouble seeing or hearing, Joint or back pain"},
+        extra_modules=("review_of_systems",),
+    )
+    assert asked.count("ros_checklist") == 1
+    assert asked.index("habits") < asked.index("ros_checklist") < asked.index("general_context")
+    symptoms = [item["text_en"] for item in sheet["hpi"]["associated_symptoms"]]
+    assert "Trouble seeing or hearing" in symptoms and "Joint or back pain" in symptoms
+    # One question: the interview grows by one screen, inside its cap.
+    assert question_cap(start("en", extra_modules=("review_of_systems",))) == MAX_QUESTIONS + 1
+
+
+def test_none_on_the_review_of_systems_denies_every_system_shown_and_no_other() -> None:
+    _, sheet = _interview(
+        {"ros_checklist": "None of these"},
+        complaint="cough and breathing concern",
+        extra_modules=("review_of_systems",),
+        sex="male",
+        age=40,
+    )
+    negatives = [item["text_en"] for item in sheet["hpi"]["pertinent_negatives"]]
+    denial = next(text for text in negatives if text.startswith("Review of systems: denies"))
+    assert "joint or back pain" in denial and "feeling low or worried" in denial
+    # The breathing module already asked about cough; men are not asked about periods.
+    assert "cough or breathlessness" not in denial
+    assert "periods" not in denial
+
+
+def test_the_review_of_systems_hides_systems_other_modules_cover() -> None:
+    state = start("en", extra_modules=("review_of_systems",), sex="female", age=30)
+    state = apply_answer(state, "chief_concern", "skin rash", skip=False)
+    shown = visible_question(state, QUESTIONS["ros_checklist"])
+    assert shown is not None
+    labels = {option.label["en"] for option in shown.options}
+    assert "Rash or itching" not in labels
+    assert {"Change in periods", "None of these", "I don't know"} <= labels
+
+
+def test_dont_know_on_the_review_of_systems_stays_open() -> None:
+    _, sheet = _interview({"ros_checklist": "I don't know"}, extra_modules=("review_of_systems",))
+    assert [item["question_id"] for item in sheet["unanswered"]] == ["ros_checklist"]
+    assert not any(
+        item["text_en"].startswith("Review of systems")
+        for item in sheet["hpi"]["pertinent_negatives"]
+    )

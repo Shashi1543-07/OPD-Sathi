@@ -54,5 +54,20 @@ export default defineConfig({
     setupFiles: "./src/test-setup.ts",
     include: ["src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}"],
     exclude: ["e2e/**"],
+    // Web coverage gate (Phase 7, task 7.13.6): every source file counts, tested or not.
+    // The thresholds are the level reached when the gate was added; raise them, never lower.
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.test.{ts,tsx}",
+        "src/test-setup.ts",
+        "src/lib/api-types.ts",
+        "src/main.tsx",
+        "src/vite-env.d.ts",
+      ],
+      reporter: ["text-summary", "json-summary"],
+      thresholds: { statements: 56, branches: 52, functions: 51, lines: 58 },
+    },
   },
 });

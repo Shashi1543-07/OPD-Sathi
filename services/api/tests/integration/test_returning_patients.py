@@ -197,7 +197,15 @@ async def test_a_nurse_finds_and_links_a_patient_who_forgot_their_card() -> None
             numbers = {item["opd_number"] for item in by_phone.json()["items"]}
             assert numbers == {mother["opd_card"]["number"], child["opd_card"]["number"]}
             item = by_phone.json()["items"][0]
-            assert set(item) == {"opd_number", "age_years", "sex", "visit_count", "last_visit"}
+            # What verification needs, and the card version for a re-issue; nothing clinical.
+            assert set(item) == {
+                "opd_number",
+                "age_years",
+                "sex",
+                "visit_count",
+                "last_visit",
+                "card_version",
+            }
 
             today = _start_returning(client, kiosk, age=9, sex="male")
             not_allowed = client.post(
@@ -256,3 +264,61 @@ async def test_a_patient_who_forgot_the_card_and_registered_as_new_is_joined_lat
                 headers=hospital.staff("nurse"),
             )
             assert refused.status_code == 409
+
+
+async def test_a_lost_card_is_reissued_at_the_desk_and_the_old_pin_stops_working() -> None:
+    async with synthetic_hospital() as hospital:
+        with api_client(hospital.settings) as client:
+            kiosk = activate_kiosk(client, hospital)
+            _, receipt = _first_visit(client, kiosk, phone="9876500009")
+            card = receipt["opd_card"]
+
+            found = client.get(
+                "/patients/lookup",
+                params={"phone": "9876500009"},
+                headers=hospital.staff("nurse"),
+            ).json()["items"]
+            assert [(item["opd_number"], item["card_version"]) for item in found] == [
+                (card["number"], 1)
+            ]
+
+            def reissue(version: int, who: str = "nurse") -> Any:
+                return client.post(
+                    "/patients/card/reissue",
+                    json={"opd_number": card["number"], "card_version": version},
+                    headers=hospital.staff(who),
+                )
+
+            assert reissue(1, "doctor").status_code == 403
+            new = reissue(1)
+            assert new.status_code == 200, new.text
+            assert new.headers["Cache-Control"] == "no-store"
+            fresh = new.json()
+            assert fresh["opd_number"] == card["number"] and fresh["card_version"] == 2
+            assert len(fresh["pin"]) == 6 and fresh["pin"] != card["pin"]
+            # A repeated request (a double tap, another desk) does not replace it again.
+            again = reissue(1)
+            assert again.status_code == 409 and again.json()["code"] == "CARD_CHANGED"
+            missing = client.post(
+                "/patients/card/reissue",
+                json={"opd_number": "26-999999", "card_version": 1},
+                headers=hospital.staff("admin"),
+            )
+            assert missing.status_code == 404
+
+            old = _start_returning(client, kiosk)
+            refused = old.post("/opd-card", card)
+            assert refused.status_code == 422 and refused.json()["code"] == "CARD_NOT_RECOGNISED"
+            returning = _start_returning(client, kiosk)
+            linked = returning.post("/opd-card", {"number": card["number"], "pin": fresh["pin"]})
+            assert linked.status_code == 200, linked.text
+
+        audits = await fetch(
+            hospital.settings,
+            hospital.hospital_id,
+            "SELECT meta::text AS meta FROM audit_log WHERE hospital_id = :h "
+            "AND action = 'patient.card_reissued'",
+            h=hospital.hospital_id,
+        )
+        assert len(audits) == 1 and '"version_after": 2' in audits[0]["meta"]
+        assert fresh["pin"] not in audits[0]["meta"]

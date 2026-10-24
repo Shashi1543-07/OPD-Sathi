@@ -236,7 +236,8 @@ class PatientRepository:
         digest = lookup_digest(phone.strip(), key=self.settings.app_hmac_key_bytes)
         result = await self.connection.execute(
             text(
-                "SELECT p.id, p.mrn, p.year_of_birth, p.sex, count(v.id) AS visit_count, "
+                "SELECT p.id, p.mrn, p.card_version, p.year_of_birth, p.sex, "
+                "count(v.id) AS visit_count, "
                 "max(v.service_date) AS last_visit FROM patients p LEFT JOIN visits v "
                 "ON v.hospital_id = p.hospital_id AND v.patient_id = p.id "
                 "AND v.token_number IS NOT NULL "
@@ -247,6 +248,29 @@ class PatientRepository:
             {"hospital_id": hospital_id, "digest": digest},
         )
         return [dict(row) for row in result.mappings().all()]
+
+    async def reissue_card(
+        self, *, hospital_id: UUID, patient_id: UUID, expected_version: int
+    ) -> int | None:
+        """Move the patient's OPD card to its next version, so the old PIN stops working.
+
+        Returns the new version, or None when the card is no longer at ``expected_version``
+        (someone re-issued it meanwhile).
+        """
+        result = await self.connection.execute(
+            text(
+                "UPDATE patients SET card_version = card_version + 1 "
+                "WHERE hospital_id = :hospital_id AND id = :patient_id "
+                "AND card_version = :expected_version RETURNING card_version"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "patient_id": patient_id,
+                "expected_version": expected_version,
+            },
+        )
+        version = result.scalar_one_or_none()
+        return int(version) if version is not None else None
 
     async def link_visit(
         self, *, hospital_id: UUID, visit_id: UUID, patient_id: UUID, source: str
@@ -1208,6 +1232,93 @@ class CaseSheetRepository:
         return result.rowcount == 1
 
 
+class DoctorNoteRepository:
+    """The doctor's own notes for a visit, one row per saved version (task 7.11.1).
+
+    Rows are only ever added: a save that does not start from the latest version is refused,
+    so two doctors cannot overwrite each other, and every earlier wording stays readable.
+    """
+
+    def __init__(self, connection: AsyncConnection, settings: Settings):
+        self.connection = connection
+        self.settings = settings
+
+    async def add_version(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        expected_version: int,
+        body: dict[str, str],
+        follow_up_on: date | None,
+        author_id: UUID,
+    ) -> int | None:
+        """Save the next version, or return None when the latest is not ``expected_version``."""
+        row_id = uuid7()
+        sealed = encrypt_field(
+            json.dumps(body, separators=(",", ":")),
+            key=self.settings.app_data_keyring,
+            associated_data=f"doctor_notes:body:{row_id}",
+        )
+        result = await self.connection.execute(
+            text(
+                "INSERT INTO doctor_notes (id, hospital_id, visit_id, version, body, "
+                "follow_up_on, author_id) SELECT :id, :hospital_id, :visit_id, "
+                ":expected_version + 1, CAST(:body AS jsonb), :follow_up_on, :author_id "
+                "WHERE COALESCE((SELECT max(version) FROM doctor_notes "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id), 0) "
+                "= :expected_version "
+                "ON CONFLICT ON CONSTRAINT uq_doctor_notes_visit_version DO NOTHING "
+                "RETURNING version"
+            ),
+            {
+                "id": row_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "expected_version": expected_version,
+                "body": json.dumps({"ciphertext": sealed}),
+                "follow_up_on": follow_up_on,
+                "author_id": author_id,
+            },
+        )
+        saved = result.scalar_one_or_none()
+        return int(saved) if saved is not None else None
+
+    async def versions(self, *, hospital_id: UUID, visit_id: UUID) -> list[dict[str, Any]]:
+        """Every saved version, newest first, with the author's name."""
+        result = await self.connection.execute(
+            text(
+                "SELECT n.id, n.version, n.body, n.follow_up_on, n.created_at, "
+                "u.name AS author_name FROM doctor_notes n "
+                "JOIN users u ON u.hospital_id = n.hospital_id AND u.id = n.author_id "
+                "WHERE n.hospital_id = :hospital_id AND n.visit_id = :visit_id "
+                "ORDER BY n.version DESC"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        versions = []
+        for row in result.mappings().all():
+            body = json.loads(
+                decrypt_field(
+                    row["body"]["ciphertext"],
+                    key=self.settings.app_data_keyring,
+                    associated_data=f"doctor_notes:body:{row['id']}",
+                )
+            )
+            versions.append(
+                {
+                    "version": row["version"],
+                    "findings": body.get("findings", ""),
+                    "assessment": body.get("assessment", ""),
+                    "plan": body.get("plan", ""),
+                    "follow_up_on": row["follow_up_on"],
+                    "by_name": row["author_name"],
+                    "at": row["created_at"],
+                }
+            )
+        return versions
+
+
 class InterviewTurnRepository:
     def __init__(self, connection: AsyncConnection, settings: Settings):
         self.connection = connection
@@ -1666,6 +1777,28 @@ class IntakeRepository:
                 "granted_at": datetime.now(UTC) if granted else None,
                 "channel": channel,
             },
+        )
+
+    async def set_answered_by(self, *, hospital_id: UUID, visit_id: UUID, who: str) -> None:
+        """Record who is answering for the patient on the visit and on each of its consents.
+
+        Changes only while the visit is registering; afterwards the record stays as given.
+        """
+        params = {"hospital_id": hospital_id, "visit_id": visit_id, "who": who}
+        await self.connection.execute(
+            text(
+                "UPDATE visits SET answered_by = :who WHERE hospital_id = :hospital_id "
+                "AND id = :visit_id AND status = 'registering'"
+            ),
+            params,
+        )
+        await self.connection.execute(
+            text(
+                "UPDATE consents SET given_by = :who WHERE hospital_id = :hospital_id "
+                "AND visit_id = :visit_id AND given_by <> :who AND EXISTS (SELECT 1 FROM visits "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id AND status = 'registering')"
+            ),
+            params,
         )
 
     async def withdraw_ai_consent(self, *, hospital_id: UUID, visit_id: UUID, by: str) -> bool:
@@ -2227,6 +2360,27 @@ class DocumentRepository:
             {"hospital_id": hospital_id, "visit_id": visit_id, "document_id": document_id},
         )
         return removed is not None
+
+
+FEATURE_DEFAULTS = {"sms_messages": False, "phone_checkin": True}
+
+
+async def sms_messages_on(connection: AsyncConnection, hospital_id: UUID) -> bool:
+    """Whether this hospital sends queue messages; off until it turns them on (task 7.14.7)."""
+    enabled = await connection.scalar(
+        text("SELECT sms_messages FROM hospital_feature_settings WHERE hospital_id = :h"),
+        {"h": hospital_id},
+    )
+    return FEATURE_DEFAULTS["sms_messages"] if enabled is None else bool(enabled)
+
+
+async def phone_checkin_on(connection: AsyncConnection, hospital_id: UUID) -> bool:
+    """Whether patients may check in from the hospital's QR codes on their own phones."""
+    enabled = await connection.scalar(
+        text("SELECT phone_checkin FROM hospital_feature_settings WHERE hospital_id = :h"),
+        {"h": hospital_id},
+    )
+    return FEATURE_DEFAULTS["phone_checkin"] if enabled is None else bool(enabled)
 
 
 async def read_ai_consent(

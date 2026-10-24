@@ -105,12 +105,33 @@ The script:
 For an unattended install: `HOSPITAL_NAME=... HOSPITAL_CODE=... ADMIN_NAME=... ADMIN_EMAIL=...
 sudo -E ./scripts/setup-hospital.sh --host ... --admin-password-file /root/admin.pw`.
 
-**Windows Server** (only where the state mandates it): install Docker for Windows Server and run
-`setup-hospital.ps1`; Linux is preferred because the scripts, hardening and systemd unit are
-built for it.
+**Windows Server** (only where the state mandates it): OPD Saathi's images are Linux images, and
+Docker on Windows Server runs Windows containers. Create an Ubuntu 24.04 virtual machine in
+Hyper-V (at least the cores, memory and disk of the table in section 2, a fixed address on the
+hospital network, the virtual disk on encrypted storage) and follow this guide inside it,
+unchanged. Back up and monitor the virtual machine like any other server; the stack's own
+backups (section 7) still run inside it. There is no separate Windows installer: one tested
+script is safer than two.
 
 **Then, immediately:** make the sealed key-escrow copies (`docs/runbooks/key-escrow.md`).
 Without `app_data_key`, encrypted records can never be read again.
+
+### Check the installation
+
+Do this once after installing, and after every upgrade. Each step must pass before anyone
+else uses the system.
+
+| Check | How | Passes when |
+|---|---|---|
+| The stack is up | `$C ps` (section 7) | Every service `running`, and `healthy` where it has a health check |
+| HTTPS and readiness | `scripts/check-tls.sh <host>`; open `https://<host>/api/readyz` | The certificate is valid for the host and not expiring soon; readiness answers `{"status":"ready"}` |
+| Sign-in | `https://<host>/staff`, as the first administrator | Two-step sign-in is asked for and works |
+| The system page | Settings → System | Version as released; database, Redis and worker up; a last backup listed; disk space shown |
+| A check-in | Register a kiosk named "Installation test" (Settings → Kiosks), open its setup link on a PC, check in a made-up patient (no real details), call them from the queue, then delete the kiosk | Token issued; the patient appears in the queue and on the doctor's screen |
+| Backups | `$C exec backup with-backup-secrets pgbackrest --stanza=osa info` | A full backup listed in every configured repository |
+| Alerts | The test alert in `docs/runbooks/alerts.md`, "Drill" | The named IT person receives it within 5 minutes |
+
+Then cancel the test patient's visit at the desk, so it does not stay in the day's queue.
 
 ## 6. The administrator's first day
 
@@ -126,6 +147,18 @@ Without `app_data_key`, encrypted records can never be read again.
 5. For phone check-in: create a phone check-in QR and print it for the waiting area.
 6. Lock the kiosks down (kiosk browser mode, Windows Assigned Access or Android lock-task) with a
    privacy filter, on a stand (task 7.3.9).
+7. **Settings → Departments**, the switches below the department form. Every new or risky
+   feature starts switched off; turn on only what the hospital has approved:
+
+   | Switch | Starts | Turn on when |
+   |---|---|---|
+   | Patient interview: review of systems, Ayurveda history | Off | The clinical lead (a vaidya for Ayurveda) has signed the questions off |
+   | Online AI help | On where the server has AI (`LLM_ENABLED=true`), which the installer leaves off | The AI provider contract is signed (task 7.5.9) |
+   | Features for patients: SMS queue messages | Off | An SMS provider and registered message templates are in place (task 7.11.6); the card says when the server has no provider |
+   | Features for patients: phone check-in | On | Turn it off to stop every phone check-in QR at once; kiosks keep working |
+
+8. Print the staff cards and the patient signs (`docs/print/`) and put the signs up before the
+   first patient.
 
 ## 7. Running it
 

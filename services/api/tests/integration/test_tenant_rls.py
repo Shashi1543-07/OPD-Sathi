@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import Settings
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
+from tests.integration.synthetic import synthetic_hospital
 
 
 @pytest.mark.asyncio
@@ -187,3 +188,29 @@ async def test_forced_hospital_rls_and_append_only_audit() -> None:
             )
         await app_engine.dispose()
         await migrator_engine.dispose()
+
+
+async def test_the_hospital_scope_ends_with_its_transaction_on_a_reused_connection() -> None:
+    """PgBouncer in transaction mode would hand one server connection to many requests in turn
+    (ADR 013). That is safe only if a request's hospital scope ends with its transaction."""
+    async with synthetic_hospital() as hospital:
+        engine = create_async_engine(hospital.settings.database_url, pool_size=1, max_overflow=0)
+        try:
+            async with engine.connect() as connection:
+                async with connection.begin():
+                    await set_hospital_scope(connection, hospital.hospital_id)
+                    scoped = await connection.scalar(
+                        text("SELECT count(*) FROM departments")
+                    )
+                async with connection.begin():
+                    leftover = await connection.scalar(
+                        text("SELECT current_setting('app.hospital_id', true)")
+                    )
+                    unscoped = await connection.scalar(
+                        text("SELECT count(*) FROM departments")
+                    )
+        finally:
+            await engine.dispose()
+        assert scoped and scoped > 0
+        assert leftover in (None, "")
+        assert unscoped == 0

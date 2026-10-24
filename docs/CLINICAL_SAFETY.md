@@ -134,9 +134,11 @@ engineering estimates until the pilot (task 7.6.5) measures them.
 - **Cause:** a child, an unconscious or confused adult; a companion answers.
 - **Effect:** history from the wrong person, recorded as the patient's own.
 - **Initial risk:** 3 × 3 = **9**
-- **Controls:** "Who is answering?" recorded on the consent and shown on the case sheet (7.5.3,
-  7.11.7); nurse-assisted path.
-- **Residual risk:** 3 × 2 = **6** once built. **Owner:** clinical lead.
+- **Controls:** "Who is answering?" asked with the consent and again, as a required choice, for
+  every patient under 18; recorded on the visit and each consent; shown on the doctor's screen
+  and the case sheet PDF (7.5.3, 7.11.7, built 24 Oct 2026); nurse-assisted path.
+- **Residual risk:** 3 × 2 = **6**. Open: counsel's note on guardians' consent (7.5.3).
+  **Owner:** clinical lead.
 
 ## Review record
 

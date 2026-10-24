@@ -1,5 +1,6 @@
 """PostgreSQL-backed identity endpoints with a deterministic Redis substitute."""
 
+import asyncio
 import os
 import time
 from collections import defaultdict, deque
@@ -310,3 +311,88 @@ async def test_operator_cli_bootstraps_a_scoped_admin_and_kiosk(
                     text("DELETE FROM hospitals WHERE id = :id"), {"id": hospital_id}
                 )
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_a_password_change_while_the_session_renews_does_not_deadlock() -> None:
+    """Renewing a session while the same account changes its password or is signed out
+    everywhere: the renewal waits for the account and then ends, instead of deadlocking (a
+    500 that signed the person out). The open transaction below locks what a password
+    change locks, in its order: the account, then every session of it."""
+    settings = _database_settings()
+    migrator_engine = create_async_engine(settings.migrations_database_url)
+    app_engine = create_async_engine(settings.database_url)
+    hospital_id, user_id = uuid4(), uuid4()
+    email, password = f"staff-{user_id}@example.test", "Synthetic-test-password-2026"
+    try:
+        async with migrator_engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            await connection.execute(
+                text("INSERT INTO hospitals (id, name, code) VALUES (:id, 'Renewal test', :code)"),
+                {"id": hospital_id, "code": f"renew-{hospital_id}"},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO users (id, hospital_id, role, name, email, password_hash) "
+                    "VALUES (:id, :hospital_id, 'nurse', 'Synthetic nurse', :email, :hash)"
+                ),
+                {"id": user_id, "hospital_id": hospital_id, "email": email,
+                 "hash": hash_password(password)},
+            )
+        app = create_app(
+            settings,
+            engine_factory=lambda _url: create_async_engine(settings.database_url),
+            redis_factory=lambda *_args, **kwargs: FakeRedis(**kwargs),
+        )
+        with TestClient(app) as client:
+            signed_in = client.post("/auth/login", json={
+                "hospital_id": str(hospital_id), "email": email, "password": password})
+            assert signed_in.status_code == 200, signed_in.text
+            async with app_engine.connect() as connection:
+                transaction = await connection.begin()
+                await set_hospital_scope(connection, hospital_id)
+                await connection.execute(
+                    text("SELECT 1 FROM users WHERE id = :id FOR UPDATE"), {"id": user_id}
+                )
+                renewal = asyncio.create_task(asyncio.to_thread(
+                    client.post, "/auth/refresh", json={"account": str(user_id)}))
+                try:
+                    await asyncio.sleep(1.5)  # past PostgreSQL's deadlock check (1 s)
+                    await connection.execute(
+                        text(
+                            "UPDATE refresh_tokens SET revoked_at = now() "
+                            "WHERE hospital_id = :hospital_id AND user_id = :user_id "
+                            "AND revoked_at IS NULL"
+                        ),
+                        {"hospital_id": hospital_id, "user_id": user_id},
+                    )
+                    await transaction.commit()
+                finally:
+                    if transaction.is_active:
+                        await transaction.rollback()
+                    # Never leave the client while its request is still running.
+                    renewed = await asyncio.wait_for(renewal, timeout=30)
+            assert renewed.status_code == 401, renewed.text
+        async with migrator_engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            reuse = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM audit_log WHERE hospital_id = :id "
+                    "AND action = 'auth.refresh.reuse_detected'"
+                ),
+                {"id": hospital_id},
+            )
+        # A session ended on purpose is not a stolen token.
+        assert reuse == 0
+    finally:
+        async with migrator_engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            for table in ("audit_log", "refresh_tokens", "users"):
+                await connection.execute(
+                    text(f"DELETE FROM {table} WHERE hospital_id = :id"), {"id": hospital_id}
+                )
+            await connection.execute(
+                text("DELETE FROM hospitals WHERE id = :id"), {"id": hospital_id}
+            )
+        await app_engine.dispose()
+        await migrator_engine.dispose()

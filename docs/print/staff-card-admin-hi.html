@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<title>OPD Saathi · प्रशासक के लिए कार्ड</title>
+<style>
+@page { size: A4; margin: 13mm; }
+* { box-sizing: border-box; }
+body { font-family: "Nirmala UI", "Noto Sans Devanagari", "Segoe UI", Arial, sans-serif;
+  color: #000; font-size: 10.5pt; line-height: 1.38; margin: 0; }
+h1 { font-size: 19pt; margin: 0 0 1mm; }
+.lead { margin: 0 0 4mm; font-size: 10pt; color: #222; }
+ol.card { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+ol.card > li { counter-increment: step; border: 1pt solid #000; border-radius: 3mm;
+  padding: 2.6mm 3.4mm 2.6mm 12mm; margin: 0 0 2.6mm; position: relative; break-inside: avoid; }
+ol.card > li::before { content: counter(step); position: absolute; left: 3.2mm; top: 2.4mm;
+  font-weight: 700; font-size: 13pt; }
+ol.card h2 { font-size: 11pt; margin: 0 0 0.6mm; }
+ol.card p { margin: 0; }
+b.ui { border: 0.8pt solid #000; border-radius: 1.4mm; padding: 0 1.2mm; white-space: nowrap; }
+.footer { font-size: 7.5pt; margin-top: 3mm; color: #333; }
+.sign { text-align: center; }
+.sign section { border-bottom: 1.2pt dashed #000; padding: 6mm 0 7mm; }
+.sign section:last-of-type { border-bottom: 0; }
+.sign h1 { font-size: 24pt; }
+.sign ol { display: inline-block; text-align: left; font-size: 13.5pt; margin: 3mm 0 0;
+  padding-left: 8mm; }
+.sign ol li { margin: 1.2mm 0; }
+.sign .urgent { font-size: 13.5pt; font-weight: 700; margin: 3mm 0 0; }
+.unwell section { padding: 16mm 0; }
+.unwell h1 { font-size: 34pt; line-height: 1.25; margin: 0; }
+</style>
+</head>
+<body>
+<h1>OPD Saathi · प्रशासक के लिए कार्ड</h1>
+<p class="lead">OPD Saathi को सुरक्षित रखना आपका काम है: कौन साइन इन कर सकता है, कौन से कियोस्क चलते हैं, कौन सी सुविधाएँ चालू हैं, और बैकअप चल रहे हैं या नहीं।</p>
+<ol class="card"><li><h2>सुरक्षित साइन इन</h2><p>ऑथेंटिकेटर ऐप से दो-चरणीय साइन-इन ज़रूरी है। दस रिकवरी कोड ताले में रखें। <b class="ui">मेरा खाता</b> दिखाता है कि आप कहाँ-कहाँ साइन इन हैं।</p></li><li><h2>स्टाफ़ खाते</h2><p><b class="ui">सेटिंग</b> → <b class="ui">उपयोगकर्ता</b> → <b class="ui">कर्मचारी खाता बनाएँ</b>: हर व्यक्ति का अपना खाता, उसके विभाग के साथ। भूले पासवर्ड के लिए <b class="ui">पासवर्ड रीसेट करें</b>, और कोई जाए या डिवाइस खो दे तो <b class="ui">हर जगह से साइन आउट करें</b>।</p></li><li><h2>कियोस्क और फ़ोन चेक-इन</h2><p><b class="ui">कियोस्क</b> → <b class="ui">कियोस्क पंजीकृत करें</b>, फिर उसका सेटअप लिंक एक बार कियोस्क पर खोलें। <b class="ui">फ़ोन चेक-इन QR</b>: इसे प्रतीक्षा कक्ष के लिए छापें।</p></li><li><h2>स्विच</h2><p><b class="ui">विभाग</b>: <b class="ui">मरीज़ का साक्षात्कार</b>, <b class="ui">ऑनलाइन AI सहायता</b> और <b class="ui">मरीज़ों के लिए सुविधाएँ</b>। कोई सुविधा तभी चालू करें जब अस्पताल ने उसे मंज़ूरी दी हो।</p></li><li><h2>हर सुबह</h2><p><b class="ui">सिस्टम</b>: डेटाबेस, Redis और वर्कर चालू, आख़िरी बैकअप एक दिन के भीतर, पर्याप्त डिस्क जगह। अलर्ट ईमेल से IT तक भी पहुँचते हैं।</p></li><li><h2>किसने क्या किया</h2><p><b class="ui">ऑडिट लॉग</b>: साइन-इन, रिकॉर्ड देखना और बदलाव, किसने और कब।</p></li><li><h2>रिपोर्ट</h2><p><b class="ui">रिपोर्ट</b>: विज़िट, प्रतीक्षा समय और AI का उपयोग, मरीज़ों के नाम के बिना।</p></li><li><h2>कुछ बिगड़ जाए तो</h2><p>docs/runbooks की रनबुक हर अलर्ट पर क्या करना है बताती हैं। OPD के समय सर्वर बंद हो तो डेस्क कागज़ी पैक पर चला जाता है।</p></li></ol>
+<p class="footer">OPD Saathi · docs/print · scripts/make_print_pack.py · admin · hi</p>
+</body>
+</html>

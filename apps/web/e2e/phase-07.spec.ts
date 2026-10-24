@@ -481,3 +481,66 @@ test("5,000-row virtual queue applies a live urgent update in under 100 ms @timi
   console.log(`queue_urgent_update_ms=${elapsed.toFixed(2)}`);
   expect(elapsed).toBeLessThan(100);
 });
+
+// What the API sends a hospital that has never saved these settings (the Departments tab's
+// other cards).
+const unsavedSettings: Record<string, unknown> = {
+  "queue-settings": {
+    call_grace_seconds: 180,
+    is_default: true,
+    updated_at: null,
+    updated_by_name: null,
+  },
+  "interview-settings": {
+    ayurveda_module: false,
+    review_of_systems_module: false,
+    updated_at: null,
+    updated_by_name: null,
+  },
+  "feature-settings": {
+    sms_messages: false,
+    phone_checkin: true,
+    sms_provider: false,
+    updated_at: null,
+    updated_by_name: null,
+  },
+  "privacy-settings": {
+    grievance_contact: "",
+    notice_path: `/privacy/${hospitalId}`,
+    notice_url: null,
+    updated_at: null,
+    updated_by_name: null,
+  },
+};
+
+test("administrator switches online AI help off for the hospital", async ({ page }) => {
+  await mockStaffSession(page, "admin");
+  let llmEnabled = true;
+  const changes: unknown[] = [];
+  await page.route("**/admin/**", async (route) => {
+    const request = route.request();
+    const name = new URL(request.url()).pathname.split("/").pop() ?? "";
+    if (name === "ai-settings") {
+      if (request.method() === "PATCH") {
+        const body = request.postDataJSON() as { llm_enabled: boolean };
+        changes.push(body);
+        llmEnabled = body.llm_enabled;
+      }
+      await route.fulfill({ json: { llm_enabled: llmEnabled, chosen: true, available: true } });
+      return;
+    }
+    await route.fulfill({ json: unsavedSettings[name] ?? { items: [], next_cursor: null } });
+  });
+
+  await page.goto("/staff/settings");
+  // Hospital-wide switches sit with the departments.
+  await page.getByRole("tab", { name: "Departments" }).click();
+  const card = page.locator("form", { has: page.getByRole("heading", { name: "Online AI help" }) });
+  const toggle = card.getByRole("checkbox", { name: "Allow online AI help in this hospital" });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByText("Saved. Applies from now.")).toBeVisible();
+  expect(changes).toEqual([{ llm_enabled: false }]);
+  await runAxe(page);
+});

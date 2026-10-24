@@ -87,3 +87,35 @@ for (const viewport of [
     });
   });
 }
+
+test("a child's details ask who is answering before going on", async ({ page }) => {
+  const sent: unknown[] = [];
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript((storedSession) => {
+    sessionStorage.setItem("osa.patient.session", JSON.stringify(storedSession));
+  }, session);
+  await page.route("**/intake/capabilities", (route) =>
+    route.fulfill({ json: { stt: "browser", tts: "browser", ai: false } }),
+  );
+  await page.route("**/healthz", (route) => route.fulfill({ json: { status: "ok" } }));
+  await page.route("**/intake/sessions/*/identity", async (route) => {
+    sent.push(route.request().postDataJSON());
+    await route.fulfill({ json: { next: "danger_signs" } });
+  });
+  await page.goto("/kiosk/intake");
+
+  await page.getByLabel("How old are you?").fill("6");
+  await page.getByRole("radio", { name: "Female" }).click();
+  const question = page.getByRole("radiogroup", { name: "Who is answering for this child?" });
+  await expect(question).toBeVisible();
+  const next = page.getByRole("button", { name: "Next", exact: true });
+  await expect(next).toBeDisabled();
+  await question.getByRole("radio", { name: "I am a parent or guardian" }).click();
+  await expect(next).toBeEnabled();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+  ).toBeLessThanOrEqual(0);
+  await next.click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toMatchObject({ age: 6, sex: "female", answered_by: "guardian" });
+});

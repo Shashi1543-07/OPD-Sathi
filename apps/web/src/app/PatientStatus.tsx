@@ -20,6 +20,8 @@ type Status = {
   ai_help?: "on" | "off" | "withdrawn";
   /** Queue messages by SMS, which the patient ticked for themselves; "on" can be stopped. */
   sms?: "on" | "off" | "stopped";
+  /** The hospital's full privacy notice (/privacy/<hospital>). */
+  privacy_path?: string;
   updated_at?: string;
 };
 
@@ -351,6 +353,11 @@ export function PatientStatus() {
               <p className="status-tip">{t("smsStopped", { ns: "status" })}</p>
             )}
           </>
+        )}
+        {status?.privacy_path && (
+          <a className="status-privacy" href={status.privacy_path}>
+            {t("privacyLink", { ns: "status" })}
+          </a>
         )}
         <p className="status-foot">{t("historyOnly", { ns: "common" })}</p>
       </article>
