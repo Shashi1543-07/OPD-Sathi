@@ -469,6 +469,30 @@ export interface paths {
         patch: operations["patch_interview_settings_admin_interview_settings_patch"];
         trace?: never;
     };
+    "/admin/feature-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Feature Settings
+         * @description Features this hospital switches on or off: SMS queue messages and phone check-in.
+         */
+        get: operations["get_feature_settings_admin_feature_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Feature Settings
+         * @description Switch features on or off for the whole hospital; check-ins that start later follow.
+         */
+        patch: operations["patch_feature_settings_admin_feature_settings_patch"];
+        trace?: never;
+    };
     "/admin/{resource}": {
         parameters: {
             query?: never;
@@ -2435,6 +2459,16 @@ export interface components {
              */
             unit: "minute" | "hour" | "day" | "week" | "month" | "year";
         };
+        /**
+         * FeatureSettingsPatch
+         * @description The switches to change; a switch left out keeps its value.
+         */
+        FeatureSettingsPatch: {
+            /** Sms Messages */
+            sms_messages?: boolean | null;
+            /** Phone Checkin */
+            phone_checkin?: boolean | null;
+        };
         /** FieldMeta */
         FieldMeta: {
             /**
@@ -4049,6 +4083,63 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["InterviewSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feature_settings_admin_feature_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    patch_feature_settings_admin_feature_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureSettingsPatch"];
             };
         };
         responses: {

@@ -5,6 +5,7 @@ an ``sms`` consent with the version and hash of the notice beside it, and keeps 
 number that only ``NOTIFY_KEY`` opens. The worker runs here as the real ``osa_worker`` role
 with no patient-data key: it can deliver, it cannot read any patient's stored number. The
 patient can stop messages from the status page; that erases the copy and cancels what is due.
+The hospital has SMS messages switched on here (off by default: test_feature_switches.py).
 """
 
 import os
@@ -88,6 +89,15 @@ async def _notifications(hospital: SyntheticHospital, visit_id: str) -> list[dic
     return [dict(row) for row in rows]
 
 
+async def _sms_on(hospital: SyntheticHospital) -> None:
+    await execute(
+        hospital.settings,
+        hospital.hospital_id,
+        "INSERT INTO hospital_feature_settings (hospital_id, sms_messages) VALUES (:h, true)",
+        h=hospital.hospital_id,
+    )
+
+
 async def _run_worker(hospital: SyntheticHospital, provider: Any) -> None:
     """One worker tick, as the restricted role and with the worker's real keys."""
     settings = hospital.settings.model_copy(update={"app_data_key": "", "app_hmac_key": ""})
@@ -107,6 +117,7 @@ async def _run_worker(hospital: SyntheticHospital, provider: Any) -> None:
 
 async def test_typing_a_phone_number_records_no_sms_choice() -> None:
     async with synthetic_hospital() as hospital:
+        await _sms_on(hospital)
         with api_client(hospital.settings) as client:
             session = start_kiosk_session(client, activate_kiosk(client, hospital))
             assert session.sms_consent is not None
@@ -121,6 +132,7 @@ async def test_typing_a_phone_number_records_no_sms_choice() -> None:
 
 async def test_sms_needs_the_patients_own_tick_on_the_current_notice() -> None:
     async with synthetic_hospital() as hospital:
+        await _sms_on(hospital)
         with api_client(hospital.settings) as client:
             session = start_kiosk_session(client, activate_kiosk(client, hospital))
             session.agree()
@@ -170,6 +182,7 @@ async def test_sms_needs_the_patients_own_tick_on_the_current_notice() -> None:
 
 async def test_worker_without_patient_keys_delivers_and_patient_can_stop() -> None:
     async with synthetic_hospital() as hospital:
+        await _sms_on(hospital)
         with api_client(hospital.settings) as client:
             session = start_kiosk_session(client, activate_kiosk(client, hospital))
             complete_intake(session, phone=PHONE, sms_opt_in=True)

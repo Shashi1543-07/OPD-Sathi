@@ -30,6 +30,11 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   parent or guardian, or someone helping is answering; for a child the details screen asks
   again and needs a choice. The doctor's screen and the case sheet PDF say when someone else
   gave the history. The offline short form asks it too.
+- **Features for patients** (Settings → Departments): SMS queue messages are now off until an
+  administrator turns them on, because they need an SMS provider and registered message
+  templates; while off, kiosks and phones do not offer the SMS box. **After upgrading, SMS is
+  off** until it is switched on again. Phone check-in can be turned off for the whole hospital
+  at once; kiosks keep working.
 
 ### Technical
 
@@ -45,6 +50,12 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   stored); the version from `/patients/lookup` guards against re-issuing twice. Audited
   without the PIN.
 - `/admin/ai-settings` also returns `chosen` and `available`.
+- `GET`/`PATCH /admin/feature-settings`: `sms_messages` (default off), `phone_checkin`
+  (default on) and `sms_provider` (whether the server can send at all); table
+  `hospital_feature_settings` (migration `0032_feature_switches`; the worker may read only the
+  SMS switch). With SMS off, sessions carry no `sms_consent`, a tick from an older screen is
+  ignored and no message is queued; with phone check-in off, every check-in QR answers
+  `409 CHECKIN_TURNED_OFF`. Changes are audited (task 7.14.7).
 - `visits.answered_by` and `consents.given_by` (migration `0031_answered_by`); `answered_by`
   on the consent, identity (required under 18: `ANSWERER_REQUIRED`) and offline submission
   payloads; forms queued by older kiosks are recorded as the patient's own.
@@ -54,6 +65,10 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - Web coverage gate in CI (`npm run test:coverage`, `@vitest/coverage-v8`, approved by the
   owner): every source file counts; thresholds at the level reached (statements 56%,
   branches 52%, functions 51%, lines 58%), to be raised, never lowered.
+- `GET /visits/{id}/fhir`: the visit as a FHIR R4 bundle (patient, encounter, patient-reported
+  complaint and conditions as unconfirmed, allergies, medicines as stated, accepted results
+  with their printed ranges, the interview, papers, consents, and who answered), tagged
+  not-ABDM-certified; doctors and administrators; audited (ADR 017).
 
 ## [0.7.0]
 

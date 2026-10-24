@@ -2362,6 +2362,27 @@ class DocumentRepository:
         return removed is not None
 
 
+FEATURE_DEFAULTS = {"sms_messages": False, "phone_checkin": True}
+
+
+async def sms_messages_on(connection: AsyncConnection, hospital_id: UUID) -> bool:
+    """Whether this hospital sends queue messages; off until it turns them on (task 7.14.7)."""
+    enabled = await connection.scalar(
+        text("SELECT sms_messages FROM hospital_feature_settings WHERE hospital_id = :h"),
+        {"h": hospital_id},
+    )
+    return FEATURE_DEFAULTS["sms_messages"] if enabled is None else bool(enabled)
+
+
+async def phone_checkin_on(connection: AsyncConnection, hospital_id: UUID) -> bool:
+    """Whether patients may check in from the hospital's QR codes on their own phones."""
+    enabled = await connection.scalar(
+        text("SELECT phone_checkin FROM hospital_feature_settings WHERE hospital_id = :h"),
+        {"h": hospital_id},
+    )
+    return FEATURE_DEFAULTS["phone_checkin"] if enabled is None else bool(enabled)
+
+
 async def read_ai_consent(
     engine: AsyncEngine, settings: Settings, *, hospital_id: UUID, visit_id: UUID
 ) -> str | None:

@@ -40,6 +40,8 @@ from app.db.repositories import (
     KioskUnavailableError,
     PatientRepository,
     QueueRepository,
+    phone_checkin_on,
+    sms_messages_on,
 )
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
 from app.domain.checkin import checkin_code_digest, is_checkin_code
@@ -50,7 +52,7 @@ from app.domain.interview.bank import (
     Language,
     Question,
 )
-from app.domain.interview.consent import DANGER_TILES, get_consent_copy
+from app.domain.interview.consent import DANGER_TILES, ConsentCopy, get_consent_copy
 from app.domain.interview.engine import (
     ALWAYS_MODULES,
     InterviewState,
@@ -1004,7 +1006,7 @@ async def create_session(
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": copy,
         "ai_consent": get_consent_copy(payload.language, "ai"),
-        "sms_consent": get_consent_copy(payload.language, "sms"),
+        "sms_consent": await _sms_notice(request, hospital_id, payload.language),
     }
 
 
@@ -1092,7 +1094,7 @@ async def create_assisted_session(
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": {**consent, "language": payload.language},
         "ai_consent": get_consent_copy(payload.language, "ai"),
-        "sms_consent": get_consent_copy(payload.language, "sms"),
+        "sms_consent": await _sms_notice(request, hospital_id, payload.language),
         "assisted": True,
     }
 
@@ -1138,6 +1140,16 @@ def _client_address(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+async def _sms_notice(
+    request: Request, hospital_id: UUID, language: Language
+) -> ConsentCopy | None:
+    """The SMS notice for the tick, or none while the hospital has SMS messages off."""
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        enabled = await sms_messages_on(connection, hospital_id)
+    return get_consent_copy(language, "sms") if enabled else None
+
+
 async def _checkin_point(request: Request, code: str) -> dict[str, Any]:
     """The active phone check-in point behind a QR code, with its hospital's name."""
     unavailable = _error(
@@ -1163,7 +1175,9 @@ async def _checkin_point(request: Request, code: str) -> dict[str, Any]:
             text("SELECT name FROM hospitals WHERE id = :hospital_id"),
             {"hospital_id": point["hospital_id"]},
         )
-    if not point["is_active"]:
+        hospital_allows = await phone_checkin_on(connection, point["hospital_id"])
+    # One check-in point paused, or phone check-in off for the whole hospital (Settings).
+    if not point["is_active"] or not hospital_allows:
         raise _error(
             409,
             "CHECKIN_TURNED_OFF",
@@ -1283,7 +1297,7 @@ async def create_checkin_session(
         "expires_in": settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": get_consent_copy(payload.language),
         "ai_consent": get_consent_copy(payload.language, "ai"),
-        "sms_consent": get_consent_copy(payload.language, "sms"),
+        "sms_consent": await _sms_notice(request, hospital_id, payload.language),
         "channel": "mobile",
         "hospital_name": point["hospital_name"],
     }
@@ -1330,7 +1344,7 @@ async def change_language(
         "language": payload.language,
         "consent": get_consent_copy(payload.language),
         "ai_consent": get_consent_copy(payload.language, "ai"),
-        "sms_consent": get_consent_copy(payload.language, "sms"),
+        "sms_consent": await _sms_notice(request, hospital_id, payload.language),
     }
 
 
@@ -1536,8 +1550,10 @@ async def save_identity(
         await set_hospital_scope(connection, hospital_id)
         repository = IntakeRepository(connection, request.app.state.settings)
         # SMS is the patient's own choice: a tick records the consent; an untick after going
-        # back records the change. No tick and no earlier answer records nothing.
-        if payload.sms_opt_in or await repository.has_consent_row(
+        # back records the change. No tick and no earlier answer records nothing. A tick
+        # from a screen shown before the hospital switched SMS off counts as no tick.
+        sms_opt_in = payload.sms_opt_in and await sms_messages_on(connection, hospital_id)
+        if sms_opt_in or await repository.has_consent_row(
             hospital_id=hospital_id, visit_id=visit_id, purpose="sms"
         ):
             await repository.record_sms_consent(
@@ -1546,7 +1562,7 @@ async def save_identity(
                 language=language,
                 version=sms_copy["version"],
                 text_sha256=sms_copy["sha256"],
-                granted=payload.sms_opt_in,
+                granted=sms_opt_in,
                 channel=channel,
             )
             await audit(
@@ -1561,7 +1577,7 @@ async def save_identity(
                 ),
                 action=(
                     "intake.sms_consent.granted"
-                    if payload.sms_opt_in
+                    if sms_opt_in
                     else "intake.sms_consent.declined"
                 ),
                 resource_type="visit",
@@ -1575,7 +1591,7 @@ async def save_identity(
             age=payload.age,
             sex=payload.sex,
             phone=payload.phone,
-            sms_opt_in=payload.sms_opt_in,
+            sms_opt_in=sms_opt_in,
             name=payload.name if state.get("assisted") is True else None,
             linked=context.get("patient_link") is not None,
         )
