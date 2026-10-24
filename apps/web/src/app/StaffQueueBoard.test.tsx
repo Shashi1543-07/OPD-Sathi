@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "../i18n";
 import { staffAuth } from "../lib/auth";
@@ -58,7 +59,12 @@ function response(body: unknown) {
 function renderBoard() {
   return render(
     <I18nextProvider i18n={i18n}>
-      <StaffQueueBoard />
+      <MemoryRouter initialEntries={["/staff/queue"]}>
+        <Routes>
+          <Route path="/staff/queue" element={<StaffQueueBoard />} />
+          <Route path="/staff/consultations" element={<p>Case sheet open</p>} />
+        </Routes>
+      </MemoryRouter>
     </I18nextProvider>,
   );
 }
@@ -371,6 +377,33 @@ describe("Phase 7.2 queue board", () => {
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith("/queue/long-called/skip", expect.objectContaining({ method: "POST" })),
     );
+  });
+
+  it("opens the case sheet when a doctor starts the consultation", async () => {
+    vi.spyOn(staffAuth, "user", "get").mockReturnValue({
+      id: "doctor-1",
+      name: "Synthetic Doctor",
+      email: "doctor@example.test",
+      role: "doctor",
+      hospital_id: "hospital-1",
+    });
+    const request = vi.spyOn(staffAuth, "request").mockImplementation(async (path) => {
+      if (path.startsWith("/alerts")) return response({ items: [] });
+      if (path.endsWith("/start")) return response({ status: "in_consult" });
+      return response({
+        items: [item({ visit_id: "called-1", token: "MED-007", status: "called" })],
+        departments,
+        next_cursor: null,
+        missed: [],
+        call_grace_seconds: 180,
+      });
+    });
+
+    renderBoard();
+    const queue = await screen.findByRole("region", { name: "Queue patients" });
+    fireEvent.click(await within(queue).findByRole("button", { name: "Start consult" }));
+    expect(await screen.findByText("Case sheet open")).toBeInTheDocument();
+    expect(request).toHaveBeenCalledWith("/queue/called-1/start", expect.objectContaining({ method: "POST" }));
   });
 
   it("explains a refused action without locking the board", async () => {

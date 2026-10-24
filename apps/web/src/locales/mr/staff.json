@@ -610,7 +610,7 @@
   "qbColPriority": "प्राधान्य",
   "qbColWaiting": "प्रतीक्षा",
   "qbColActions": "कृती",
-  "qbViewport": "रांगेतील रुग्ण",
+  "qbViewport": "रांगेतील रुग्णांची यादी",
   "qbPosition": "रांगेत #{{position}}",
   "qbNotRecorded": "नोंदलेले नाही",
   "qbJustArrived": "आत्ताच आले",

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import "../locales/staff";
@@ -154,6 +154,7 @@ function formatWait(minutes: number | null, t: TFunction) {
 
 export function StaffQueueBoard() {
   const { t, i18n } = useTranslation("staff");
+  const navigate = useNavigate();
   const hospitalId = staffAuth.user?.hospital_id ?? "";
   const userScope = `${hospitalId}:${staffAuth.user?.id ?? ""}`;
   const [departmentId, setDepartmentId] = useState(
@@ -543,6 +544,11 @@ export function StaffQueueBoard() {
         throw new Error(
           (await queueProblem(response, t)) ?? t("qbActionUnavailable"),
         );
+      if (name === "start") {
+        // A started consultation is the case sheet: open it, one click instead of two.
+        navigate(`/staff/consultations?visit_id=${visitId}&status=in_consult`);
+        return;
+      }
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : t("qbActionFailed"));
     } finally {
@@ -868,7 +874,7 @@ export function StaffQueueBoard() {
             // A danger-sign tile is stored by its code; say what the patient tapped.
             const tile = alert.evidence ? DANGER_TILE_LABELS[alert.evidence] : undefined;
             return (
-              <article
+              <div
                 className={`qb-alert ${help ? "qb-alert--help" : alert.level === "priority" ? "qb-alert--priority" : "qb-alert--urgent"}`}
                 role="alert"
                 key={alert.id}
@@ -894,7 +900,7 @@ export function StaffQueueBoard() {
                 <button type="button" className="qb-btn" onClick={() => void acknowledge(alert.id)}>
                   {t("qbAcknowledge")}
                 </button>
-              </article>
+              </div>
             );
           })}
         </section>
