@@ -238,6 +238,8 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         "ai_help": place["ai_help"] if place else "off",
         # Queue messages by SMS: "on" can be stopped from the status page, never started.
         "sms": place["sms"] if place else "off",
+        # The hospital's full privacy notice, which the page links to.
+        "privacy_path": f"/privacy/{visit['hospital_id']}",
         "updated_at": datetime.now(UTC).isoformat(),
     }
 

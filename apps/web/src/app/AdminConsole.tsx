@@ -33,6 +33,7 @@ import { staffAuth } from "../lib/auth";
 import { newRequestId } from "../lib/ids";
 import { AiSettingsCard } from "./AiSettingsCard";
 import { FeatureSettingsCard } from "./FeatureSettingsCard";
+import { PrivacySettingsCard } from "./PrivacySettingsCard";
 import { InterviewSettingsCard } from "./InterviewSettingsCard";
 import { QueueSettingsCard } from "./QueueSettingsCard";
 
@@ -1135,6 +1136,7 @@ export function AdminConsole() {
           {resource === "departments" && <InterviewSettingsCard />}
           {resource === "departments" && <AiSettingsCard />}
           {resource === "departments" && <FeatureSettingsCard />}
+          {resource === "departments" && <PrivacySettingsCard />}
         </div>
 
         <section className="adm-card adm-list" aria-labelledby={`${baseId}-list`}>

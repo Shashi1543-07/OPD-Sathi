@@ -33,7 +33,7 @@ Hospital: ______________________ Installation host: ______________________ Versi
 | ☐ | Every clinical content item signed off (7.6.1); the Ayurveda module by a vaidya, or switched off | `docs/CLINICIAN_REVIEW.md` with names, dates and versions; `python -m app.cli content-status` shows 0 awaiting sign-off; `CLINICAL_CONTENT_APPROVAL_REQUIRED=true` in `.env` |
 | ☐ | Every Hindi and Marathi text reviewed by a native speaker (7.6.2) | Review record per file |
 | ☐ | Hazard log reviewed by the clinical lead (7.6.3) | `docs/CLINICAL_SAFETY.md` review record |
-| ☐ | Patient notice and consent texts approved by counsel in three languages (7.5.2) | Counsel's approval |
+| ☐ | Patient notice and consent texts approved by counsel in three languages (7.5.2); the grievance officer's contact set (Settings → Departments → Privacy notice) and the notice poster up | Counsel's approval; `app/domain/privacy/notice-*.md` and the consent files marked approved with the reviewers' names (`python -m app.cli content-status`) |
 | ☐ | Processor agreement between hospital and operator signed (7.5.1) | Agreement |
 | ☐ | AI and SMS provider contracts signed, or AI and SMS off by configuration (7.5.9, 7.11.6) | Contracts, or `.env` showing `LLM_ENABLED=false` and `NOTIFICATION_PROVIDER=console` |
 | ☐ | Retention schedule approved; the retention job scheduled; its first report reviewed (7.5.6) | Schedule; report |

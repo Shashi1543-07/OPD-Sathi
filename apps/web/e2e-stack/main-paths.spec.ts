@@ -20,7 +20,10 @@ test.afterAll(async () => {
 
 async function signIn(page: Page, email: string, password: string) {
   await page.goto(`${state.base}/staff?lang=en`);
-  await page.getByLabel("Hospital", { exact: true }).selectOption(state.hospital_id);
+  // The field is a text box until the hospital list arrives, then a list to pick from.
+  const hospital = page.getByRole("combobox", { name: "Hospital", exact: true });
+  await expect(hospital).toBeVisible();
+  await hospital.selectOption(state.hospital_id);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -152,4 +155,14 @@ test("a new doctor chooses a password, calls the patient and writes notes", asyn
   // Saved on the server, not only on the screen.
   const notes = await admin.get(`visits/${patient.visitId}/doctor-notes`);
   expect(notes.version).toBe(1);
+});
+
+test("the privacy notice is public and names the grievance officer", async ({ page }) => {
+  const contact = "Dr S. Rao, Grievance Officer, Room 12";
+  const settings = await admin.put("admin/privacy-settings", { grievance_contact: contact });
+  // A patient's phone: no sign-in, in Marathi.
+  await page.goto(`${state.base}${String(settings.notice_path)}?lang=mr`);
+  await expect(page.getByRole("heading", { name: "गोपनीयता सूचना" })).toBeVisible();
+  await expect(page.getByText(contact)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "तुमचे पर्याय आणि अधिकार" })).toBeVisible();
 });

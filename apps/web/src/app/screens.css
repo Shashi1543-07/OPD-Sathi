@@ -9006,3 +9006,76 @@
 .sys h3 {
   margin-top: var(--space-5, 24px);
 }
+
+/* ---- Privacy notice for patients (Phase 7, 7.5.2) ---- */
+.status-privacy {
+  color: var(--primary-active);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.privacy-page h1 {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+.privacy-draft {
+  background: var(--priority-tint);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-weight: 600;
+  margin: 0;
+  padding: var(--space-2-5) var(--space-3-5);
+}
+.privacy-text h2,
+.privacy-contact h2 {
+  font-size: var(--font-size-lg);
+  margin: var(--space-4) 0 var(--space-1-5);
+}
+.privacy-text p,
+.privacy-text ul,
+.privacy-contact p {
+  line-height: 1.55;
+  margin: 0 0 var(--space-2);
+}
+.privacy-text ul {
+  padding-left: 1.25rem;
+}
+.privacy-text li {
+  margin: var(--space-1) 0;
+}
+.privacy-contact {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-1) var(--space-3-5) var(--space-2);
+}
+
+/* ---- Privacy notice settings and poster (Phase 7, 7.5.2, 7.15.3) ---- */
+.adm-form textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-md);
+  font-weight: 400;
+  min-width: 0;
+  padding: 0.55rem 0.75rem;
+  resize: vertical;
+  width: 100%;
+}
+.adm-form textarea:focus {
+  border-color: var(--primary);
+  outline: 3px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  outline-offset: 0;
+}
+.adm-privacy-poster-language h3 {
+  font-size: var(--font-size-lg);
+  margin: var(--space-2) 0 var(--space-1);
+}
+.adm-privacy-poster-language p,
+.adm-privacy-poster-desk {
+  margin: 0 0 var(--space-1-5);
+}

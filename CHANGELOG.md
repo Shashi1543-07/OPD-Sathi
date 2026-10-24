@@ -35,6 +35,18 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   templates; while off, kiosks and phones do not offer the SMS box. **After upgrading, SMS is
   off** until it is switched on again. Phone check-in can be turned off for the whole hospital
   at once; kiosks keep working.
+- **Privacy notice for patients**: the full notice (what is collected, why, who sees it, how
+  long it is kept, the patient's rights and where to complain) in English, Hindi and Marathi,
+  linked from the token page and phone check-in. Settings → Departments → Privacy notice:
+  the grievance officer's contact, and a poster with a QR to print for the waiting area. The
+  notice is a draft until the hospital's counsel approves it, and says so.
+- **The queue board in Hindi and Marathi**: the urgent-alert "Acknowledge" button and its
+  wording, filters, columns, the next-to-call panel and every error were English only.
+- **Staff cards and patient signs to print** (`docs/print`): one page each for nurses,
+  doctors and administrators, "How to check in" and "If you feel very unwell, tell the staff
+  now", in three languages, using the screens' own words.
+- **Fixed:** changing your password while the page renewed its sign-in could sign you out
+  with an error.
 
 ### Technical
 
@@ -75,6 +87,24 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   that `RedisDown` could never fire: the worker exited when Redis went away, so monitoring saw
   `WorkerDown` instead and the Redis gauge went stale. The worker now stays up through a Redis
   outage, reports it, and resumes when Redis is back.
+- `GET /privacy-notice/{hospital_id}?language=` (public, rate-limited): the hospital's name,
+  the notice (`app/domain/privacy/notice-*.md`, versioned and reviewed like the consent copy,
+  so `CLINICAL_CONTENT_APPROVAL_REQUIRED` refuses a draft) and the grievance contact.
+  `GET`/`PUT /admin/privacy-settings` (migration `0033_privacy_contact`, audited); the status
+  and phone check-in responses carry `privacy_path` (task 7.5.2).
+- Session renewal locks the account before its refresh token, the order sign-in, password
+  changes and "sign out everywhere" use; the reverse order deadlocked with a password change
+  (500). A token ended on purpose no longer counts as token reuse in the audit log.
+- End-to-end against the real API (task 7.13.2): `apps/web/e2e-stack`, run by the
+  production-smoke CI job on the production-mode stack: two-step sign-in, kiosk pairing and a
+  whole check-in, a new doctor's first sign-in, call, consultation and notes, the privacy
+  notice.
+- Upgrade test (tasks 7.13.3, 7.7.9): `nightly-load.yml` installs the previous release with a
+  patient and a paired kiosk, upgrades in place and checks with `scripts/upgrade_check.py`
+  that data, keys, sign-in and the kiosk survive.
+- `scripts/make_print_pack.py` writes `docs/print`; CI fails when it is stale. The operator
+  guide (`docs/DEPLOYMENT.md`) gains a check of the installation and sends Windows Server to a
+  Hyper-V Linux virtual machine (there was never a `setup-hospital.ps1`).
 
 ## [0.7.0]
 

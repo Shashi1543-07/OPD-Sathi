@@ -1199,7 +1199,11 @@ async def checkin_details(code: str, request: Request) -> dict[str, Any]:
         detail="Please wait a moment and try again.",
     )
     point = await _checkin_point(request, code)
-    return {"hospital_name": point["hospital_name"], "languages": ["hi", "mr", "en"]}
+    return {
+        "hospital_name": point["hospital_name"],
+        "languages": ["hi", "mr", "en"],
+        "privacy_path": f"/privacy/{point['hospital_id']}",
+    }
 
 
 @router.post("/checkin/{code}/sessions", status_code=status.HTTP_201_CREATED)

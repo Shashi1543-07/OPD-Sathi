@@ -493,6 +493,30 @@ export interface paths {
         patch: operations["patch_feature_settings_admin_feature_settings_patch"];
         trace?: never;
     };
+    "/admin/privacy-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Privacy Settings
+         * @description The grievance officer's contact shown with the privacy notice, and the notice's link.
+         */
+        get: operations["get_privacy_settings_admin_privacy_settings_get"];
+        /**
+         * Put Privacy Settings
+         * @description Set how patients reach the grievance officer; the notice shows it at once.
+         */
+        put: operations["put_privacy_settings_admin_privacy_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/{resource}": {
         parameters: {
             query?: never;
@@ -1921,6 +1945,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/privacy-notice/{hospital_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Privacy Notice
+         * @description The hospital's name, the full notice in one language, and whom to complain to.
+         */
+        get: operations["privacy_notice_privacy_notice__hospital_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/documents": {
         parameters: {
             query?: never;
@@ -2943,6 +2987,11 @@ export interface components {
              * @default false
              */
             no_known_allergies: boolean;
+        };
+        /** PrivacySettingsPut */
+        PrivacySettingsPut: {
+            /** Grievance Contact */
+            grievance_contact: string;
         };
         /** QueueSettingsPatch */
         QueueSettingsPatch: {
@@ -4140,6 +4189,63 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["FeatureSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_privacy_settings_admin_privacy_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    put_privacy_settings_admin_privacy_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivacySettingsPut"];
             };
         };
         responses: {
@@ -6729,6 +6835,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    privacy_notice_privacy_notice__hospital_id__get: {
+        parameters: {
+            query?: {
+                language?: "en" | "hi" | "mr";
+            };
+            header?: never;
+            path: {
+                hospital_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {

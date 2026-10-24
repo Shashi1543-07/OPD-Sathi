@@ -163,6 +163,11 @@ class FeatureSettingsPatch(Payload):
 _FEATURE_SWITCHES = ("sms_messages", "phone_checkin")
 
 
+class PrivacySettingsPut(Payload):
+    # How patients reach the grievance officer: a name, a phone number, an email, a room.
+    grievance_contact: str = Field(max_length=500)
+
+
 def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
     return UUID(principal["hospital_id"]), UUID(principal["sub"])
 
@@ -534,6 +539,83 @@ async def patch_feature_settings(
             },
         )
         return await _feature_settings(connection, hospital_id, settings)
+
+
+async def _privacy_settings(
+    connection: Any, hospital_id: UUID, settings: Settings
+) -> dict[str, Any]:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT s.grievance_contact, s.updated_at, u.name AS updated_by_name "
+                    "FROM hospital_privacy_settings s LEFT JOIN users u "
+                    "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
+                    "WHERE s.hospital_id = :hospital_id"
+                ),
+                {"hospital_id": hospital_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    path = f"/privacy/{hospital_id}"
+    public_web_url = settings.public_web_url.strip().rstrip("/")
+    return {
+        "grievance_contact": row["grievance_contact"] if row else "",
+        "notice_path": path,
+        # For the poster's QR; empty when the server does not know its own address.
+        "notice_url": f"{public_web_url}{path}" if public_web_url else None,
+        "updated_at": row["updated_at"].isoformat() if row and row["updated_at"] else None,
+        "updated_by_name": row["updated_by_name"] if row else None,
+    }
+
+
+@router.get("/privacy-settings")
+async def get_privacy_settings(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """The grievance officer's contact shown with the privacy notice, and the notice's link."""
+    hospital_id, _ = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        return await _privacy_settings(connection, hospital_id, request.app.state.settings)
+
+
+@router.put("/privacy-settings")
+async def put_privacy_settings(
+    payload: PrivacySettingsPut,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Set how patients reach the grievance officer; the notice shows it at once."""
+    hospital_id, actor_id = _identity(principal)
+    contact = payload.grievance_contact.strip()
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await connection.execute(
+            text(
+                "INSERT INTO hospital_privacy_settings (hospital_id, grievance_contact, "
+                "updated_by) VALUES (:hospital_id, :contact, :actor_id) "
+                "ON CONFLICT (hospital_id) DO UPDATE SET "
+                "grievance_contact = EXCLUDED.grievance_contact, "
+                "updated_by = EXCLUDED.updated_by, updated_at = now()"
+            ),
+            {"hospital_id": hospital_id, "contact": contact, "actor_id": actor_id},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.privacy_settings.updated",
+            resource_type="hospital_privacy_settings",
+            resource_id=hospital_id,
+            meta={"grievance_contact_set": bool(contact)},
+        )
+        return await _privacy_settings(connection, hospital_id, request.app.state.settings)
 
 
 @router.get("/{resource}")

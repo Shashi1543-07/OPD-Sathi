@@ -188,6 +188,14 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    path: "/privacy/:hospitalId",
+    HydrateFallback: RouteLoading,
+    lazy: async () => {
+      const { PrivacyNotice } = await import("./PrivacyNotice");
+      return { Component: PrivacyNotice };
+    },
+  },
+  {
     path: "/s/:token",
     HydrateFallback: RouteLoading,
     lazy: async () => {

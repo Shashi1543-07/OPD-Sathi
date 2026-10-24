@@ -420,7 +420,7 @@ export const intake = {
   },
   /** The hospital behind a phone check-in QR, or an error saying why it cannot start. */
   checkinDetails: (code: string) =>
-    call<{ hospital_name: string; languages: Language[] }>(
+    call<{ hospital_name: string; languages: Language[]; privacy_path?: string }>(
       `/intake/checkin/${encodeURIComponent(code)}`,
     ),
   /** Start a visit on the patient's own phone from a hospital's check-in QR. */

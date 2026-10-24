@@ -54,6 +54,7 @@ export async function freshCode(secret: string): Promise<string> {
 export type Api = {
   get: (path: string) => Promise<Record<string, unknown>>;
   post: (path: string, body?: unknown) => Promise<Record<string, unknown>>;
+  put: (path: string, body: unknown) => Promise<Record<string, unknown>>;
   dispose: () => Promise<void>;
 };
 
@@ -76,6 +77,11 @@ function wrap(context: APIRequestContext): Api {
       read(
         await context.post(path, { data: body, headers: { "Idempotency-Key": randomUUID() } }),
         `POST ${path}`,
+      ),
+    put: async (path, body) =>
+      read(
+        await context.put(path, { data: body, headers: { "Idempotency-Key": randomUUID() } }),
+        `PUT ${path}`,
       ),
     dispose: () => context.dispose(),
   };

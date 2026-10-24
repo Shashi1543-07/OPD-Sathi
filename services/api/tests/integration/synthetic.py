@@ -52,6 +52,7 @@ _TEARDOWN = (
     "DELETE FROM hospital_queue_settings WHERE hospital_id = :id",
     "DELETE FROM hospital_interview_settings WHERE hospital_id = :id",
     "DELETE FROM hospital_feature_settings WHERE hospital_id = :id",
+    "DELETE FROM hospital_privacy_settings WHERE hospital_id = :id",
     "DELETE FROM users WHERE hospital_id = :id",
     "DELETE FROM departments WHERE hospital_id = :id",
     "DELETE FROM hospitals WHERE id = :id",
