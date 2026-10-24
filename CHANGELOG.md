@@ -7,6 +7,18 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 
 ## [Unreleased]
 
+### For hospital staff and administrators
+
+- **The doctor's own notes** (Clinical notes tab): examination findings, assessment, plan and a
+  follow-up date, written by the doctor and never by AI. Each save is a new version; earlier
+  versions stay readable, and the latest is printed on the case sheet PDF.
+
+### Technical
+
+- `GET`/`PUT /visits/{id}/doctor-notes` with `If-Match` versions; table `doctor_notes`
+  (migration `0029_doctor_notes`, insert-only for the application, encrypted text included in
+  key rotation and restore drills).
+
 ## [0.7.0]
 
 The production-readiness release (Phase 7, gates G0 to G2). For pilots with synthetic data and

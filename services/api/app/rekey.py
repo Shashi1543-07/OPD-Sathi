@@ -49,6 +49,7 @@ FIELDS = (
     EncryptedField("interview_turns", "id", "text_english", "interview_turns:text_english", "text"),
     EncryptedField("users", "id", "mfa_secret_enc", "users:mfa_secret_enc", "text"),
     EncryptedField("case_sheets", "visit_id", "data", "case_sheets:data", "json"),
+    EncryptedField("doctor_notes", "id", "body", "doctor_notes:body", "json"),
     EncryptedField("documents", "id", "extracted", "documents:extracted", "json"),
     EncryptedField("document_contents", "document_id", "ciphertext", "documents:content", "bytes"),
 )

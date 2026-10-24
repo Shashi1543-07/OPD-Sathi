@@ -1208,6 +1208,93 @@ class CaseSheetRepository:
         return result.rowcount == 1
 
 
+class DoctorNoteRepository:
+    """The doctor's own notes for a visit, one row per saved version (task 7.11.1).
+
+    Rows are only ever added: a save that does not start from the latest version is refused,
+    so two doctors cannot overwrite each other, and every earlier wording stays readable.
+    """
+
+    def __init__(self, connection: AsyncConnection, settings: Settings):
+        self.connection = connection
+        self.settings = settings
+
+    async def add_version(
+        self,
+        *,
+        hospital_id: UUID,
+        visit_id: UUID,
+        expected_version: int,
+        body: dict[str, str],
+        follow_up_on: date | None,
+        author_id: UUID,
+    ) -> int | None:
+        """Save the next version, or return None when the latest is not ``expected_version``."""
+        row_id = uuid7()
+        sealed = encrypt_field(
+            json.dumps(body, separators=(",", ":")),
+            key=self.settings.app_data_keyring,
+            associated_data=f"doctor_notes:body:{row_id}",
+        )
+        result = await self.connection.execute(
+            text(
+                "INSERT INTO doctor_notes (id, hospital_id, visit_id, version, body, "
+                "follow_up_on, author_id) SELECT :id, :hospital_id, :visit_id, "
+                ":expected_version + 1, CAST(:body AS jsonb), :follow_up_on, :author_id "
+                "WHERE COALESCE((SELECT max(version) FROM doctor_notes "
+                "WHERE hospital_id = :hospital_id AND visit_id = :visit_id), 0) "
+                "= :expected_version "
+                "ON CONFLICT ON CONSTRAINT uq_doctor_notes_visit_version DO NOTHING "
+                "RETURNING version"
+            ),
+            {
+                "id": row_id,
+                "hospital_id": hospital_id,
+                "visit_id": visit_id,
+                "expected_version": expected_version,
+                "body": json.dumps({"ciphertext": sealed}),
+                "follow_up_on": follow_up_on,
+                "author_id": author_id,
+            },
+        )
+        saved = result.scalar_one_or_none()
+        return int(saved) if saved is not None else None
+
+    async def versions(self, *, hospital_id: UUID, visit_id: UUID) -> list[dict[str, Any]]:
+        """Every saved version, newest first, with the author's name."""
+        result = await self.connection.execute(
+            text(
+                "SELECT n.id, n.version, n.body, n.follow_up_on, n.created_at, "
+                "u.name AS author_name FROM doctor_notes n "
+                "JOIN users u ON u.hospital_id = n.hospital_id AND u.id = n.author_id "
+                "WHERE n.hospital_id = :hospital_id AND n.visit_id = :visit_id "
+                "ORDER BY n.version DESC"
+            ),
+            {"hospital_id": hospital_id, "visit_id": visit_id},
+        )
+        versions = []
+        for row in result.mappings().all():
+            body = json.loads(
+                decrypt_field(
+                    row["body"]["ciphertext"],
+                    key=self.settings.app_data_keyring,
+                    associated_data=f"doctor_notes:body:{row['id']}",
+                )
+            )
+            versions.append(
+                {
+                    "version": row["version"],
+                    "findings": body.get("findings", ""),
+                    "assessment": body.get("assessment", ""),
+                    "plan": body.get("plan", ""),
+                    "follow_up_on": row["follow_up_on"],
+                    "by_name": row["author_name"],
+                    "at": row["created_at"],
+                }
+            )
+        return versions
+
+
 class InterviewTurnRepository:
     def __init__(self, connection: AsyncConnection, settings: Settings):
         self.connection = connection

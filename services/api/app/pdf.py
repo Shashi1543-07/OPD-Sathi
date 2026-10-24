@@ -101,6 +101,10 @@ _LABELS = {
 _DISCLAIMER = (
     "Collected by OPD Saathi from the patient's own statements. History only. Not a diagnosis."
 )
+_DISCLAIMER_WITH_NOTES = (
+    "History collected by OPD Saathi from the patient's own statements. "
+    "The doctor's notes are the doctor's own."
+)
 # Ayurveda history: what the patient reported, then the vaidya's examination findings.
 _AYUSH_REPORTED = (
     ("appetite", "Appetite (Ahara Shakti)"),
@@ -191,11 +195,13 @@ def render_case_sheet_pdf(
     queue_number: str,
     attention_reasons: list[str],
     patient_line: str = "",
+    doctor_notes: dict[str, Any] | None = None,
 ) -> bytes:
     """Return an A4 HTML-rendered PDF with escaped patient-provided text.
 
     The sheet is for the doctor, so labels and values are English; the patient's own
-    words follow each translated value in brackets.
+    words follow each translated value in brackets. ``doctor_notes`` is the latest saved
+    version of the doctor's own notes (task 7.11.1), printed apart from the history.
     """
     from weasyprint import HTML
 
@@ -281,6 +287,24 @@ def render_case_sheet_pdf(
         if ai_summary.get("brief_en") and review.get("status") != "rejected"
         else ""
     )
+    notes = doctor_notes or {}
+    notes_rows = "".join(
+        (
+            _row("Examination findings", notes.get("findings"), "en"),
+            _row("Assessment", notes.get("assessment"), "en"),
+            _row("Plan", notes.get("plan"), "en"),
+            _row("Follow-up", notes.get("follow_up_on"), "en"),
+        )
+    )
+    notes_by = " · ".join(
+        str(part) for part in (notes.get("by_name"), notes.get("at")) if part
+    )
+    notes_block = (
+        f"<h2>Doctor's notes</h2><p class='meta'>{escape(notes_by)}</p><dl>{notes_rows}</dl>"
+        if notes_rows
+        else ""
+    )
+    disclaimer = _DISCLAIMER_WITH_NOTES if notes_rows else _DISCLAIMER
     language_names = {"en": "English", "hi": "Hindi", "mr": "Marathi"}
     meta_line = " · ".join(
         part
@@ -302,7 +326,7 @@ def render_case_sheet_pdf(
 <html lang="{escape(language)}">
 <head><meta charset="utf-8"><style>
 @page {{ size: A4; margin: 12mm 13mm 15mm;
-  @bottom-center {{ content: "{_DISCLAIMER}"; font: 7pt Inter, sans-serif;
+  @bottom-center {{ content: "{disclaimer}"; font: 7pt Inter, sans-serif;
     color: #555; }} }}
 body {{ font: 9pt Inter, 'Noto Sans Devanagari', sans-serif;
   color: #17212b; line-height: 1.28; }}
@@ -341,6 +365,7 @@ ul {{ margin:2pt 0 0; padding-left:14pt; }}
   </section>
 </div>
 {ayush_block}
+{notes_block}
 </body></html>"""
     return cast(bytes, HTML(string=html).write_pdf())
 

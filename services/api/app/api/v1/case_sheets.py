@@ -5,6 +5,7 @@ import re
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, Depends, Header, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -18,6 +19,7 @@ from app.core.auth import require_role
 from app.core.errors import ApiProblemError
 from app.db.repositories import (
     CaseSheetRepository,
+    DoctorNoteRepository,
     IntakeRepository,
     InterviewTurnRepository,
     PatientRepository,
@@ -264,6 +266,9 @@ async def export_case_sheet_pdf(
                 "Visit not found",
                 "The requested visit is unavailable.",
             )
+        notes = await DoctorNoteRepository(connection, request.app.state.settings).versions(
+            hospital_id=hospital_id, visit_id=visit_id
+        )
         reasons = [
             str(
                 item.get("reason_en")
@@ -283,7 +288,11 @@ async def export_case_sheet_pdf(
             action="case_sheet.pdf_exported",
             resource_type="case_sheet",
             resource_id=saved["id"],
-            meta={"version": int(saved["version"]), "red_flag_count": len(reasons)},
+            meta={
+                "version": int(saved["version"]),
+                "red_flag_count": len(reasons),
+                "doctor_notes_version": notes[0]["version"] if notes else 0,
+            },
         )
     sex = {"female": "Female", "male": "Male", "other": "Other"}.get(str(visit.get("sex")), "")
     age = visit.get("age_years")
@@ -295,6 +304,7 @@ async def export_case_sheet_pdf(
         queue_number=visit["token_label"] or "",
         attention_reasons=reasons,
         patient_line=patient_line,
+        doctor_notes=_printed_notes(notes[0]) if notes else None,
     )
     return StarletteResponse(
         content=pdf,
@@ -304,6 +314,18 @@ async def export_case_sheet_pdf(
             "Cache-Control": "no-store",
         },
     )
+
+
+def _printed_notes(latest: dict[str, Any]) -> dict[str, Any]:
+    """The latest notes with dates as people read them (India time)."""
+    at = latest["at"].astimezone(ZoneInfo("Asia/Kolkata"))
+    follow_up = latest.get("follow_up_on")
+    return {
+        **latest,
+        "by_name": f"Written by {latest['by_name']}",
+        "at": at.strftime("%d %b %Y, %H:%M"),
+        "follow_up_on": follow_up.strftime("%d %b %Y") if follow_up else None,
+    }
 
 
 @router.patch("/visits/{visit_id}/case-sheet", response_model=CaseSheetResponse)

@@ -5775,6 +5775,58 @@
 .ayu-exam .cx-btn--primary {
   margin-top: 0.75rem;
 }
+/* The doctor's own notes (task 7.11.1). */
+.dn-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+.dn-field {
+  display: grid;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  gap: 0.25rem;
+}
+.dn-field textarea,
+.dn-field input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-weight: 400;
+  padding: 0.5rem 0.6rem;
+}
+.dn-field textarea {
+  resize: vertical;
+}
+.dn-field--date input {
+  justify-self: start;
+  min-height: 2.4rem;
+}
+.dn-form .cx-btn--primary {
+  justify-self: start;
+}
+.dn-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dn-theirs {
+  border-left: 3px solid #fcd34d;
+  margin-top: 0.75rem;
+  padding-left: 0.75rem;
+}
+.dn-earlier {
+  margin-top: 0.75rem;
+}
+.dn-earlier summary {
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.dn-version + .dn-version {
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+}
 .cx-card--open {
   border-color: #fcd34d;
 }

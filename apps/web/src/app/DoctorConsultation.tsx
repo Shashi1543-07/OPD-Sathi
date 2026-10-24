@@ -50,6 +50,7 @@ import { PreviousVisits, type PatientHistory } from "./PreviousVisits";
 import { DocumentsPanel } from "./DocumentsPanel";
 import { useVisitDocuments } from "./visitDocuments";
 import { AyurvedaPanel } from "./AyurvedaPanel";
+import { DoctorNotesPanel } from "./DoctorNotesPanel";
 import { useConsultQueue } from "./consultQueue";
 import { DANGER_TILE_LABELS } from "../lib/dangerTiles";
 import { newRequestId } from "../lib/ids";
@@ -1486,17 +1487,7 @@ export function DoctorConsultation() {
   } else {
     panel = (
       <div className="cx-notes">
-        <section className="cx-card cx-card--info" aria-labelledby={`${baseId}-notes`}>
-          <h4 id={`${baseId}-notes`}>
-            <Info aria-hidden="true" size={16} /> {t("notesTitle")}
-          </h4>
-          <p>{t("notesUnsupported")}</p>
-          <div className="cx-card-actions">
-            <button type="button" className="cx-btn" onClick={() => openTab("history")}>
-              <Pencil aria-hidden="true" size={15} /> {t("editResponses")}
-            </button>
-          </div>
-        </section>
+        <DoctorNotesPanel key={visitId} visitId={visitId} />
         <section className="cx-card" aria-labelledby={`${baseId}-edits`}>
           <h4 id={`${baseId}-edits`}>{t("staffEditsTitle")}</h4>
           {staffEdits.length ? (

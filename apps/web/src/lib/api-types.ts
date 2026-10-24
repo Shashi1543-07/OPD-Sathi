@@ -1819,6 +1819,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/visits/{visit_id}/doctor-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Doctor Notes
+         * @description The doctor's notes and every earlier version, for staff of the visit's department.
+         */
+        get: operations["get_doctor_notes_visits__visit_id__doctor_notes_get"];
+        /**
+         * Save Doctor Notes
+         * @description Save the next version of the notes, starting from the version the doctor last saw.
+         *
+         *     Allowed to doctors of the visit's department while the patient is under care (the visit
+         *     is open or today's), so earlier records are not rewritten later. Every save is audited
+         *     with the parts that changed, never their text.
+         */
+        put: operations["save_doctor_notes_visits__visit_id__doctor_notes_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/documents": {
         parameters: {
             query?: never;
@@ -2264,6 +2292,63 @@ export interface components {
             name_mr?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+        };
+        /**
+         * DoctorNotesPayload
+         * @description What the doctor writes; at least one part must have text.
+         */
+        DoctorNotesPayload: {
+            /**
+             * Findings
+             * @default
+             */
+            findings: string;
+            /**
+             * Assessment
+             * @default
+             */
+            assessment: string;
+            /**
+             * Plan
+             * @default
+             */
+            plan: string;
+            /** Follow Up On */
+            follow_up_on?: string | null;
+        };
+        /** DoctorNotesResponse */
+        DoctorNotesResponse: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /** Version */
+            version: number;
+            /** Editable */
+            editable: boolean;
+            /** Versions */
+            versions?: components["schemas"]["DoctorNotesVersion"][];
+        };
+        /** DoctorNotesVersion */
+        DoctorNotesVersion: {
+            /** Version */
+            version: number;
+            /** Findings */
+            findings: string;
+            /** Assessment */
+            assessment: string;
+            /** Plan */
+            plan: string;
+            /** Follow Up On */
+            follow_up_on?: string | null;
+            /** By Name */
+            by_name: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
         };
         /** Duration */
         Duration: {
@@ -6241,6 +6326,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscriptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_doctor_notes_visits__visit_id__doctor_notes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNotesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_doctor_notes_visits__visit_id__doctor_notes_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DoctorNotesPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNotesResponse"];
                 };
             };
             /** @description Validation Error */

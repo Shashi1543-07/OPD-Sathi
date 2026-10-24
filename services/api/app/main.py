@@ -31,6 +31,7 @@ from app.api.v1 import audio as audio_api
 from app.api.v1 import audit as audit_api
 from app.api.v1 import auth as auth_api
 from app.api.v1 import case_sheets as case_sheets_api
+from app.api.v1 import doctor_notes as doctor_notes_api
 from app.api.v1 import documents as documents_api
 from app.api.v1 import intake as intake_api
 from app.api.v1 import queue as queue_api
@@ -297,6 +298,7 @@ def create_app(
     app.include_router(audio_api.router)
     app.include_router(queue_api.router)
     app.include_router(case_sheets_api.router)
+    app.include_router(doctor_notes_api.router)
     app.include_router(documents_api.router)
     app.include_router(speech_api.router)
 
