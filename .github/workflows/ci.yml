@@ -70,6 +70,7 @@ jobs:
       - run: PYTHONPATH=services/api python services/api/scripts/write_case_sheet_schema.py --check
       # The printed paper fallback forms match the question bank and translations (7.7.7).
       - run: python scripts/make_paper_forms.py --check
+      - run: python scripts/make_print_pack.py --check
       - run: alembic -c services/api/alembic.ini upgrade head && alembic -c services/api/alembic.ini downgrade base && alembic -c services/api/alembic.ini upgrade head
         env:
           MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:ci-osa-migrator-password@localhost:5432/osa

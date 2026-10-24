@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OPD Saathi · nurse&#x27;s card</title>
+<style>
+@page { size: A4; margin: 13mm; }
+* { box-sizing: border-box; }
+body { font-family: "Nirmala UI", "Noto Sans Devanagari", "Segoe UI", Arial, sans-serif;
+  color: #000; font-size: 10.5pt; line-height: 1.38; margin: 0; }
+h1 { font-size: 19pt; margin: 0 0 1mm; }
+.lead { margin: 0 0 4mm; font-size: 10pt; color: #222; }
+ol.card { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+ol.card > li { counter-increment: step; border: 1pt solid #000; border-radius: 3mm;
+  padding: 2.6mm 3.4mm 2.6mm 12mm; margin: 0 0 2.6mm; position: relative; break-inside: avoid; }
+ol.card > li::before { content: counter(step); position: absolute; left: 3.2mm; top: 2.4mm;
+  font-weight: 700; font-size: 13pt; }
+ol.card h2 { font-size: 11pt; margin: 0 0 0.6mm; }
+ol.card p { margin: 0; }
+b.ui { border: 0.8pt solid #000; border-radius: 1.4mm; padding: 0 1.2mm; white-space: nowrap; }
+.footer { font-size: 7.5pt; margin-top: 3mm; color: #333; }
+.sign { text-align: center; }
+.sign section { border-bottom: 1.2pt dashed #000; padding: 6mm 0 7mm; }
+.sign section:last-of-type { border-bottom: 0; }
+.sign h1 { font-size: 24pt; }
+.sign ol { display: inline-block; text-align: left; font-size: 13.5pt; margin: 3mm 0 0;
+  padding-left: 8mm; }
+.sign ol li { margin: 1.2mm 0; }
+.sign .urgent { font-size: 13.5pt; font-weight: 700; margin: 3mm 0 0; }
+.unwell section { padding: 16mm 0; }
+.unwell h1 { font-size: 34pt; line-height: 1.25; margin: 0; }
+</style>
+</head>
+<body>
+<h1>OPD Saathi · nurse&#x27;s card</h1>
+<p class="lead">OPD Saathi takes the patient&#x27;s history at the kiosk and keeps the queue. It never diagnoses. Patients come first; the screen comes second.</p>
+<ol class="card"><li><h2>Sign in</h2><p>Open https://&lt;server&gt;/staff on the desk computer with your own email and password. The first time, choose your own password. Never share an account.</p></li><li><h2>Urgent alerts come first</h2><p>A red alert at the top of <b class="ui">Queue</b> means a patient tapped a danger sign or asked for help. Go to the patient now, then press <b class="ui">Acknowledge</b>. Keep <b class="ui">Alert sound</b> on.</p></li><li><h2>Check what the kiosk cannot</h2><p><b class="ui">Nurse to confirm</b>: confirm the danger sign in person. To change a patient&#x27;s place, open ⋯ → <b class="ui">Change priority</b>, give a reason, then <b class="ui">Apply override</b>. If the department is not confirmed, type a reason and press <b class="ui">Confirm department</b>.</p></li><li><h2>Calling patients</h2><p><b class="ui">Call next</b> calls the next patient in calling order, urgent first. If they do not come, wait for the countdown, then <b class="ui">Mark absent</b>. They move to <b class="ui">Missed calls</b>; <b class="ui">Recall</b> puts them back in their place with the same token.</p></li><li><h2>Patients who cannot use the kiosk</h2><p><b class="ui">Patients</b> → <b class="ui">Assisted registration</b>: read the consent notice with the patient first, then enter their answers with them.</p></li><li><h2>Lost OPD card</h2><p><b class="ui">Patients</b> → <b class="ui">Lost OPD card</b>: find the patient, check their age and sex with them, then <b class="ui">Re-issue card</b>. Give them the new PIN; the old one stops working.</p></li><li><h2>If the system is down</h2><p>Use the paper pack at the desk: the paper intake form and the paper token roll (P-001 …). Enter those visits once the system is back.</p></li><li><h2>Help</h2><p>IT contact: ______________________ Phone: ______________</p></li></ol>
+<p class="footer">OPD Saathi · docs/print · scripts/make_print_pack.py · nurse · en</p>
+</body>
+</html>

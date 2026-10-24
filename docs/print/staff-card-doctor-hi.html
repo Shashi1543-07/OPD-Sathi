@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<title>OPD Saathi · डॉक्टर के लिए कार्ड</title>
+<style>
+@page { size: A4; margin: 13mm; }
+* { box-sizing: border-box; }
+body { font-family: "Nirmala UI", "Noto Sans Devanagari", "Segoe UI", Arial, sans-serif;
+  color: #000; font-size: 10.5pt; line-height: 1.38; margin: 0; }
+h1 { font-size: 19pt; margin: 0 0 1mm; }
+.lead { margin: 0 0 4mm; font-size: 10pt; color: #222; }
+ol.card { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+ol.card > li { counter-increment: step; border: 1pt solid #000; border-radius: 3mm;
+  padding: 2.6mm 3.4mm 2.6mm 12mm; margin: 0 0 2.6mm; position: relative; break-inside: avoid; }
+ol.card > li::before { content: counter(step); position: absolute; left: 3.2mm; top: 2.4mm;
+  font-weight: 700; font-size: 13pt; }
+ol.card h2 { font-size: 11pt; margin: 0 0 0.6mm; }
+ol.card p { margin: 0; }
+b.ui { border: 0.8pt solid #000; border-radius: 1.4mm; padding: 0 1.2mm; white-space: nowrap; }
+.footer { font-size: 7.5pt; margin-top: 3mm; color: #333; }
+.sign { text-align: center; }
+.sign section { border-bottom: 1.2pt dashed #000; padding: 6mm 0 7mm; }
+.sign section:last-of-type { border-bottom: 0; }
+.sign h1 { font-size: 24pt; }
+.sign ol { display: inline-block; text-align: left; font-size: 13.5pt; margin: 3mm 0 0;
+  padding-left: 8mm; }
+.sign ol li { margin: 1.2mm 0; }
+.sign .urgent { font-size: 13.5pt; font-weight: 700; margin: 3mm 0 0; }
+.unwell section { padding: 16mm 0; }
+.unwell h1 { font-size: 34pt; line-height: 1.25; margin: 0; }
+</style>
+</head>
+<body>
+<h1>OPD Saathi · डॉक्टर के लिए कार्ड</h1>
+<p class="lead">कियोस्क मरीज़ के अपने शब्दों में इतिहास लेता है। यह निदान कभी नहीं करता; हर चिकित्सकीय निर्णय आपका है।</p>
+<ol class="card"><li><h2>साइन इन</h2><p>https://&lt;server&gt;/staff खोलें और अपने ईमेल और पासवर्ड से साइन इन करें। पहली बार अपना पासवर्ड खुद चुनें।</p></li><li><h2>अगले मरीज़ को बुलाएँ</h2><p><b class="ui">कतार</b> में <b class="ui">अगले मरीज़ को बुलाएँ</b> अगले मरीज़ को बुलाता है, तत्काल वाले पहले। फिर <b class="ui">केस शीट खोलें</b> और <b class="ui">परामर्श शुरू करें</b>।</p></li><li><h2>मरीज़ ने क्या कहा</h2><p><b class="ui">सारांश</b> में शिकायत, ख़तरे के संकेत और इतिहास है; <b class="ui">साक्षात्कार प्रतिलेख</b> में हर जवाब वैसा ही है जैसा दिया गया। मरीज़ या नर्स ने जो बदला, वह चिह्नित है।</p></li><li><h2>AI का मसौदा केवल मसौदा है</h2><p>इस्तेमाल से पहले जाँचें: किसी स्रोत पर टैप करके वह जवाब देखें जिस पर वाक्य आधारित है, फिर <b class="ui">स्वीकार करें</b>, <b class="ui">संपादित करें</b> या <b class="ui">अस्वीकार करें</b>। AI न निदान करता है, न दवा लिखता है।</p></li><li><h2>आपके अपने नोट्स</h2><p><b class="ui">क्लिनिकल नोट्स</b>: जाँच के निष्कर्ष, आकलन, योजना और फ़ॉलो-अप की तारीख, फिर <b class="ui">नोट्स सहेजें</b>। हर बार सहेजने पर नया संस्करण बनता है, जो केस शीट पर छपता है।</p></li><li><h2>पुराने कागज़</h2><p><b class="ui">पुराने कागज़</b>: मरीज़ के लाए कागज़ों की फ़ोटो। हर रीडिंग को परिणाम मानने से पहले स्वीकार करें या ठीक करें।</p></li><li><h2>समाप्त करें</h2><p>केस शीट के लिए <b class="ui">प्रिंट / PDF</b>, फिर <b class="ui">परामर्श समाप्त करें</b>। मरीज़ न आए तो: <b class="ui">अनुपस्थित दर्ज करें</b>।</p></li><li><h2>कीबोर्ड</h2><p>N: <b class="ui">कतार पर जाएँ</b> · E: <b class="ui">इतिहास का पहला भाग संपादित करें</b> · P: <b class="ui">केस शीट प्रिंट करें</b></p></li></ol>
+<p class="footer">OPD Saathi · docs/print · scripts/make_print_pack.py · doctor · hi</p>
+</body>
+</html>

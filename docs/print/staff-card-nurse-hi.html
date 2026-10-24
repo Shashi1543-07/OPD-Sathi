@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<title>OPD Saathi · नर्स के लिए कार्ड</title>
+<style>
+@page { size: A4; margin: 13mm; }
+* { box-sizing: border-box; }
+body { font-family: "Nirmala UI", "Noto Sans Devanagari", "Segoe UI", Arial, sans-serif;
+  color: #000; font-size: 10.5pt; line-height: 1.38; margin: 0; }
+h1 { font-size: 19pt; margin: 0 0 1mm; }
+.lead { margin: 0 0 4mm; font-size: 10pt; color: #222; }
+ol.card { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+ol.card > li { counter-increment: step; border: 1pt solid #000; border-radius: 3mm;
+  padding: 2.6mm 3.4mm 2.6mm 12mm; margin: 0 0 2.6mm; position: relative; break-inside: avoid; }
+ol.card > li::before { content: counter(step); position: absolute; left: 3.2mm; top: 2.4mm;
+  font-weight: 700; font-size: 13pt; }
+ol.card h2 { font-size: 11pt; margin: 0 0 0.6mm; }
+ol.card p { margin: 0; }
+b.ui { border: 0.8pt solid #000; border-radius: 1.4mm; padding: 0 1.2mm; white-space: nowrap; }
+.footer { font-size: 7.5pt; margin-top: 3mm; color: #333; }
+.sign { text-align: center; }
+.sign section { border-bottom: 1.2pt dashed #000; padding: 6mm 0 7mm; }
+.sign section:last-of-type { border-bottom: 0; }
+.sign h1 { font-size: 24pt; }
+.sign ol { display: inline-block; text-align: left; font-size: 13.5pt; margin: 3mm 0 0;
+  padding-left: 8mm; }
+.sign ol li { margin: 1.2mm 0; }
+.sign .urgent { font-size: 13.5pt; font-weight: 700; margin: 3mm 0 0; }
+.unwell section { padding: 16mm 0; }
+.unwell h1 { font-size: 34pt; line-height: 1.25; margin: 0; }
+</style>
+</head>
+<body>
+<h1>OPD Saathi · नर्स के लिए कार्ड</h1>
+<p class="lead">OPD Saathi कियोस्क पर मरीज़ का इतिहास लेता है और कतार चलाता है। यह निदान कभी नहीं करता। पहले मरीज़, फिर स्क्रीन।</p>
+<ol class="card"><li><h2>साइन इन</h2><p>डेस्क के कंप्यूटर पर https://&lt;server&gt;/staff खोलें और अपने ईमेल और पासवर्ड से साइन इन करें। पहली बार अपना पासवर्ड खुद चुनें। अपना खाता कभी किसी से साझा न करें।</p></li><li><h2>तत्काल अलर्ट सबसे पहले</h2><p><b class="ui">कतार</b> में सबसे ऊपर लाल अलर्ट का मतलब है कि मरीज़ ने ख़तरे का कोई लक्षण चुना या मदद माँगी। तुरंत मरीज़ के पास जाएँ, फिर <b class="ui">पुष्टि करें</b> दबाएँ। <b class="ui">अलर्ट की आवाज़</b> चालू रखें।</p></li><li><h2>जो कियोस्क नहीं जाँच सकता</h2><p><b class="ui">नर्स पुष्टि करें</b>: ख़तरे के लक्षण की पुष्टि मरीज़ से मिलकर करें। मरीज़ की जगह बदलने के लिए ⋯ → <b class="ui">प्राथमिकता बदलें</b> खोलें, कारण लिखें, फिर <b class="ui">बदलाव लागू करें</b>। विभाग की पुष्टि न हुई हो तो कारण लिखकर <b class="ui">विभाग की पुष्टि करें</b> दबाएँ।</p></li><li><h2>मरीज़ों को बुलाना</h2><p><b class="ui">अगले मरीज़ को बुलाएँ</b> बुलाने के क्रम में अगले मरीज़ को बुलाता है, तत्काल वाले पहले। मरीज़ न आए तो उलटी गिनती पूरी होने दें, फिर <b class="ui">अनुपस्थित दर्ज करें</b>। मरीज़ <b class="ui">छूटी हुई बारी</b> में चला जाता है; <b class="ui">वापस बुलाएँ</b> उसे उसी टोकन के साथ उसकी जगह वापस रखता है।</p></li><li><h2>जो मरीज़ कियोस्क नहीं चला सकते</h2><p><b class="ui">मरीज़</b> → <b class="ui">सहायता से पंजीकरण</b>: पहले सहमति की सूचना मरीज़ के साथ पढ़ें, फिर उनके साथ बैठकर उनके जवाब भरें।</p></li><li><h2>OPD कार्ड खो गया</h2><p><b class="ui">मरीज़</b> → <b class="ui">खोया हुआ OPD कार्ड</b>: मरीज़ को खोजें, उनसे उम्र और लिंग की पुष्टि करें, फिर <b class="ui">कार्ड फिर से जारी करें</b>। उन्हें नया PIN दें; पुराना तुरंत बंद हो जाता है।</p></li><li><h2>सिस्टम बंद हो तो</h2><p>डेस्क पर रखा कागज़ी पैक इस्तेमाल करें: कागज़ का पंजीकरण फ़ॉर्म और कागज़ी टोकन (P-001 …)। सिस्टम चालू होने पर ये विज़िट उसमें दर्ज करें।</p></li><li><h2>मदद</h2><p>IT संपर्क: ______________________ फ़ोन: ______________</p></li></ol>
+<p class="footer">OPD Saathi · docs/print · scripts/make_print_pack.py · nurse · hi</p>
+</body>
+</html>
