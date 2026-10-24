@@ -678,12 +678,19 @@ async def refresh(
             failure = "invalid"
         else:
             await set_hospital_scope(connection, initial["hospital_id"])
+            # The account first, then its token: the order sign-in, password changes and
+            # "sign out everywhere" lock them in. Locking the token first deadlocked with a
+            # password change made while the browser renewed its session.
+            await connection.execute(
+                text("SELECT 1 FROM users WHERE id = :user_id FOR KEY SHARE"),
+                {"user_id": initial["user_id"]},
+            )
             token = (
                 (
                     await connection.execute(
                         text(
-                            "SELECT id, hospital_id, user_id, family_id, expires_at, revoked_at "
-                            "FROM refresh_tokens WHERE id = :id FOR UPDATE"
+                            "SELECT id, hospital_id, user_id, family_id, expires_at, revoked_at, "
+                            "replaced_by FROM refresh_tokens WHERE id = :id FOR UPDATE"
                         ),
                         {"id": initial["id"]},
                     )
@@ -692,6 +699,9 @@ async def refresh(
                 .first()
             )
             if token is None:
+                failure = "invalid"
+            elif token["revoked_at"] is not None and token["replaced_by"] is None:
+                # Ended by signing out, a password change or an administrator: not a theft.
                 failure = "invalid"
             elif token["revoked_at"] is not None:
                 await connection.execute(
