@@ -436,20 +436,20 @@ Where the work stands and where the next session starts: `docs/PHASE_7_HANDOFF.m
 
 | Workstream | Tasks | Status |
 |---|---|---|
-| 7.0 Fix what the analysis found | 7.0.1–7.0.6 | 7.0.1–7.0.5 done (G0, PR #17); 7.0.6 open |
+| 7.0 Fix what the analysis found | 7.0.1–7.0.6 | 7.0.1–7.0.5 done (G0, PR #17); 7.0.6 done (G3: ten consecutive full browser runs with 2 workers and no retry, 25 Oct 2026) |
 | 7.1 Production configuration and packaging | 7.1.1–7.1.8 | 7.1.1–7.1.4, 7.1.6 done (G1); 7.1.5 needs 7.8 results; 7.1.7, 7.1.8 open |
 | 7.2 Network, HTTPS and the edge | 7.2.1–7.2.8 | 7.2.1, 7.2.3–7.2.5, 7.2.7 done (G1); 7.2.2, 7.2.6 with hospital IT; 7.2.8 policy |
 | 7.3 Accounts, access and keys | 7.3.1–7.3.10 | 7.3.1–7.3.10 done (G1); kiosk lockdown hardware with hospital IT |
 | 7.4 Security verification | 7.4.1–7.4.9 | 7.4.1–7.4.5, 7.4.7, 7.4.9 done (G1); 7.4.6 external auditor; 7.4.8 with G2 alerts |
-| 7.5 Privacy and legal | 7.5.1–7.5.11 | not started |
-| 7.6 Clinical safety and governance | 7.6.1–7.6.7 | 7.6.1 loaders and gate done (G1), sign-off by clinicians open; 7.6.3, 7.6.4 drafted; others open |
-| 7.7 Reliability, backup and recovery | 7.7.1–7.7.9 | 7.7.2–7.7.5, 7.7.7, 7.7.9 done (G2); 7.7.1 targets proposed, to sign; 7.7.6 standby and 7.7.8 chaos per case open |
-| 7.8 Scaling and performance | 7.8.1–7.8.10 | 7.8.2, 7.8.3, 7.8.7 done (G2; nightly); 7.8.1 capacity per tier from staging; 7.8.4–7.8.6, 7.8.8–7.8.10 open |
+| 7.5 Privacy and legal | 7.5.1–7.5.11 | 7.5.3 done (G3: who gave consent, on the case sheet); 7.5.2 engineering done (G3: the full notice in three languages, a draft until counsel approves it); 7.5.5 grievance contact done (G3), access-request export open; 7.5.7 procedure drafted (G1); 7.5.1, 7.5.4, 7.5.6, 7.5.8–7.5.11 need counsel, the DPO and the hospital |
+| 7.6 Clinical safety and governance | 7.6.1–7.6.7 | 7.6.1 loaders and gate done (G1), sign-off by clinicians open, including every Hindi and Marathi string added in G3; 7.6.3, 7.6.4 drafted; others open |
+| 7.7 Reliability, backup and recovery | 7.7.1–7.7.9 | 7.7.2–7.7.5, 7.7.7, 7.7.9 done (G2); 7.7.8 failure drills nightly (G3: Redis, PostgreSQL, worker, full disk); 7.7.1 targets proposed, to sign; 7.7.6 standby needs hardware |
+| 7.8 Scaling and performance | 7.8.1–7.8.10 | 7.8.2, 7.8.3, 7.8.7 done (G2; nightly); 7.8.4 done (pool sizes and the connection budget in G0; G3: PgBouncer decision with its test, ADR 013; index review on a million visits, migration 0034; query-count gates in CI; monthly partitions wait for the approved retention schedule); 7.8.5 measured (G3): the full rollup refresh takes 10 s at a million visits, so a per-day rollup is needed before a busy hospital passes about 250,000 visits; 7.8.1 capacity per tier from staging; 7.8.6, 7.8.8–7.8.10 open |
 | 7.9 Monitoring and operations | 7.9.1–7.9.7 | 7.9.1–7.9.7 done (G2); alert drill and support agreement to sign with the hospital |
-| 7.10 Interoperability | 7.10.1–7.10.6 | not started |
-| 7.11 Finishing the product | 7.11.1–7.11.11 | not started |
-| 7.12 Usability, accessibility and polish | 7.12.1–7.12.6 | not started |
-| 7.13 Testing and quality gates | 7.13.1–7.13.7 | not started |
-| 7.14 Releases and delivery | 7.14.1–7.14.7 | 7.14.2–7.14.4, 7.14.6 done (G2); first release to cut; 7.14.1 staging needs hardware; 7.14.5 on first hotfix; 7.14.7 open |
-| 7.15 Documentation, training and support | 7.15.1–7.15.5 | not started |
-| 7.16 Pilot and go-live | 7.16.1–7.16.4 | not started |
+| 7.10 Interoperability | 7.10.1–7.10.6 | 7.10.1 done (G3: FHIR R4 export of a visit, ADR 017); 7.10.4 needs the hospital's own system; 7.10.5 needs the pilot's printers; 7.10.2, 7.10.3 (ABDM, months) and 7.10.6 (codes, a clinician's review) later |
+| 7.11 Finishing the product | 7.11.1–7.11.11 | 7.11.1–7.11.5, 7.11.7, 7.11.11 done (G3); 7.11.8, 7.11.9 decided: not in v1 (ADRs 014, 015); 7.11.6 needs an SMS provider and DLT registration; 7.11.10 needs native-speaker reviewers |
+| 7.12 Usability, accessibility and polish | 7.12.1–7.12.6 | 7.12.2, 7.12.4–7.12.6 done (G3: keyboard-only staff work, the board in three languages at 320–1600 px with axe, one click less to the case sheet, `STAFF_SPEED.md`); 7.12.1 usability test with real people and 7.12.3 kiosk placement with the pilot hospital |
+| 7.13 Testing and quality gates | 7.13.1–7.13.7 | 7.13.2–7.13.4, 7.13.6 done (G3: real-API browser suite in CI, upgrade test, nightly drills, web coverage gate); 7.13.7 done (G2: no patient data in logs, tested in CI); 7.13.1 real devices on the hospital LAN; 7.13.5 results into the release notes at the next release candidate |
+| 7.14 Releases and delivery | 7.14.1–7.14.7 | 7.14.2–7.14.4, 7.14.6 done (G2); first release `v0.7.0` cut; 7.14.7 done (G3: SMS and phone check-in switches, SMS off by default); 7.14.1 staging needs hardware; 7.14.5 on first hotfix |
+| 7.15 Documentation, training and support | 7.15.1–7.15.5 | 7.15.1–7.15.3 written (G3: operator guide with an installation check, staff cards for three roles in three languages, patient signs and the privacy poster); done when a person outside the team installs from the guide, the cards are used in training and the signs are printed for the pilot; 7.15.4 training with the hospital; 7.15.5 at `v1.0.0` |
+| 7.16 Pilot and go-live | 7.16.1–7.16.4 | not started (field work with the pilot hospital) |

@@ -117,6 +117,11 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   report screens (`tests/integration/test_query_counts.py`) fail on a query per row or a
   statement over budget. Measured and left for task 7.8.5: the 5-minute analytics rollup
   refresh recomputes the whole history (10 s at a million visits).
+- Tests (task 7.0.6): ten consecutive full browser runs with two workers and no retry. Fixed
+  on the way: the AI-switch browser test's mock crashed the privacy card beside it (CI was red
+  from the privacy notice commit); a results-over-time test took its date from the runner's
+  UTC clock and failed every evening from 18:30 UTC; the Lighthouse gate judges each page's
+  median of three runs instead of failing on one noisy run, with the same thresholds.
 
 ## [0.7.0]
 
