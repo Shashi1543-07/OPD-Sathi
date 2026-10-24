@@ -137,6 +137,7 @@ async def test_admin_can_read_and_update_tenant_ai_opt_in(monkeypatch) -> None:
         state=SimpleNamespace(
             engine=SimpleNamespace(begin=lambda: connection),
             settings=Settings(),
+            llm_provider=SimpleNamespace(name="gemini"),
         )
     )
     request = Request(
@@ -162,10 +163,17 @@ async def test_admin_can_read_and_update_tenant_ai_opt_in(monkeypatch) -> None:
 
     monkeypatch.setattr(admin, "set_hospital_scope", scope)
     monkeypatch.setattr(admin, "audit", audit)
-    assert await admin.get_ai_settings(request, user) == {"llm_enabled": True}
+    assert await admin.get_ai_settings(request, user) == {
+        "llm_enabled": True,
+        "chosen": True,
+        "available": True,
+    }
     assert await admin.patch_ai_settings(
         admin.AISettingsPatch(llm_enabled=False), request, user
-    ) == {"llm_enabled": False}
+    ) == {"llm_enabled": False, "chosen": True, "available": True}
+    # Without an AI provider on this server the switch has no effect, and the screen says so.
+    app.state.llm_provider = SimpleNamespace(name="mock")
+    assert (await admin.get_ai_settings(request, user))["available"] is False
     assert len(statements) == 1
     assert "ON CONFLICT (hospital_id) DO UPDATE" in str(statements[0][0])
     assert statements[0][1] == {"hospital_id": hospital_id, "llm_enabled": False}

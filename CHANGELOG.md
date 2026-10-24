@@ -23,6 +23,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **Lost OPD card** (Patients, for nurses and administrators): find the patient, check age and
   sex with them, and give a new PIN. The number and records stay the same; the old PIN stops
   working at once.
+- **Online AI help switch** (Settings → Departments): administrators turn AI off or on for the
+  hospital. The card says when no choice is saved yet (AI is on where the server has it) and
+  when the server has no AI, so the switch does nothing.
 
 ### Technical
 
@@ -37,6 +40,7 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - `POST /patients/card/reissue` moves `patients.card_version` on (the PIN is derived, never
   stored); the version from `/patients/lookup` guards against re-issuing twice. Audited
   without the PIN.
+- `/admin/ai-settings` also returns `chosen` and `available`.
 
 ## [0.7.0]
 

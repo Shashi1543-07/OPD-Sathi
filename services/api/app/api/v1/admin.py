@@ -189,20 +189,35 @@ def _refuse_self(resource: str, resource_id: UUID, actor_id: UUID, action: str) 
         )
 
 
+def _ai_settings(request: Request, saved: bool | None) -> dict[str, bool]:
+    """The hospital's AI switch, whether it was ever chosen, and whether AI can run here.
+
+    No saved choice means AI is on (as intake applies it) until an admin switches it off.
+    ``available`` is false when the server has AI turned off or no AI provider configured;
+    then the switch has no effect and every visit runs on this server alone.
+    """
+    provider = getattr(request.app.state.llm_provider, "name", "mock")
+    return {
+        "llm_enabled": saved is not False,
+        "chosen": saved is not None,
+        "available": bool(request.app.state.settings.llm_enabled) and provider != "mock",
+    }
+
+
 @router.get("/ai-settings")
 async def get_ai_settings(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(_admin_principal)],
 ) -> dict[str, bool]:
+    """The hospital's switch for online AI help (the patient's own consent is still needed)."""
     hospital_id, _ = _identity(principal)
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        enabled = await connection.scalar(
+        saved = await connection.scalar(
             text("SELECT llm_enabled FROM hospital_ai_settings WHERE hospital_id = :hospital_id"),
             {"hospital_id": hospital_id},
         )
-    # No saved choice means AI is on (as intake applies it) until an admin switches it off.
-    return {"llm_enabled": enabled is not False}
+    return _ai_settings(request, saved)
 
 
 @router.patch("/ai-settings")
@@ -233,7 +248,7 @@ async def patch_ai_settings(
             resource_id=hospital_id,
             meta={"llm_enabled": payload.llm_enabled},
         )
-    return {"llm_enabled": payload.llm_enabled}
+    return _ai_settings(request, payload.llm_enabled)
 
 
 async def _queue_settings(connection: Any, hospital_id: UUID) -> dict[str, Any]:

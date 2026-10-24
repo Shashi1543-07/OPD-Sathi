@@ -410,7 +410,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Ai Settings */
+        /**
+         * Get Ai Settings
+         * @description The hospital's switch for online AI help (the patient's own consent is still needed).
+         */
         get: operations["get_ai_settings_admin_ai_settings_get"];
         put?: never;
         post?: never;
