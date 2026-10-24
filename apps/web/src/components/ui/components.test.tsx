@@ -136,8 +136,10 @@ describe("shared UI components", () => {
   it("changes the session language from the language tiles", async () => {
     const user = userEvent.setup();
     renderWithI18n(<LanguageSelector />);
-    await user.click(screen.getByRole("button", { name: "मराठी" }));
+    // The tile's name is everything it shows, script and English name alike.
+    await user.click(screen.getByRole("button", { name: "मराठी Marathi" }));
     expect(useLanguageStore.getState().language).toBe("mr");
+    expect(screen.getByRole("button", { name: "English" })).toBeInTheDocument();
     expect(i18n.language).toBe("mr");
   });
 
