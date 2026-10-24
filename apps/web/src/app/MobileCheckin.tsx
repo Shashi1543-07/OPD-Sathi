@@ -24,6 +24,7 @@ export function MobileCheckin() {
   const networkOffline = outlet?.networkOffline ?? !navigator.onLine;
   const [load, setLoad] = useState<Load>("checking");
   const [hospital, setHospital] = useState<string | null>(null);
+  const [privacyPath, setPrivacyPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [ticket] = useState<MobileTicket | null>(() => intake.lastTicket());
@@ -36,6 +37,7 @@ export function MobileCheckin() {
     try {
       const details = await intake.checkinDetails(code);
       setHospital(details.hospital_name);
+      setPrivacyPath(details.privacy_path ?? null);
       intake.rememberHospitalName(details.hospital_name);
       setLoad("ready");
     } catch (cause) {
@@ -185,6 +187,11 @@ export function MobileCheckin() {
           <p role="alert" className="mobile-error">
             {error}
           </p>
+        )}
+        {privacyPath && (
+          <Link className="status-privacy" to={privacyPath}>
+            {t("privacyLink", { ns: "status" })}
+          </Link>
         )}
       </section>
     </main>

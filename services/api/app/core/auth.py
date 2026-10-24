@@ -38,6 +38,8 @@ PUBLIC_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/status/{token}/sms/stop"),
         ("GET", "/intake/checkin/{code}"),
         ("POST", "/intake/checkin/{code}/sessions"),
+        # The privacy notice: what a patient reads before they agree to anything.
+        ("GET", "/privacy-notice/{hospital_id}"),
         ("GET", "/openapi.json"),
         ("HEAD", "/openapi.json"),
         ("GET", "/docs"),
@@ -170,6 +172,8 @@ PUBLIC_CODE_ROUTES: tuple[tuple[str, re.Pattern[str]], ...] = (
     # A hospital's phone check-in QR: look it up, then start a patient session from it.
     ("GET", re.compile(r"/intake/checkin/[A-Za-z0-9_-]{43}")),
     ("POST", re.compile(r"/intake/checkin/[A-Za-z0-9_-]{43}/sessions")),
+    # A hospital's privacy notice, by the hospital's ID (not a secret: it is on the poster).
+    ("GET", re.compile(r"/privacy-notice/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")),
 )
 
 

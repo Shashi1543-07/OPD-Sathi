@@ -104,3 +104,48 @@ def test_the_api_refuses_to_start_with_draft_content_when_approval_is_required()
         create_app(settings)
     assert "triage/weights.yaml" in str(refused.value)
     assert "consent/en.md" in str(refused.value)
+
+
+def test_the_privacy_notice_is_a_draft_with_the_same_sections_in_each_language() -> None:
+    from app.domain.privacy import get_privacy_notice
+
+    notices = {language: get_privacy_notice(language) for language in ("en", "hi", "mr")}
+    for language, notice in notices.items():
+        assert notice["review_status"] == DRAFT
+        assert notice["version"] == "privacy-notice-1.0"
+        assert CONTENT_STATUS[f"privacy/notice-{language}.md"] == DRAFT
+    # The same headings and bullets in each translation, so none drops a right.
+    shapes = {
+        language: [line[:2] for line in notice["text"].splitlines() if line[:2] in {"##", "- "}]
+        for language, notice in notices.items()
+    }
+    assert shapes["en"] == shapes["hi"] == shapes["mr"]
+    assert shapes["en"].count("##") == 6
+
+
+def test_an_approved_privacy_notice_needs_counsels_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.domain import privacy
+
+    (tmp_path / "notice-en.md").write_text(
+        "---\nreview_status: approved\nversion: privacy-notice-1.1\n"
+        "reviewed_by: Adv. R. Shah (counsel); Dr P. Joshi (DPO)\nreviewed_on: 2026-10-01\n"
+        "---\n## Who is responsible\n\nThis hospital.\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "notice-hi.md").write_text(
+        "---\nreview_status: approved\nversion: privacy-notice-1.1\n---\n## कौन\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(privacy, "NOTICE_DIRECTORY", tmp_path)
+    assert privacy.get_privacy_notice("en")["review_status"] == APPROVED
+    with pytest.raises(ValueError, match="privacy/notice-hi.md is marked approved"):
+        privacy.get_privacy_notice("hi")
+
+
+def test_production_refuses_a_draft_privacy_notice_when_approval_is_required() -> None:
+    settings = Settings(clinical_content_approval_required=True)
+    with pytest.raises(RuntimeError, match="still a draft") as refused:
+        create_app(settings)
+    assert "privacy/notice-en.md" in str(refused.value)

@@ -1,21 +1,34 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import "../locales/staff";
-import { Leaf } from "lucide-react";
+import { ListChecks } from "lucide-react";
 import { staffAuth } from "../lib/auth";
 
-type InterviewSettings = {
-  ayurveda_module: boolean;
+type Switch = "review_of_systems_module" | "ayurveda_module";
+type InterviewSettings = Record<Switch, boolean> & {
   updated_at: string | null;
   updated_by_name: string | null;
 };
 
-/** Optional interview modules for this hospital: the Ayurveda history at AYUSH hospitals. */
+/** Each optional module, with its label and what it adds; all are off until a hospital turns them on. */
+const SWITCHES: { key: Switch; label: string; hint: string }[] = [
+  {
+    key: "review_of_systems_module",
+    label: "reviewOfSystemsModuleLabel",
+    hint: "reviewOfSystemsModuleHint",
+  },
+  { key: "ayurveda_module", label: "ayurvedaModuleLabel", hint: "ayurvedaModuleHint" },
+];
+
+/** Optional interview modules for this hospital: the review of systems and the Ayurveda history. */
 export function InterviewSettingsCard() {
   const { t } = useTranslation("staff");
   const titleId = useId();
   const [settings, setSettings] = useState<InterviewSettings>();
-  const [ayurveda, setAyurveda] = useState(false);
+  const [values, setValues] = useState<Record<Switch, boolean>>({
+    review_of_systems_module: false,
+    ayurveda_module: false,
+  });
   const [state, setState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
 
   useEffect(() => {
@@ -27,13 +40,22 @@ export function InterviewSettingsCard() {
         const body = (await response.json()) as InterviewSettings;
         if (!active) return;
         setSettings(body);
-        setAyurveda(body.ayurveda_module);
+        setValues({
+          review_of_systems_module: body.review_of_systems_module,
+          ayurveda_module: body.ayurveda_module,
+        });
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
   }, []);
+
+  const changes = settings
+    ? Object.fromEntries(
+        SWITCHES.filter(({ key }) => values[key] !== settings[key]).map(({ key }) => [key, values[key]]),
+      )
+    : {};
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,12 +64,15 @@ export function InterviewSettingsCard() {
       const response = await staffAuth.request("/admin/interview-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ayurveda_module: ayurveda }),
+        body: JSON.stringify(changes),
       });
       if (!response.ok) throw new Error("interview settings not saved");
       const body = (await response.json()) as InterviewSettings;
       setSettings(body);
-      setAyurveda(body.ayurveda_module);
+      setValues({
+        review_of_systems_module: body.review_of_systems_module,
+        ayurveda_module: body.ayurveda_module,
+      });
       setState("saved");
     } catch {
       setState("failed");
@@ -58,25 +83,31 @@ export function InterviewSettingsCard() {
     <form className="adm-card adm-form" aria-labelledby={titleId} onSubmit={(event) => void save(event)}>
       <div className="adm-card-head">
         <span className="adm-card-icon" aria-hidden="true">
-          <Leaf size={20} />
+          <ListChecks size={20} />
         </span>
         <div>
           <h3 id={titleId}>{t("interviewSettingsTitle")}</h3>
-          <p>{t("ayurvedaModuleHint")}</p>
+          <p>{t("interviewSettingsHint")}</p>
         </div>
       </div>
-      <label className="adm-check">
-        <input
-          type="checkbox"
-          checked={ayurveda}
-          disabled={!settings}
-          onChange={(event) => {
-            setAyurveda(event.target.checked);
-            setState("idle");
-          }}
-        />
-        <span>{t("ayurvedaModuleLabel")}</span>
-      </label>
+      {SWITCHES.map(({ key, label, hint }) => (
+        <div key={key} className="adm-switch">
+          <label className="adm-check">
+            <input
+              type="checkbox"
+              checked={values[key]}
+              disabled={!settings}
+              aria-describedby={`${titleId}-${key}`}
+              onChange={(event) => {
+                setValues((current) => ({ ...current, [key]: event.target.checked }));
+                setState("idle");
+              }}
+            />
+            <span>{t(label)}</span>
+          </label>
+          <small id={`${titleId}-${key}`}>{t(hint)}</small>
+        </div>
+      ))}
       {state === "saved" && (
         <p className="adm-banner adm-banner--ok" role="status">
           {t("interviewSettingsSaved")}
@@ -90,7 +121,7 @@ export function InterviewSettingsCard() {
       <button
         type="submit"
         className="adm-submit"
-        disabled={!settings || state === "saving" || ayurveda === settings.ayurveda_module}
+        disabled={!settings || state === "saving" || Object.keys(changes).length === 0}
       >
         {t("interviewSettingsSave")}
       </button>

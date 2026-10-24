@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -18,7 +18,7 @@ from app.core.errors import ApiProblemError
 from app.core.idempotency import IdempotencyStore
 from app.core.passwords import password_problem
 from app.core.security import create_opaque_secret, digest_secret, hash_password
-from app.db.repositories import AdminRepository
+from app.db.repositories import FEATURE_DEFAULTS, AdminRepository
 from app.db.session import set_hospital_scope
 from app.domain.checkin import checkin_code
 from app.domain.queue.state import DEFAULT_CALL_GRACE_SECONDS
@@ -128,8 +128,44 @@ class QueueSettingsPatch(Payload):
 
 
 class InterviewSettingsPatch(Payload):
+    """The switches to change; a switch left out keeps its value."""
+
     # Ask the six patient-reportable Ayurveda history questions in every interview.
-    ayurveda_module: bool
+    ayurveda_module: bool | None = None
+    # Ask the one-screen review of systems (other body systems) in every interview.
+    review_of_systems_module: bool | None = None
+
+    @model_validator(mode="after")
+    def one_switch(self) -> "InterviewSettingsPatch":
+        if self.ayurveda_module is None and self.review_of_systems_module is None:
+            raise ValueError("Change at least one interview setting.")
+        return self
+
+
+_INTERVIEW_SWITCHES = ("ayurveda_module", "review_of_systems_module")
+
+
+class FeatureSettingsPatch(Payload):
+    """The switches to change; a switch left out keeps its value."""
+
+    # Offer patients queue messages by SMS (each still needs the patient's own tick).
+    sms_messages: bool | None = None
+    # Let patients check in on their own phones from the hospital's check-in QR codes.
+    phone_checkin: bool | None = None
+
+    @model_validator(mode="after")
+    def one_switch(self) -> "FeatureSettingsPatch":
+        if self.sms_messages is None and self.phone_checkin is None:
+            raise ValueError("Change at least one feature setting.")
+        return self
+
+
+_FEATURE_SWITCHES = ("sms_messages", "phone_checkin")
+
+
+class PrivacySettingsPut(Payload):
+    # How patients reach the grievance officer: a name, a phone number, an email, a room.
+    grievance_contact: str = Field(max_length=500)
 
 
 def _identity(principal: dict[str, Any]) -> tuple[UUID, UUID]:
@@ -176,20 +212,35 @@ def _refuse_self(resource: str, resource_id: UUID, actor_id: UUID, action: str) 
         )
 
 
+def _ai_settings(request: Request, saved: bool | None) -> dict[str, bool]:
+    """The hospital's AI switch, whether it was ever chosen, and whether AI can run here.
+
+    No saved choice means AI is on (as intake applies it) until an admin switches it off.
+    ``available`` is false when the server has AI turned off or no AI provider configured;
+    then the switch has no effect and every visit runs on this server alone.
+    """
+    provider = getattr(request.app.state.llm_provider, "name", "mock")
+    return {
+        "llm_enabled": saved is not False,
+        "chosen": saved is not None,
+        "available": bool(request.app.state.settings.llm_enabled) and provider != "mock",
+    }
+
+
 @router.get("/ai-settings")
 async def get_ai_settings(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(_admin_principal)],
 ) -> dict[str, bool]:
+    """The hospital's switch for online AI help (the patient's own consent is still needed)."""
     hospital_id, _ = _identity(principal)
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        enabled = await connection.scalar(
+        saved = await connection.scalar(
             text("SELECT llm_enabled FROM hospital_ai_settings WHERE hospital_id = :hospital_id"),
             {"hospital_id": hospital_id},
         )
-    # No saved choice means AI is on (as intake applies it) until an admin switches it off.
-    return {"llm_enabled": enabled is not False}
+    return _ai_settings(request, saved)
 
 
 @router.patch("/ai-settings")
@@ -220,7 +271,7 @@ async def patch_ai_settings(
             resource_id=hospital_id,
             meta={"llm_enabled": payload.llm_enabled},
         )
-    return {"llm_enabled": payload.llm_enabled}
+    return _ai_settings(request, payload.llm_enabled)
 
 
 async def _queue_settings(connection: Any, hospital_id: UUID) -> dict[str, Any]:
@@ -310,7 +361,8 @@ async def _interview_settings(connection: Any, hospital_id: UUID) -> dict[str, A
         (
             await connection.execute(
                 text(
-                    "SELECT s.ayurveda_module, s.updated_at, u.name AS updated_by_name "
+                    "SELECT s.ayurveda_module, s.review_of_systems_module, s.updated_at, "
+                    "u.name AS updated_by_name "
                     "FROM hospital_interview_settings s LEFT JOIN users u "
                     "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
                     "WHERE s.hospital_id = :hospital_id"
@@ -322,9 +374,15 @@ async def _interview_settings(connection: Any, hospital_id: UUID) -> dict[str, A
         .first()
     )
     if row is None:
-        return {"ayurveda_module": False, "updated_at": None, "updated_by_name": None}
+        return {
+            "ayurveda_module": False,
+            "review_of_systems_module": False,
+            "updated_at": None,
+            "updated_by_name": None,
+        }
     return {
         "ayurveda_module": bool(row["ayurveda_module"]),
+        "review_of_systems_module": bool(row["review_of_systems_module"]),
         "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
         "updated_by_name": row["updated_by_name"],
     }
@@ -335,7 +393,7 @@ async def get_interview_settings(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(_admin_principal)],
 ) -> dict[str, Any]:
-    """Optional interview modules for this hospital (the Ayurveda history)."""
+    """Optional interview modules for this hospital (review of systems, Ayurveda history)."""
     hospital_id, _ = _identity(principal)
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
@@ -348,22 +406,29 @@ async def patch_interview_settings(
     request: Request,
     principal: Annotated[dict[str, Any], Depends(_admin_principal)],
 ) -> dict[str, Any]:
-    """Turn the Ayurveda history on or off; it applies to interviews that start afterwards."""
+    """Turn optional modules on or off; changes apply to interviews that start afterwards."""
     hospital_id, actor_id = _identity(principal)
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         before = await _interview_settings(connection, hospital_id)
+        after = {
+            name: before[name] if getattr(payload, name) is None else getattr(payload, name)
+            for name in _INTERVIEW_SWITCHES
+        }
         await connection.execute(
             text(
                 "INSERT INTO hospital_interview_settings (hospital_id, ayurveda_module, "
-                "updated_by) VALUES (:hospital_id, :ayurveda, :actor_id) "
+                "review_of_systems_module, updated_by) "
+                "VALUES (:hospital_id, :ayurveda, :review_of_systems, :actor_id) "
                 "ON CONFLICT (hospital_id) DO UPDATE SET "
                 "ayurveda_module = EXCLUDED.ayurveda_module, "
+                "review_of_systems_module = EXCLUDED.review_of_systems_module, "
                 "updated_by = EXCLUDED.updated_by, updated_at = now()"
             ),
             {
                 "hospital_id": hospital_id,
-                "ayurveda": payload.ayurveda_module,
+                "ayurveda": after["ayurveda_module"],
+                "review_of_systems": after["review_of_systems_module"],
                 "actor_id": actor_id,
             },
         )
@@ -377,13 +442,180 @@ async def patch_interview_settings(
             resource_type="hospital_interview_settings",
             resource_id=hospital_id,
             meta={
-                "ayurveda_module": {
-                    "before": before["ayurveda_module"],
-                    "after": payload.ayurveda_module,
-                }
+                name: {"before": before[name], "after": after[name]}
+                for name in _INTERVIEW_SWITCHES
+                if getattr(payload, name) is not None
             },
         )
         return await _interview_settings(connection, hospital_id)
+
+
+async def _feature_settings(
+    connection: Any, hospital_id: UUID, settings: Settings
+) -> dict[str, Any]:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT s.sms_messages, s.phone_checkin, s.updated_at, "
+                    "u.name AS updated_by_name "
+                    "FROM hospital_feature_settings s LEFT JOIN users u "
+                    "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
+                    "WHERE s.hospital_id = :hospital_id"
+                ),
+                {"hospital_id": hospital_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    switches = (
+        dict(FEATURE_DEFAULTS)
+        if row is None
+        else {name: bool(row[name]) for name in _FEATURE_SWITCHES}
+    )
+    return {
+        **switches,
+        # Without a provider the server only writes messages to its log (NOTIFICATION_PROVIDER).
+        "sms_provider": settings.notification_provider != "console",
+        "updated_at": row["updated_at"].isoformat() if row and row["updated_at"] else None,
+        "updated_by_name": row["updated_by_name"] if row else None,
+    }
+
+
+@router.get("/feature-settings")
+async def get_feature_settings(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Features this hospital switches on or off: SMS queue messages and phone check-in."""
+    hospital_id, _ = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        return await _feature_settings(connection, hospital_id, request.app.state.settings)
+
+
+@router.patch("/feature-settings")
+async def patch_feature_settings(
+    payload: FeatureSettingsPatch,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Switch features on or off for the whole hospital; check-ins that start later follow."""
+    hospital_id, actor_id = _identity(principal)
+    settings: Settings = request.app.state.settings
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        before = await _feature_settings(connection, hospital_id, settings)
+        after = {
+            name: before[name] if getattr(payload, name) is None else getattr(payload, name)
+            for name in _FEATURE_SWITCHES
+        }
+        await connection.execute(
+            text(
+                "INSERT INTO hospital_feature_settings (hospital_id, sms_messages, "
+                "phone_checkin, updated_by) "
+                "VALUES (:hospital_id, :sms_messages, :phone_checkin, :actor_id) "
+                "ON CONFLICT (hospital_id) DO UPDATE SET "
+                "sms_messages = EXCLUDED.sms_messages, "
+                "phone_checkin = EXCLUDED.phone_checkin, "
+                "updated_by = EXCLUDED.updated_by, updated_at = now()"
+            ),
+            {"hospital_id": hospital_id, "actor_id": actor_id, **after},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.feature_settings.updated",
+            resource_type="hospital_feature_settings",
+            resource_id=hospital_id,
+            meta={
+                name: {"before": before[name], "after": after[name]}
+                for name in _FEATURE_SWITCHES
+                if getattr(payload, name) is not None
+            },
+        )
+        return await _feature_settings(connection, hospital_id, settings)
+
+
+async def _privacy_settings(
+    connection: Any, hospital_id: UUID, settings: Settings
+) -> dict[str, Any]:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT s.grievance_contact, s.updated_at, u.name AS updated_by_name "
+                    "FROM hospital_privacy_settings s LEFT JOIN users u "
+                    "ON u.hospital_id = s.hospital_id AND u.id = s.updated_by "
+                    "WHERE s.hospital_id = :hospital_id"
+                ),
+                {"hospital_id": hospital_id},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    path = f"/privacy/{hospital_id}"
+    public_web_url = settings.public_web_url.strip().rstrip("/")
+    return {
+        "grievance_contact": row["grievance_contact"] if row else "",
+        "notice_path": path,
+        # For the poster's QR; empty when the server does not know its own address.
+        "notice_url": f"{public_web_url}{path}" if public_web_url else None,
+        "updated_at": row["updated_at"].isoformat() if row and row["updated_at"] else None,
+        "updated_by_name": row["updated_by_name"] if row else None,
+    }
+
+
+@router.get("/privacy-settings")
+async def get_privacy_settings(
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """The grievance officer's contact shown with the privacy notice, and the notice's link."""
+    hospital_id, _ = _identity(principal)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        return await _privacy_settings(connection, hospital_id, request.app.state.settings)
+
+
+@router.put("/privacy-settings")
+async def put_privacy_settings(
+    payload: PrivacySettingsPut,
+    request: Request,
+    principal: Annotated[dict[str, Any], Depends(_admin_principal)],
+) -> dict[str, Any]:
+    """Set how patients reach the grievance officer; the notice shows it at once."""
+    hospital_id, actor_id = _identity(principal)
+    contact = payload.grievance_contact.strip()
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await connection.execute(
+            text(
+                "INSERT INTO hospital_privacy_settings (hospital_id, grievance_contact, "
+                "updated_by) VALUES (:hospital_id, :contact, :actor_id) "
+                "ON CONFLICT (hospital_id) DO UPDATE SET "
+                "grievance_contact = EXCLUDED.grievance_contact, "
+                "updated_by = EXCLUDED.updated_by, updated_at = now()"
+            ),
+            {"hospital_id": hospital_id, "contact": contact, "actor_id": actor_id},
+        )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="admin.privacy_settings.updated",
+            resource_type="hospital_privacy_settings",
+            resource_id=hospital_id,
+            meta={"grievance_contact_set": bool(contact)},
+        )
+        return await _privacy_settings(connection, hospital_id, request.app.state.settings)
 
 
 @router.get("/{resource}")

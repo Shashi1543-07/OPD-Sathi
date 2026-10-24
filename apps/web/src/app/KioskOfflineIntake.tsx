@@ -33,6 +33,8 @@ export function KioskOfflineIntake() {
   const { networkOffline } = useOutletContext<{ networkOffline: boolean }>();
   const [age, setAge] = useState("");
   const [sex, setSex] = useState<OfflineSubmission["sex"]>("unknown");
+  // Who is answering: always chosen on the short form (nothing pre-selected).
+  const [answeredBy, setAnsweredBy] = useState<OfflineSubmission["answered_by"] | "">("");
   const [complaint, setComplaint] = useState("");
   const [duration, setDuration] = useState("");
   const [severity, setSeverity] = useState(0);
@@ -131,6 +133,7 @@ export function KioskOfflineIntake() {
         medications: medications.trim(),
         allergies: allergies.trim(),
         danger_tile_ids: dangerTiles,
+        answered_by: answeredBy || "patient",
       };
       const queued = await queueOfflineSubmission(submission, kioskToken);
       setProvisionalToken(queued.token);
@@ -164,6 +167,21 @@ export function KioskOfflineIntake() {
             <option value="male">{t("sexMale")}</option>
             <option value="other">{t("sexOther")}</option>
             <option value="unknown">{t("sexUnknown")}</option>
+          </select>
+
+          <label htmlFor="offline-answered-by">{t("offlineAnsweredBy")}</label>
+          <select
+            id="offline-answered-by"
+            required
+            value={answeredBy}
+            onChange={(event) => setAnsweredBy(event.target.value as OfflineSubmission["answered_by"])}
+          >
+            <option value="" disabled>
+              {t("offlineAnsweredChoose")}
+            </option>
+            <option value="patient">{t("offlineAnsweredPatient")}</option>
+            <option value="guardian">{t("offlineAnsweredGuardian")}</option>
+            <option value="representative">{t("offlineAnsweredRepresentative")}</option>
           </select>
 
           <label htmlFor="offline-complaint">{t("offlineComplaint")}</label>

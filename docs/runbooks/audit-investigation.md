@@ -19,7 +19,10 @@ Settings → Audit log (administrators only). Filter by:
   touched it;
 - **Person** to see everything one staff member did;
 - **Action** (for example `case_sheet.read`, `patient_history.read`, `document.photo_viewed`,
-  `auth.login.failed`) and a **date range**.
+  `auth.login.failed`) and a **date range**. Give a date range when you search by action
+  alone: without one the search reads the whole log, newest first, and on a large hospital it
+  can reach the 5-second limit and fail (`docs/SCALING.md`, index review). With a record or a
+  person it is fast either way.
 
 Export the result as CSV for the investigation file; the export is audited.
 

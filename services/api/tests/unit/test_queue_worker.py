@@ -75,6 +75,11 @@ class FakeConnection:
             self.attempts += 1
         return FakeResult([])
 
+    async def scalar(self, statement: object, _params: object = None) -> None:
+        # The hospital's SMS switch: no choice saved, so SMS messages are off.
+        self.statements.append(str(statement))
+        return None
+
 
 class FakeRedis:
     def __init__(self, *, fail: bool = False, rows: list[dict[str, object]] | None = None):

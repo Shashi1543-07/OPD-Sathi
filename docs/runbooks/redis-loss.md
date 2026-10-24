@@ -3,6 +3,10 @@
 **Alerts:** `RedisDown`, often with `QueueUpdatesStuck` · **Owner:** hospital IT ·
 **Time:** 10 minutes · **Data at risk:** none clinical (task 7.7.4)
 
+While Redis is down, the API answers "not ready" and staff screens show the queue as
+unavailable. The worker keeps running and resumes its work by itself once Redis is back, so a
+`WorkerDown` alert at the same time means a second problem.
+
 ## What Redis holds, and what losing it costs
 
 PostgreSQL is the record of every visit, answer, case sheet and queue position. Redis holds

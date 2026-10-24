@@ -162,3 +162,49 @@ def _advance_to(session: PatientSession, target: str) -> dict[str, Any]:
     if not shown or not isinstance(shown[-1], dict):
         raise AssertionError(f"{target} was never asked")
     return dict(shown[-1])
+
+
+async def test_a_hospital_adds_the_review_of_systems_and_the_doctor_sees_each_system() -> None:
+    async with synthetic_hospital() as hospital:
+        with api_client(hospital.settings) as client:
+            settings = client.get("/admin/interview-settings", headers=hospital.staff("admin"))
+            assert settings.json()["review_of_systems_module"] is False
+            assert client.patch(
+                "/admin/interview-settings", json={}, headers=hospital.staff("admin")
+            ).status_code == 422
+            enabled = client.patch(
+                "/admin/interview-settings",
+                json={"review_of_systems_module": True},
+                headers=hospital.staff("admin"),
+            )
+            assert enabled.status_code == 200, enabled.text
+            # Changing one switch leaves the other as it was.
+            assert enabled.json()["review_of_systems_module"] is True
+            assert enabled.json()["ayurveda_module"] is False
+
+            session = start_kiosk_session(client, activate_kiosk(client, hospital))
+            complete_intake(
+                session,
+                complaint="headache",
+                answers={"ros_checklist": "Trouble seeing or hearing"},
+            )
+            assert session.confirm().status_code == 200
+            sheet = client.get(
+                f"/visits/{session.visit_id}/case-sheet", headers=hospital.staff("doctor")
+            )
+            symptoms = [
+                item["text_en"]
+                for item in sheet.json()["case_sheet"]["hpi"]["associated_symptoms"]
+            ]
+            assert "Trouble seeing or hearing" in symptoms
+
+        audits = await fetch(
+            hospital.settings,
+            hospital.hospital_id,
+            "SELECT meta FROM audit_log WHERE hospital_id = :h "
+            "AND action = 'admin.interview_settings.updated'",
+            h=hospital.hospital_id,
+        )
+        assert [row["meta"] for row in audits] == [
+            {"review_of_systems_module": {"before": False, "after": True}}
+        ]

@@ -695,6 +695,27 @@
       "duration_seconds": 0.12
     },
     {
+      "id": "question.ros_checklist",
+      "lang": "en",
+      "text_sha256": "8832201e88dca748987b4879bc9b46e9f393bc8d7cf99eb3f9073709a484b245",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ros_checklist",
+      "lang": "hi",
+      "text_sha256": "41418efe94fc5f9b6d57c6fd296384ed9e547e84c12e3860a91b8e5f98694542",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "question.ros_checklist",
+      "lang": "mr",
+      "text_sha256": "d3f29cc277f0dc61c4f579790074b3381980bbb0111fd8319ae1e006f7d05aa8",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
       "id": "question.severity",
       "lang": "en",
       "text_sha256": "97f15ca2e10dcbf209bf82d0c3cdb16e72b7973031d00dbd53919ba8809f8d59",
@@ -3782,6 +3803,111 @@
       "duration_seconds": 0.12
     },
     {
+      "id": "ui.kiosk.offlineAnsweredBy",
+      "lang": "en",
+      "text_sha256": "15cee356c00b56ac87a554513d4b9f613311d5d630f3cbad10f769853a0bb13d",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredBy",
+      "lang": "hi",
+      "text_sha256": "c44f251bff25c572f9109cbfbb0cc2c2d813ccb3e87a01dd2eb4080a04e51916",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredBy",
+      "lang": "mr",
+      "text_sha256": "12eae52694258288ee7db34205c9576029011001dea327c22cb448e5fb62e7bc",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredChoose",
+      "lang": "en",
+      "text_sha256": "0b24aed53ab654eae8cd8d2b2c7196527480b3591d079fb08cbbd697dfe4169e",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredChoose",
+      "lang": "hi",
+      "text_sha256": "eba3e010d596e41d623404b1da05273a1cd91074883ffb27a7e644622b9809c7",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredChoose",
+      "lang": "mr",
+      "text_sha256": "16196c9b36d65b8eabed39325b1e92450d25f6467687ce59fe14f90b5ba8f91e",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredGuardian",
+      "lang": "en",
+      "text_sha256": "b953198047beec9287b907714f415ebea60f515d96645f1fe7483891477985df",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredGuardian",
+      "lang": "hi",
+      "text_sha256": "3f532d189dbecac4870e6052f180530fdcf6d065ae390d81ca23835b32d6257a",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredGuardian",
+      "lang": "mr",
+      "text_sha256": "2bd676544343642f83a6dbb853258a1b581d987d1a12bd3a9b69d2013ad7393c",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredPatient",
+      "lang": "en",
+      "text_sha256": "7ecd304013ea04720d821bfcfc6738e094b3f65b3948b58920b557160c07bb99",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredPatient",
+      "lang": "hi",
+      "text_sha256": "9f4c696b29b88cff59f1a5284b957fa5446af3edd77bf370539154ad44e5cf9c",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredPatient",
+      "lang": "mr",
+      "text_sha256": "66b55f5bf73f6d1cf0e3cbb2b171fe2714c378b6da4cb0a1bfc8d6e9ae774ed3",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredRepresentative",
+      "lang": "en",
+      "text_sha256": "5e0c97844847612b73a047d2786eaff962e14aff30ebaf210e3a667a06cbd425",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredRepresentative",
+      "lang": "hi",
+      "text_sha256": "ae9a8f21bf5bc3f55bb955707ce2f78b8541ba45a80f055621ac1d573727e688",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredRepresentative",
+      "lang": "mr",
+      "text_sha256": "76f0e454dff5e9d7eae5f138af61c792161ed51dd47fe4e3edf9bc05c310ecd1",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
       "id": "ui.kiosk.offlineBack",
       "lang": "en",
       "text_sha256": "69855b44164c92a12ffc8b9c0c37672eac58d93680a3864df81ee93aa63e9ee3",
@@ -5311,27 +5437,6 @@
       "id": "ui.kiosk.skipQuestion",
       "lang": "mr",
       "text_sha256": "6a0027d9ac40b54d0847971c4b497defa353fef0c7224d88a62f9a7d0d6ba2ba",
-      "file": "mr/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.smsOptIn",
-      "lang": "en",
-      "text_sha256": "fcb5289b17a7944d99c1b87c2c2a14313f9715db8eabf971c5ee42e4879c6faf",
-      "file": "en/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.smsOptIn",
-      "lang": "hi",
-      "text_sha256": "2ca10d0f2c58ec1a52037a47132b1969d20ca075ad90c6217ee361af7a379160",
-      "file": "hi/mock-tone.wav",
-      "duration_seconds": 0.12
-    },
-    {
-      "id": "ui.kiosk.smsOptIn",
-      "lang": "mr",
-      "text_sha256": "e951d376a546b5311926b811d364576ae6cc58326907ecb1ff961af3dc826340",
       "file": "mr/mock-tone.wav",
       "duration_seconds": 0.12
     },

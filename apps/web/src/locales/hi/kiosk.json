@@ -189,5 +189,10 @@
   "mobileResume": "जहाँ छोड़ा था वहीं से जारी रखें",
   "mobileStartOver": "फिर से शुरू करें",
   "mobileVoiceNote": "बोलकर जवाब देने के लिए अस्पताल का सुरक्षित लिंक चाहिए। आप टैप करके या लिखकर जवाब दे सकते हैं।",
-  "mobileKeepPage": "यह पेज खुला रखें। बंद हो जाए तो इसी फ़ोन पर वही चेक-इन लिंक फिर से खोलें।"
+  "mobileKeepPage": "यह पेज खुला रखें। बंद हो जाए तो इसी फ़ोन पर वही चेक-इन लिंक फिर से खोलें।",
+  "offlineAnsweredBy": "कौन जवाब दे रहा है?",
+  "offlineAnsweredChoose": "एक चुनें",
+  "offlineAnsweredPatient": "मरीज़",
+  "offlineAnsweredGuardian": "माता-पिता या अभिभावक",
+  "offlineAnsweredRepresentative": "मरीज़ की मदद करने वाला"
 }

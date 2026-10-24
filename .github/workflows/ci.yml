@@ -70,6 +70,7 @@ jobs:
       - run: PYTHONPATH=services/api python services/api/scripts/write_case_sheet_schema.py --check
       # The printed paper fallback forms match the question bank and translations (7.7.7).
       - run: python scripts/make_paper_forms.py --check
+      - run: python scripts/make_print_pack.py --check
       - run: alembic -c services/api/alembic.ini upgrade head && alembic -c services/api/alembic.ini downgrade base && alembic -c services/api/alembic.ini upgrade head
         env:
           MIGRATIONS_DATABASE_URL: postgresql+asyncpg://osa_migrator:ci-osa-migrator-password@localhost:5432/osa
@@ -121,7 +122,8 @@ jobs:
         working-directory: .
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test -- --reporter=dot
+      # Unit tests with the coverage gate (task 7.13.6; thresholds in vite.config.ts).
+      - run: npm run test:coverage -- --reporter=dot
       - run: npm run e2e
       - run: npm run e2e:pwa
       - run: npm run build
@@ -145,9 +147,10 @@ jobs:
 
   # The stack exactly as a hospital runs it: production overlay, secrets as files, HTTPS.
   # Drives one kiosk check-in and a doctor's call, and checks that no secret leaks (task 7.1.2).
+  # Then the browser walks the main paths on that stack with no mocks (task 7.13.2).
   production-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -160,6 +163,46 @@ jobs:
         env:
           # As on a hospital server: container logs to the systemd journal.
           OSA_LOG_DRIVER: journald
+          # Leave the stack running for the end-to-end suite below.
+          KEEP: '1'
+          SMOKE_STATE_FILE: ${{ runner.temp }}/smoke-state.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      # The same retries as the frontend job: Ubuntu's package mirror sometimes stalls.
+      - name: Install the Playwright browser
+        timeout-minutes: 15
+        working-directory: apps/web
+        run: |
+          printf '%s\n' 'Acquire::Retries "5";' 'Acquire::http::Timeout "30";' \
+            'Acquire::https::Timeout "30";' 'DPkg::Lock::Timeout "120";' |
+            sudo tee /etc/apt/apt.conf.d/99ci-network >/dev/null
+          for attempt in 1 2 3; do
+            timeout 300 npx playwright install --with-deps chromium && exit 0
+            echo "Attempt $attempt failed; retrying"
+            sudo pkill -x apt-get || true
+            sudo dpkg --configure -a || true
+          done
+          exit 1
+      - name: End-to-end against the real API
+        working-directory: apps/web
+        run: npx playwright test -c playwright.stack.config.ts
+        env:
+          STACK_STATE: ${{ runner.temp }}/smoke-state.json
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: stack-e2e-results
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -p osa-smoke logs --tail 150 api worker web
 
   # The images as shipped: scanned for fixable high and critical vulnerabilities, with a
   # CycloneDX SBOM for each (tasks 7.4.3, 7.14.3). Unfixed upstream issues are reported in the

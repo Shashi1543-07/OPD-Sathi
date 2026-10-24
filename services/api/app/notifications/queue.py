@@ -1,8 +1,10 @@
 """Queue-event notification intent creation and retryable delivery.
 
 Messages go only to visits whose patient ticked the SMS box themselves, which records a
-granted, unwithdrawn ``sms`` consent. The worker reads the visit's own copy of the number,
-encrypted with ``NOTIFY_KEY``; it never holds the patient-data key.
+granted, unwithdrawn ``sms`` consent, and only while the hospital has SMS messages switched on
+(Settings, task 7.14.7; switching off stops new messages, not the few already due). The
+worker reads the visit's own copy of the number, encrypted with ``NOTIFY_KEY``; it never holds
+the patient-data key.
 """
 
 from typing import Any
@@ -15,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from app.config import Settings
 from app.core.crypto import decrypt_field
 from app.core.ids import uuid7
+from app.db.repositories import sms_messages_on
 from app.notifications.providers import NotificationProvider, render_message
 
 logger = structlog.get_logger(__name__)
@@ -122,6 +125,8 @@ async def record_queue_event_intents(
     """Persist intents for token issue and queue rank thresholds after queue mutation."""
     from app.domain.queue.redis_queue import QueueRedis
 
+    if not await sms_messages_on(connection, hospital_id):
+        return 0
     queue = QueueRedis(queue_client, app_env=settings.app_env)
     members = await queue.members(
         hospital_id=hospital_id, department_id=department_id, start=0, stop=5

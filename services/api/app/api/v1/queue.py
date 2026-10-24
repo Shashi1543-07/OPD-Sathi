@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from redis.exceptions import RedisError
@@ -33,7 +33,7 @@ from app.db.repositories import (
     decrypt_case_sheet,
 )
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
-from app.domain.patients import normalize_mrn
+from app.domain.patients import card_pin, normalize_mrn
 from app.domain.queue.redis_queue import QueueRedis
 from app.domain.queue.scoring import average_consult_minutes, estimate_wait, visit_score
 from app.domain.queue.state import QueueRuleError
@@ -238,6 +238,8 @@ async def _status_payload(request: Request, token: str) -> dict[str, Any]:
         "ai_help": place["ai_help"] if place else "off",
         # Queue messages by SMS: "on" can be stopped from the status page, never started.
         "sms": place["sms"] if place else "off",
+        # The hospital's full privacy notice, which the page links to.
+        "privacy_path": f"/privacy/{visit['hospital_id']}",
         "updated_at": datetime.now(UTC).isoformat(),
     }
 
@@ -713,9 +715,82 @@ async def lookup_patients(
                 "sex": item["sex"],
                 "visit_count": int(item["visit_count"] or 0),
                 "last_visit": item["last_visit"].isoformat() if item["last_visit"] else None,
+                # Sent back when re-issuing, so a repeated request cannot replace it twice.
+                "card_version": int(item["card_version"]),
             }
             for item in candidates
         ]
+    }
+
+
+class ReissueCardPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    opd_number: str = Field(min_length=6, max_length=24)
+    # The version the lookup showed; a card re-issued meanwhile is not replaced again.
+    card_version: int = Field(ge=1, le=32767)
+
+
+@router.post("/patients/card/reissue")
+async def reissue_opd_card(
+    payload: ReissueCardPayload,
+    request: Request,
+    response: Response,
+    principal: Annotated[dict[str, Any], Depends(require_role("nurse", "admin"))],
+) -> dict[str, Any]:
+    """Give a patient who lost their OPD card a new PIN; the old PIN stops working (7.11.4).
+
+    The number stays the same, so the patient's record and earlier visits are unchanged. Staff
+    check the patient's age and sex against the lookup first. The new PIN is returned once,
+    to be written on a new card, and is never stored or logged. Audited.
+    """
+    hospital_id = UUID(principal["hospital_id"])
+    actor_id = UUID(principal["sub"])
+    number = normalize_mrn(payload.opd_number)
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        await _staff_department(
+            connection, hospital_id=hospital_id, actor_id=actor_id, role=principal["role"]
+        )
+        repository = PatientRepository(connection, request.app.state.settings)
+        record = await repository.by_mrn(hospital_id=hospital_id, mrn=number) if number else None
+        if record is None:
+            raise _problem(
+                404, "PATIENT_NOT_FOUND", "No such OPD number", "No patient has this OPD number."
+            )
+        version = await repository.reissue_card(
+            hospital_id=hospital_id,
+            patient_id=record["id"],
+            expected_version=payload.card_version,
+        )
+        if version is None:
+            raise _problem(
+                409,
+                "CARD_CHANGED",
+                "Card already re-issued",
+                "This card was re-issued meanwhile. Search again before re-issuing it.",
+            )
+        await audit(
+            connection,
+            request,
+            hospital_id=hospital_id,
+            actor_type="user",
+            actor_id=actor_id,
+            action="patient.card_reissued",
+            resource_type="patient",
+            resource_id=record["id"],
+            meta={"version_before": payload.card_version, "version_after": version},
+        )
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "opd_number": record["mrn"],
+        "pin": card_pin(
+            key=request.app.state.settings.app_hmac_key_bytes,
+            hospital_id=hospital_id,
+            patient_id=record["id"],
+            version=version,
+        ),
+        "card_version": version,
     }
 
 

@@ -189,5 +189,10 @@
   "mobileResume": "जिथे थांबलो तिथून पुढे सुरू ठेवा",
   "mobileStartOver": "पुन्हा सुरू करा",
   "mobileVoiceNote": "बोलून उत्तर देण्यासाठी रुग्णालयाची सुरक्षित लिंक लागते. तुम्ही टॅप करून किंवा लिहून उत्तर देऊ शकता.",
-  "mobileKeepPage": "हे पान उघडे ठेवा. बंद झाल्यास याच फोनवर तीच चेक-इन लिंक पुन्हा उघडा."
+  "mobileKeepPage": "हे पान उघडे ठेवा. बंद झाल्यास याच फोनवर तीच चेक-इन लिंक पुन्हा उघडा.",
+  "offlineAnsweredBy": "कोण उत्तर देत आहे?",
+  "offlineAnsweredChoose": "एक निवडा",
+  "offlineAnsweredPatient": "रुग्ण",
+  "offlineAnsweredGuardian": "आई-वडील किंवा पालक",
+  "offlineAnsweredRepresentative": "रुग्णाला मदत करणारी व्यक्ती"
 }

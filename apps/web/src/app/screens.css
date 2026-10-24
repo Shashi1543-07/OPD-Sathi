@@ -5775,6 +5775,58 @@
 .ayu-exam .cx-btn--primary {
   margin-top: 0.75rem;
 }
+/* The doctor's own notes (task 7.11.1). */
+.dn-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+.dn-field {
+  display: grid;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  gap: 0.25rem;
+}
+.dn-field textarea,
+.dn-field input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-weight: 400;
+  padding: 0.5rem 0.6rem;
+}
+.dn-field textarea {
+  resize: vertical;
+}
+.dn-field--date input {
+  justify-self: start;
+  min-height: 2.4rem;
+}
+.dn-form .cx-btn--primary {
+  justify-self: start;
+}
+.dn-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dn-theirs {
+  border-left: 3px solid #fcd34d;
+  margin-top: 0.75rem;
+  padding-left: 0.75rem;
+}
+.dn-earlier {
+  margin-top: 0.75rem;
+}
+.dn-earlier summary {
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.dn-version + .dn-version {
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+}
 .cx-card--open {
   border-color: #fcd34d;
 }
@@ -6479,6 +6531,52 @@
   grid-column: 1 / -1;
   margin: 0;
 }
+/* Lost OPD card: a quieter desk tool below assisted registration (task 7.11.4). */
+.pr-register.pr-reissue {
+  background: var(--surface);
+  border-color: var(--border);
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.pr-reissue > svg {
+  color: var(--text-muted);
+}
+.pr-reissue-form,
+.pr-reissue-candidates,
+.pr-reissue-result,
+.pr-reissue-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.pr-reissue-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pr-reissue-form input {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+.pr-reissue-candidates {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+}
+.pr-reissue-candidates li,
+.pr-reissue-confirm {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  justify-content: space-between;
+}
+.pr-reissue-result p {
+  margin: 0 0 var(--space-2);
+}
+.pr-reissue-pin {
+  font-size: var(--font-size-xl);
+  letter-spacing: 0.15em;
+}
 
 /* Status tiles double as filters */
 .pr-tiles {
@@ -6565,7 +6663,9 @@
   gap: 0.2rem;
 }
 .pr-field select,
-.pr-search input {
+.pr-search input,
+.pr-reissue-form select,
+.pr-reissue-form input {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -6591,7 +6691,9 @@
   width: 17rem;
 }
 .pr-field select:focus,
-.pr-search input:focus {
+.pr-search input:focus,
+.pr-reissue-form select:focus,
+.pr-reissue-form input:focus {
   border-color: var(--primary);
   outline: 2px solid color-mix(in srgb, var(--primary) 25%, transparent);
 }
@@ -7043,6 +7145,10 @@
   height: 1.2rem;
   min-height: 0;
   width: 1.2rem;
+}
+.adm-form .adm-switch small {
+  display: block;
+  margin: 0.15rem 0 0 1.75rem;
 }
 .adm-form .adm-inline-field input {
   max-width: 7rem;
@@ -8549,6 +8655,23 @@
 .dp-results-wrap {
   overflow-x: auto;
 }
+/* Prior investigations (task 7.11.3). */
+.dp-timeline .dp-results caption {
+  font-weight: 700;
+  padding: 0.5rem 0 0.25rem;
+  text-align: left;
+}
+.dp-timeline-papers {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.dp-timeline-detail {
+  color: var(--text-muted);
+  display: block;
+  font-size: var(--font-size-sm);
+}
 .dp-results {
   border-collapse: collapse;
   font-size: var(--font-size-sm);
@@ -8882,4 +9005,77 @@
 }
 .sys h3 {
   margin-top: var(--space-5, 24px);
+}
+
+/* ---- Privacy notice for patients (Phase 7, 7.5.2) ---- */
+.status-privacy {
+  color: var(--primary-active);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.privacy-page h1 {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+.privacy-draft {
+  background: var(--priority-tint);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-weight: 600;
+  margin: 0;
+  padding: var(--space-2-5) var(--space-3-5);
+}
+.privacy-text h2,
+.privacy-contact h2 {
+  font-size: var(--font-size-lg);
+  margin: var(--space-4) 0 var(--space-1-5);
+}
+.privacy-text p,
+.privacy-text ul,
+.privacy-contact p {
+  line-height: 1.55;
+  margin: 0 0 var(--space-2);
+}
+.privacy-text ul {
+  padding-left: 1.25rem;
+}
+.privacy-text li {
+  margin: var(--space-1) 0;
+}
+.privacy-contact {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-1) var(--space-3-5) var(--space-2);
+}
+
+/* ---- Privacy notice settings and poster (Phase 7, 7.5.2, 7.15.3) ---- */
+.adm-form textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-md);
+  font-weight: 400;
+  min-width: 0;
+  padding: 0.55rem 0.75rem;
+  resize: vertical;
+  width: 100%;
+}
+.adm-form textarea:focus {
+  border-color: var(--primary);
+  outline: 3px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  outline-offset: 0;
+}
+.adm-privacy-poster-language h3 {
+  font-size: var(--font-size-lg);
+  margin: var(--space-2) 0 var(--space-1);
+}
+.adm-privacy-poster-language p,
+.adm-privacy-poster-desk {
+  margin: 0 0 var(--space-1-5);
 }

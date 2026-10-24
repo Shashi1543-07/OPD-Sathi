@@ -332,6 +332,15 @@
   background: var(--primary);
   color: #fff;
 }
+/* Longer choices ("I am a parent or guardian") stack, one per row. */
+.intake-segmented--stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+.intake-segmented--stack button {
+  font-size: 1.15rem;
+  padding: 0.5rem 1rem;
+  text-align: left;
+}
 .intake-check {
   display: flex;
   gap: var(--space-3);

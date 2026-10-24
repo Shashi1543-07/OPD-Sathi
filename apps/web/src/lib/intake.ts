@@ -36,6 +36,8 @@ type Session = {
 };
 
 /** The OPD card a patient brings to the next visit: registration number and PIN. */
+/** Who is answering for the patient (tasks 7.5.3, 7.11.7). */
+export type AnsweredBy = "patient" | "guardian" | "representative";
 export type OpdCard = { number: string; pin: string };
 
 /** What an old paper is: the patient picks it before taking the photo. */
@@ -418,7 +420,7 @@ export const intake = {
   },
   /** The hospital behind a phone check-in QR, or an error saying why it cannot start. */
   checkinDetails: (code: string) =>
-    call<{ hospital_name: string; languages: Language[] }>(
+    call<{ hospital_name: string; languages: Language[]; privacy_path?: string }>(
       `/intake/checkin/${encodeURIComponent(code)}`,
     ),
   /** Start a visit on the patient's own phone from a hospital's check-in QR. */
@@ -489,13 +491,15 @@ export const intake = {
     savePatientSession({ ...session, stage: "consent" });
     return consent;
   },
-  consent: (consent: ConsentCopy, granted: boolean) =>
+  /** ``answeredBy``: who agrees and will answer (the patient, a parent or guardian, a helper). */
+  consent: (consent: ConsentCopy, granted: boolean, answeredBy: AnsweredBy = "patient") =>
     patientRequest<{ next: string; message?: string }>("/consent", {
       method: "POST",
       body: JSON.stringify({
         version: consent.version,
         sha256: consent.sha256,
         granted,
+        answered_by: answeredBy,
       }),
     }),
   /** The optional answer about online AI help (its own notice, nothing pre-selected). */
@@ -506,7 +510,7 @@ export const intake = {
     }),
   /**
    * Save age, sex and contact. ``smsNotice`` is the SMS notice the patient ticked themselves;
-   * without it no queue messages are sent.
+   * without it no queue messages are sent. ``answeredBy`` is required for a patient under 18.
    */
   identity: (
     age: number,
@@ -514,6 +518,7 @@ export const intake = {
     phone?: string,
     name?: string,
     smsNotice?: ConsentCopy,
+    answeredBy?: AnsweredBy,
   ) =>
     patientRequest<{ next: string }>("/identity", {
       method: "POST",
@@ -525,6 +530,7 @@ export const intake = {
         sms_opt_in: Boolean(smsNotice && phone),
         sms_consent:
           smsNotice && phone ? { version: smsNotice.version, sha256: smsNotice.sha256 } : null,
+        answered_by: answeredBy ?? null,
       }),
     }),
   dangerSigns: (tileIds: string[]) =>

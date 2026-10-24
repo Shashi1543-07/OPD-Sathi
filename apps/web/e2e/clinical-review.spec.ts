@@ -72,7 +72,14 @@ async function signedInDoctor(page: Page) {
       case_sheet: caseSheet(review, examination),
       confirmed_by_patient: true,
       confirmed_at: "2026-10-16T05:00:00Z",
-      patient: { token: "MED-021", age_years: 52, sex: "female", language: "hi", urgency: "routine" },
+      patient: {
+        token: "MED-021",
+        age_years: 52,
+        sex: "female",
+        language: "hi",
+        urgency: "routine",
+        answered_by: "representative",
+      },
     },
     headers: { ETag: `"${version}"` },
   });
@@ -99,6 +106,19 @@ async function signedInDoctor(page: Page) {
     version += 1;
     await route.fulfill(respond());
   });
+  const notes: Record<string, unknown>[] = [];
+  await page.route(`**/visits/${visitId}/doctor-notes`, async (route) => {
+    const request = route.request();
+    if (request.method() === "PUT") {
+      const body = JSON.parse(request.postData() ?? "{}") as Record<string, unknown>;
+      requests.push({ path: "doctor-notes", body, ifMatch: request.headers()["if-match"] ?? null });
+      notes.unshift({ ...body, version: notes.length + 1, by_name: "Dr Rao", at: "2026-10-16T05:20:00Z" });
+    }
+    await route.fulfill({
+      json: { visit_id: visitId, version: notes.length, editable: true, versions: notes },
+      headers: { ETag: `"${notes.length}"` },
+    });
+  });
   await page.route(`**/visits/${visitId}/transcript`, (route) =>
     route.fulfill({
       json: {
@@ -119,6 +139,8 @@ test("a doctor checks the AI draft against its sources, accepts it and records A
   const requests = await signedInDoctor(page);
   await page.goto(`/staff/consultations?visit_id=${visitId}&status=in_consult`);
 
+  // Someone else gave the history; the doctor sees that first.
+  await expect(page.getByText("Answered by someone helping the patient")).toBeVisible();
   const ai = page.locator(".cx-card--ai").first();
   await expect(ai.getByText("Draft · not reviewed")).toBeVisible();
   // Each sentence cites the answers it rests on; one tap opens that answer.
@@ -150,6 +172,43 @@ test("a doctor checks the AI draft against its sources, accepts it and records A
   // The examination form fits a phone without sideways scrolling.
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("button", { name: "Save examination" })).toBeVisible();
+  expect(
+    await page.evaluate(() => document.scrollingElement!.scrollWidth - document.scrollingElement!.clientWidth),
+  ).toBeLessThanOrEqual(0);
+});
+
+test("a doctor writes their own notes, saved as a version and kept apart from the history", async ({
+  page,
+}) => {
+  const requests = await signedInDoctor(page);
+  await page.goto(`/staff/consultations?visit_id=${visitId}&status=in_consult`);
+
+  await page.getByRole("tab", { name: /^Clinical notes/ }).click();
+  await expect(page.getByText("No notes yet.")).toBeVisible();
+  await expect(page.getByText(/Never written by AI/)).toBeVisible();
+  await page.getByRole("textbox", { name: "Examination findings" }).fill("Knees swollen, warm.");
+  await page.getByRole("textbox", { name: "Assessment" }).fill("Inflammatory arthritis to rule out.");
+  await page.getByRole("textbox", { name: "Plan" }).fill("ESR and CRP; review with reports.");
+  await page.getByRole("button", { name: "Save notes" }).click();
+  await expect(page.getByText("Notes saved (version 1).")).toBeVisible();
+  expect(requests.at(-1)).toEqual({
+    path: "doctor-notes",
+    body: {
+      findings: "Knees swollen, warm.",
+      assessment: "Inflammatory arthritis to rule out.",
+      plan: "ESR and CRP; review with reports.",
+      follow_up_on: null,
+    },
+    ifMatch: '"0"',
+  });
+  await expect(page.getByText(/Version 1 · Dr Rao/)).toBeVisible();
+
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(
+    accessibility.violations.filter((item) => ["critical", "serious"].includes(item.impact ?? "")),
+  ).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Save notes" })).toBeVisible();
   expect(
     await page.evaluate(() => document.scrollingElement!.scrollWidth - document.scrollingElement!.clientWidth),
   ).toBeLessThanOrEqual(0);

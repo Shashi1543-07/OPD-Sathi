@@ -14,7 +14,11 @@ def evaluate() -> tuple[int, list[str]]:
     errors: list[str] = []
     for line_number, line in enumerate(GOLDEN_PATH.read_text(encoding="utf-8").splitlines(), 1):
         case = json.loads(line)
-        state = start(case["language"], red_flag_ids=tuple(case["red_flag_ids"]))
+        state = start(
+            case["language"],
+            red_flag_ids=tuple(case["red_flag_ids"]),
+            extra_modules=tuple(case.get("extra_modules", ())),
+        )
         for answer in case["answers"]:
             question = next_question(state)
             if question is None or question.id != answer["question_id"]:

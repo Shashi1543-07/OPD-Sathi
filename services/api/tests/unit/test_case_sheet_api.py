@@ -96,6 +96,12 @@ async def test_case_sheet_pdf_is_department_scoped_and_audited(monkeypatch) -> N
     monkeypatch.setattr(case_sheets, "set_hospital_scope", lambda *_args, **_kwargs: _noop())
     monkeypatch.setattr(case_sheets, "CaseSheetRepository", lambda *_args: repository)
 
+    class NoNotes:
+        async def versions(self, **_kwargs):
+            return []
+
+    monkeypatch.setattr(case_sheets, "DoctorNoteRepository", lambda *_args: NoNotes())
+
     async def record_audit(_connection, _request, **values) -> None:
         audited.append(values)
 
@@ -110,7 +116,9 @@ async def test_case_sheet_pdf_is_department_scoped_and_audited(monkeypatch) -> N
         async def execute(self, *_args, **_kwargs):
             return Result()
 
-    def render_pdf(case_sheet, *, queue_number, attention_reasons, patient_line=""):
+    def render_pdf(
+        case_sheet, *, queue_number, attention_reasons, patient_line="", doctor_notes=None
+    ):
         rendered.append(
             {
                 "case_sheet": case_sheet,
@@ -134,7 +142,7 @@ async def test_case_sheet_pdf_is_department_scoped_and_audited(monkeypatch) -> N
     assert response.headers["cache-control"] == "no-store"
     assert rendered[0]["queue_number"] == "GM-042"
     assert audited[0]["action"] == "case_sheet.pdf_exported"
-    assert audited[0]["meta"] == {"version": 6, "red_flag_count": 0}
+    assert audited[0]["meta"] == {"version": 6, "red_flag_count": 0, "doctor_notes_version": 0}
 
 
 def test_case_sheet_pdf_contains_english_and_devanagari_text() -> None:
@@ -333,3 +341,48 @@ async def test_transcript_is_doctor_scoped_and_audited_without_text_in_audit(mon
 
 async def _noop() -> None:
     return None
+
+
+def test_case_sheet_pdf_prints_the_doctors_notes_apart_from_the_history() -> None:
+    from io import BytesIO
+
+    from pypdf import PdfReader
+
+    from app.pdf import render_case_sheet_pdf
+
+    sheet = {
+        "language": "en",
+        "chief_complaint": {"text_original": "Fever", "text_en": "Fever"},
+        "hpi": {},
+        "routing": {"department_code": "GENMED"},
+    }
+    notes = {
+        "findings": "Throat red <no exudate>",
+        "assessment": "Viral pharyngitis likely",
+        "plan": "Fluids",
+        "follow_up_on": "31 Oct 2026",
+        "by_name": "Written by Synthetic doctor",
+        "at": "24 Oct 2026, 10:15",
+    }
+    try:
+        with_notes = render_case_sheet_pdf(
+            sheet, queue_number="GM-001", attention_reasons=[], doctor_notes=notes
+        )
+        without = render_case_sheet_pdf(sheet, queue_number="GM-001", attention_reasons=[])
+    except OSError as error:
+        if "libgobject-2.0-0" in str(error):
+            pytest.skip("WeasyPrint's native Pango library is unavailable on this host")
+        raise
+
+    def text_of(pdf: bytes) -> str:
+        return " ".join(
+            " ".join((page.extract_text() or "").split()) for page in PdfReader(BytesIO(pdf)).pages
+        )
+
+    printed = text_of(with_notes)
+    assert "Doctor's notes" in printed
+    assert "Throat red <no exudate>" in printed  # escaped, printed as written
+    assert "Written by Synthetic doctor" in printed and "31 Oct 2026" in printed
+    assert "The doctor's notes are the doctor's own." in printed
+    assert "Doctor's notes" not in text_of(without)
+    assert "History only. Not a diagnosis." in text_of(without)

@@ -410,7 +410,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Ai Settings */
+        /**
+         * Get Ai Settings
+         * @description The hospital's switch for online AI help (the patient's own consent is still needed).
+         */
         get: operations["get_ai_settings_admin_ai_settings_get"];
         put?: never;
         post?: never;
@@ -451,7 +454,7 @@ export interface paths {
         };
         /**
          * Get Interview Settings
-         * @description Optional interview modules for this hospital (the Ayurveda history).
+         * @description Optional interview modules for this hospital (review of systems, Ayurveda history).
          */
         get: operations["get_interview_settings_admin_interview_settings_get"];
         put?: never;
@@ -461,9 +464,57 @@ export interface paths {
         head?: never;
         /**
          * Patch Interview Settings
-         * @description Turn the Ayurveda history on or off; it applies to interviews that start afterwards.
+         * @description Turn optional modules on or off; changes apply to interviews that start afterwards.
          */
         patch: operations["patch_interview_settings_admin_interview_settings_patch"];
+        trace?: never;
+    };
+    "/admin/feature-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Feature Settings
+         * @description Features this hospital switches on or off: SMS queue messages and phone check-in.
+         */
+        get: operations["get_feature_settings_admin_feature_settings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Feature Settings
+         * @description Switch features on or off for the whole hospital; check-ins that start later follow.
+         */
+        patch: operations["patch_feature_settings_admin_feature_settings_patch"];
+        trace?: never;
+    };
+    "/admin/privacy-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Privacy Settings
+         * @description The grievance officer's contact shown with the privacy notice, and the notice's link.
+         */
+        get: operations["get_privacy_settings_admin_privacy_settings_get"];
+        /**
+         * Put Privacy Settings
+         * @description Set how patients reach the grievance officer; the notice shows it at once.
+         */
+        put: operations["put_privacy_settings_admin_privacy_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/{resource}": {
@@ -1378,6 +1429,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/patients/card/reissue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reissue Opd Card
+         * @description Give a patient who lost their OPD card a new PIN; the old PIN stops working (7.11.4).
+         *
+         *     The number stays the same, so the patient's record and earlier visits are unchanged. Staff
+         *     check the patient's age and sex against the lookup first. The new PIN is returned once,
+         *     to be written on a new card, and is never stored or logged. Audited.
+         */
+        post: operations["reissue_opd_card_patients_card_reissue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/queue/{visit_id}/link-patient": {
         parameters: {
             query?: never;
@@ -1819,6 +1894,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/visits/{visit_id}/doctor-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Doctor Notes
+         * @description The doctor's notes and every earlier version, for staff of the visit's department.
+         */
+        get: operations["get_doctor_notes_visits__visit_id__doctor_notes_get"];
+        /**
+         * Save Doctor Notes
+         * @description Save the next version of the notes, starting from the version the doctor last saw.
+         *
+         *     Allowed to doctors of the visit's department while the patient is under care (the visit
+         *     is open or today's), so earlier records are not rewritten later. Every save is audited
+         *     with the parts that changed, never their text.
+         */
+        put: operations["save_doctor_notes_visits__visit_id__doctor_notes_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/visits/{visit_id}/fhir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Visit Fhir
+         * @description The visit as a FHIR R4 bundle: patient, encounter, what the patient reported, accepted
+         *     results from their papers, the interview and the consents. Not ABDM-certified (tagged).
+         *
+         *     For doctors of the visit's department and administrators. Audited, without contents.
+         */
+        get: operations["export_visit_fhir_visits__visit_id__fhir_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/privacy-notice/{hospital_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Privacy Notice
+         * @description The hospital's name, the full notice in one language, and whom to complain to.
+         */
+        get: operations["privacy_notice_privacy_notice__hospital_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/documents": {
         parameters: {
             query?: never;
@@ -1933,6 +2079,29 @@ export interface paths {
          *     each one is audited.
          */
         post: operations["review_document_reading_visits__visit_id__documents__document_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/visits/{visit_id}/investigations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Investigations
+         * @description Prior investigations: accepted readings from this and earlier visits, in date order.
+         *
+         *     Earlier visits' papers follow the same rule as the papers list: shown while the patient
+         *     is under care (and to administrators). Audited.
+         */
+        get: operations["get_investigations_visits__visit_id__investigations_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2219,6 +2388,8 @@ export interface components {
             sha256: string;
             /** Granted */
             granted: boolean;
+            /** Answered By */
+            answered_by?: ("patient" | "guardian" | "representative") | null;
         };
         /** CreateAssistedSessionPayload */
         CreateAssistedSessionPayload: {
@@ -2265,6 +2436,63 @@ export interface components {
             /** Is Active */
             is_active?: boolean | null;
         };
+        /**
+         * DoctorNotesPayload
+         * @description What the doctor writes; at least one part must have text.
+         */
+        DoctorNotesPayload: {
+            /**
+             * Findings
+             * @default
+             */
+            findings: string;
+            /**
+             * Assessment
+             * @default
+             */
+            assessment: string;
+            /**
+             * Plan
+             * @default
+             */
+            plan: string;
+            /** Follow Up On */
+            follow_up_on?: string | null;
+        };
+        /** DoctorNotesResponse */
+        DoctorNotesResponse: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /** Version */
+            version: number;
+            /** Editable */
+            editable: boolean;
+            /** Versions */
+            versions?: components["schemas"]["DoctorNotesVersion"][];
+        };
+        /** DoctorNotesVersion */
+        DoctorNotesVersion: {
+            /** Version */
+            version: number;
+            /** Findings */
+            findings: string;
+            /** Assessment */
+            assessment: string;
+            /** Plan */
+            plan: string;
+            /** Follow Up On */
+            follow_up_on?: string | null;
+            /** By Name */
+            by_name: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+        };
         /** Duration */
         Duration: {
             /** Value */
@@ -2274,6 +2502,16 @@ export interface components {
              * @enum {string}
              */
             unit: "minute" | "hour" | "day" | "week" | "month" | "year";
+        };
+        /**
+         * FeatureSettingsPatch
+         * @description The switches to change; a switch left out keeps its value.
+         */
+        FeatureSettingsPatch: {
+            /** Sms Messages */
+            sms_messages?: boolean | null;
+            /** Phone Checkin */
+            phone_checkin?: boolean | null;
         };
         /** FieldMeta */
         FieldMeta: {
@@ -2340,11 +2578,34 @@ export interface components {
              */
             sms_opt_in: boolean;
             sms_consent?: components["schemas"]["ConsentNoticeRef"] | null;
+            /** Answered By */
+            answered_by?: ("patient" | "guardian" | "representative") | null;
         };
-        /** InterviewSettingsPatch */
+        /**
+         * InterviewSettingsPatch
+         * @description The switches to change; a switch left out keeps its value.
+         */
         InterviewSettingsPatch: {
             /** Ayurveda Module */
-            ayurveda_module: boolean;
+            ayurveda_module?: boolean | null;
+            /** Review Of Systems Module */
+            review_of_systems_module?: boolean | null;
+        };
+        /** InvestigationsResponse */
+        InvestigationsResponse: {
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /** Papers */
+            papers: components["schemas"]["TimelinePaper"][];
+            /** Tests */
+            tests: components["schemas"]["LabTestHistory"][];
+            /** Earlier Shown */
+            earlier_shown: boolean;
+            /** Awaiting Review */
+            awaiting_review: number;
         };
         /** KioskActivationPayload */
         KioskActivationPayload: {
@@ -2409,6 +2670,30 @@ export interface components {
             printed_flag?: ("high" | "low") | null;
             /** Range Flag */
             range_flag?: ("above" | "below" | "within") | null;
+        };
+        /**
+         * LabTestHistory
+         * @description Every accepted result of one test, oldest first, each with the range printed beside it.
+         */
+        LabTestHistory: {
+            /** Test */
+            test: string;
+            /** Results */
+            results: components["schemas"]["LabTestResult"][];
+        };
+        /** LabTestResult */
+        LabTestResult: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            result: components["schemas"]["LabResult"];
         };
         /** LanguagePayload */
         LanguagePayload: {
@@ -2527,6 +2812,8 @@ export interface components {
             allergies: string;
             /** Danger Tile Ids */
             danger_tile_ids?: string[];
+            /** Answered By */
+            answered_by?: ("patient" | "guardian" | "representative") | null;
         };
         /** OpdCardPayload */
         OpdCardPayload: {
@@ -2598,6 +2885,8 @@ export interface components {
             queued_at?: string | null;
             /** Ai Help */
             ai_help?: ("on" | "off" | "withdrawn") | null;
+            /** Answered By */
+            answered_by?: ("patient" | "guardian" | "representative") | null;
         };
         /** PatientDocument */
         PatientDocument: {
@@ -2699,6 +2988,11 @@ export interface components {
              */
             no_known_allergies: boolean;
         };
+        /** PrivacySettingsPut */
+        PrivacySettingsPut: {
+            /** Grievance Contact */
+            grievance_contact: string;
+        };
         /** QueueSettingsPatch */
         QueueSettingsPatch: {
             /** Call Grace Seconds */
@@ -2750,6 +3044,13 @@ export interface components {
             evidence: string;
             /** Reason En */
             reason_en?: string | null;
+        };
+        /** ReissueCardPayload */
+        ReissueCardPayload: {
+            /** Opd Number */
+            opd_number: string;
+            /** Card Version */
+            card_version: number;
         };
         /** Remove */
         Remove: {
@@ -2917,6 +3218,52 @@ export interface components {
             text_en: string;
             /** Confidence */
             confidence?: number | null;
+        };
+        /**
+         * TimelinePaper
+         * @description One accepted paper, at the date printed on it (or its visit's date when none was read).
+         */
+        TimelinePaper: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Visit Id
+             * Format: uuid
+             */
+            visit_id: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * Date Source
+             * @enum {string}
+             */
+            date_source: "printed" | "visit";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "prescription" | "lab_report" | "discharge_summary" | "other";
+            /**
+             * Facility
+             * @default
+             */
+            facility: string;
+            /** Reviewed By */
+            reviewed_by?: string | null;
+            /** Diagnoses */
+            diagnoses?: string[];
+            /** Medicines */
+            medicines?: components["schemas"]["Medicine"][];
+            /** Procedures */
+            procedures?: string[];
+            /** Lab Results */
+            lab_results?: components["schemas"]["LabResult"][];
         };
         /** TranscriptResponse */
         TranscriptResponse: {
@@ -3785,6 +4132,120 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["InterviewSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feature_settings_admin_feature_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    patch_feature_settings_admin_feature_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_privacy_settings_admin_privacy_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    put_privacy_settings_admin_privacy_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivacySettingsPut"];
             };
         };
         responses: {
@@ -5484,6 +5945,41 @@ export interface operations {
             };
         };
     };
+    reissue_opd_card_patients_card_reissue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReissueCardPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     link_patient_queue__visit_id__link_patient_post: {
         parameters: {
             query?: never;
@@ -6254,6 +6750,138 @@ export interface operations {
             };
         };
     };
+    get_doctor_notes_visits__visit_id__doctor_notes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNotesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_doctor_notes_visits__visit_id__doctor_notes_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "if-match"?: string | null;
+            };
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DoctorNotesPayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DoctorNotesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_visit_fhir_visits__visit_id__fhir_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    privacy_notice_privacy_notice__hospital_id__get: {
+        parameters: {
+            query?: {
+                language?: "en" | "hi" | "mr";
+            };
+            header?: never;
+            path: {
+                hospital_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_patient_documents_intake_sessions__visit_id__documents_get: {
         parameters: {
             query?: never;
@@ -6465,6 +7093,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffDocument"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_investigations_visits__visit_id__investigations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationsResponse"];
                 };
             };
             /** @description Validation Error */

@@ -65,7 +65,12 @@ class NotificationConnection:
                 self.created += 1
         return Result()
 
-    async def scalar(self, _statement: object, _params: object = None) -> int:
+    sms_messages: bool | None = True
+
+    async def scalar(self, statement: object, _params: object = None) -> int | bool | None:
+        # The hospital's SMS switch (on here unless a test turns it off), else the hourly count.
+        if "hospital_feature_settings" in str(statement):
+            return self.sms_messages
         return 0
 
 
@@ -301,3 +306,33 @@ def test_notify_key_rules() -> None:
     with pytest.raises(ValueError, match="NOTIFY_KEY"):
         Settings(app_env="test", notify_key="too-short")
     assert Settings(app_env="test", notify_key="").notify_key_bytes is None
+
+
+@pytest.mark.asyncio
+async def test_no_intent_while_the_hospital_has_sms_off() -> None:
+    connection = NotificationConnection()
+    connection.sms_messages = False
+    client = QueueClient(connection.visit_id)
+    created = await record_queue_event_intents(
+        connection,
+        client,
+        hospital_id=HOSPITAL_ID,
+        department_id=DEPARTMENT_ID,
+        settings=Settings(app_env="test"),
+    )
+    assert created == 0 and connection.created == 0
+
+
+@pytest.mark.asyncio
+async def test_sms_is_off_for_a_hospital_that_never_chose() -> None:
+    connection = NotificationConnection()
+    connection.sms_messages = None
+    client = QueueClient(connection.visit_id)
+    await record_queue_event_intents(
+        connection,
+        client,
+        hospital_id=HOSPITAL_ID,
+        department_id=DEPARTMENT_ID,
+        settings=Settings(app_env="test"),
+    )
+    assert connection.created == 0

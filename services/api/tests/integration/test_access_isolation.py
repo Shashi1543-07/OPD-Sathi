@@ -79,6 +79,16 @@ VISIT_PROBES = (
         headers={"If-Match": '"1"'},
     ),
     Probe("GET", "/visits/{visit}/history", _STAFF),
+    Probe("GET", "/visits/{visit}/doctor-notes", _STAFF),
+    Probe(
+        "PUT",
+        "/visits/{visit}/doctor-notes",
+        ("doctor",),
+        json={"plan": "Synthetic plan"},
+        headers={"If-Match": '"0"'},
+    ),
+    Probe("GET", "/visits/{visit}/investigations", _STAFF),
+    Probe("GET", "/visits/{visit}/fhir", ("doctor", "admin")),
     Probe("GET", "/visits/{visit}/documents", _STAFF),
     Probe(
         "POST", "/visits/{visit}/documents", ("doctor", "nurse"), content=_JPEG, headers=_PHOTO

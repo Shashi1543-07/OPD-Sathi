@@ -24,6 +24,15 @@ This document describes the local MVP data model. It is an engineering inventory
 | Photos of old papers | PostgreSQL `documents` (details) and `document_contents` (the photo) | The photo is encrypted at application level (AES-GCM, bound to its document, so a photo copied onto another record cannot be decrypted); listing papers never loads a photo. What AI read from a paper is stored encrypted in `documents.extracted` as an unconfirmed draft. Tenant-scoped. Shown only to staff of the visit's department (papers from earlier visits only while the patient is under care), sent with `Cache-Control: no-store`, and every view of a photo is audited. See "Old papers" below. |
 | Prescription scan | Not stored | The older one-tap scan that reads medicine names into the medication answer processes the photo in memory and keeps only the names the patient confirms. |
 
+## The full notice
+
+Patients read the full privacy notice at `/privacy/<hospital>` (English, Hindi, Marathi), from
+the waiting-area poster's QR (printed from Settings → Departments → Privacy notice), the token
+page and phone check-in. Its text is `services/api/app/domain/privacy/notice-*.md`, versioned
+and reviewed like the consent copy: a draft until counsel approves it (task 7.5.2), and the
+page says so. The hospital's grievance officer contact is stored in
+`hospital_privacy_settings` (row-level security, changes audited) and shown with it.
+
 ## Consent by purpose
 
 Each check-in asks two separate questions (and offers a third, optional box for SMS; see "Queue messages by SMS"), each with its own short notice that is shown and read aloud in the patient's language:

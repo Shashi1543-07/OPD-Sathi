@@ -40,11 +40,19 @@ from app.db.repositories import (
     KioskUnavailableError,
     PatientRepository,
     QueueRepository,
+    phone_checkin_on,
+    sms_messages_on,
 )
 from app.db.session import set_hospital_scope, set_secret_lookup_scope
 from app.domain.checkin import checkin_code_digest, is_checkin_code
-from app.domain.interview.bank import AYURVEDA_MODULE, QUESTIONS, Language, Question
-from app.domain.interview.consent import DANGER_TILES, get_consent_copy
+from app.domain.interview.bank import (
+    AYURVEDA_MODULE,
+    QUESTIONS,
+    REVIEW_OF_SYSTEMS_MODULE,
+    Language,
+    Question,
+)
+from app.domain.interview.consent import DANGER_TILES, ConsentCopy, get_consent_copy
 from app.domain.interview.engine import (
     ALWAYS_MODULES,
     InterviewState,
@@ -111,10 +119,19 @@ class CreateAssistedSessionPayload(StrictPayload):
     language: Language
 
 
+# Who is answering for the patient (tasks 7.5.3, 7.11.7): the patient, a parent or
+# guardian, or a representative (a relative or companion helping an adult who cannot answer).
+AnsweredBy = Literal["patient", "guardian", "representative"]
+# Below this age the kiosk must be told who is answering; "the patient" is still allowed.
+_ANSWERER_REQUIRED_BELOW_AGE = 18
+
+
 class ConsentPayload(StrictPayload):
     version: str = Field(min_length=1, max_length=64)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     granted: bool
+    # Who agreed and will answer; asked on the consent screen (the patient when left out).
+    answered_by: AnsweredBy | None = None
 
 
 class ConsentNoticeRef(StrictPayload):
@@ -132,6 +149,8 @@ class IdentityPayload(StrictPayload):
     sms_opt_in: bool = False
     # The SMS notice shown beside the box, required when the patient ticked it themselves.
     sms_consent: ConsentNoticeRef | None = None
+    # Who is answering; required for a patient under 18 (the kiosk asks again then).
+    answered_by: AnsweredBy | None = None
 
     @model_validator(mode="after")
     def require_phone_for_sms(self) -> "IdentityPayload":
@@ -168,6 +187,9 @@ class OfflineSubmissionPayload(StrictPayload):
     medications: str = Field(default="", max_length=500)
     allergies: str = Field(default="", max_length=500)
     danger_tile_ids: list[str] = Field(default_factory=list, max_length=20)
+    # Who answered the short form. Forms queued by an older kiosk app do not say; they are
+    # recorded as the patient's own, as every visit was before this was asked.
+    answered_by: AnsweredBy | None = None
 
     @model_validator(mode="after")
     def normalize_text(self) -> "OfflineSubmissionPayload":
@@ -251,18 +273,33 @@ async def _session_lock(request: Request, hospital_id: UUID, visit_id: UUID) -> 
             pass  # The lock expires by itself.
 
 
-async def _hospital_ayurveda_enabled(request: Request, hospital_id: UUID) -> bool:
-    """Whether this hospital adds the Ayurveda history questions (an AYUSH hospital)."""
+async def _hospital_modules(request: Request, hospital_id: UUID) -> tuple[str, ...]:
+    """The optional modules this hospital adds: review of systems, then Ayurveda history."""
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        enabled = await connection.scalar(
-            text(
-                "SELECT ayurveda_module FROM hospital_interview_settings "
-                "WHERE hospital_id = :hospital_id"
-            ),
-            {"hospital_id": hospital_id},
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT review_of_systems_module, ayurveda_module "
+                        "FROM hospital_interview_settings WHERE hospital_id = :hospital_id"
+                    ),
+                    {"hospital_id": hospital_id},
+                )
+            )
+            .mappings()
+            .first()
         )
-    return enabled is True
+    if row is None:
+        return ()
+    return tuple(
+        module
+        for module, enabled in (
+            (REVIEW_OF_SYSTEMS_MODULE, row["review_of_systems_module"]),
+            (AYURVEDA_MODULE, row["ayurveda_module"]),
+        )
+        if enabled is True
+    )
 
 
 async def _evaluate_visit(
@@ -969,7 +1006,7 @@ async def create_session(
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": copy,
         "ai_consent": get_consent_copy(payload.language, "ai"),
-        "sms_consent": get_consent_copy(payload.language, "sms"),
+        "sms_consent": await _sms_notice(request, hospital_id, payload.language),
     }
 
 
@@ -1057,7 +1094,7 @@ async def create_assisted_session(
         "expires_in": request.app.state.settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": {**consent, "language": payload.language},
         "ai_consent": get_consent_copy(payload.language, "ai"),
-        "sms_consent": get_consent_copy(payload.language, "sms"),
+        "sms_consent": await _sms_notice(request, hospital_id, payload.language),
         "assisted": True,
     }
 
@@ -1103,6 +1140,16 @@ def _client_address(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+async def _sms_notice(
+    request: Request, hospital_id: UUID, language: Language
+) -> ConsentCopy | None:
+    """The SMS notice for the tick, or none while the hospital has SMS messages off."""
+    async with request.app.state.engine.begin() as connection:
+        await set_hospital_scope(connection, hospital_id)
+        enabled = await sms_messages_on(connection, hospital_id)
+    return get_consent_copy(language, "sms") if enabled else None
+
+
 async def _checkin_point(request: Request, code: str) -> dict[str, Any]:
     """The active phone check-in point behind a QR code, with its hospital's name."""
     unavailable = _error(
@@ -1128,7 +1175,9 @@ async def _checkin_point(request: Request, code: str) -> dict[str, Any]:
             text("SELECT name FROM hospitals WHERE id = :hospital_id"),
             {"hospital_id": point["hospital_id"]},
         )
-    if not point["is_active"]:
+        hospital_allows = await phone_checkin_on(connection, point["hospital_id"])
+    # One check-in point paused, or phone check-in off for the whole hospital (Settings).
+    if not point["is_active"] or not hospital_allows:
         raise _error(
             409,
             "CHECKIN_TURNED_OFF",
@@ -1150,7 +1199,11 @@ async def checkin_details(code: str, request: Request) -> dict[str, Any]:
         detail="Please wait a moment and try again.",
     )
     point = await _checkin_point(request, code)
-    return {"hospital_name": point["hospital_name"], "languages": ["hi", "mr", "en"]}
+    return {
+        "hospital_name": point["hospital_name"],
+        "languages": ["hi", "mr", "en"],
+        "privacy_path": f"/privacy/{point['hospital_id']}",
+    }
 
 
 @router.post("/checkin/{code}/sessions", status_code=status.HTTP_201_CREATED)
@@ -1248,7 +1301,7 @@ async def create_checkin_session(
         "expires_in": settings.patient_session_hours * _SESSION_TTL_FACTOR,
         "consent": get_consent_copy(payload.language),
         "ai_consent": get_consent_copy(payload.language, "ai"),
-        "sms_consent": get_consent_copy(payload.language, "sms"),
+        "sms_consent": await _sms_notice(request, hospital_id, payload.language),
         "channel": "mobile",
         "hospital_name": point["hospital_name"],
     }
@@ -1295,7 +1348,7 @@ async def change_language(
         "language": payload.language,
         "consent": get_consent_copy(payload.language),
         "ai_consent": get_consent_copy(payload.language, "ai"),
-        "sms_consent": get_consent_copy(payload.language, "sms"),
+        "sms_consent": await _sms_notice(request, hospital_id, payload.language),
     }
 
 
@@ -1325,6 +1378,7 @@ async def record_consent(
     )
     assisted = state.get("channel") == "nurse" and state.get("assisted") is True
     nurse_id = UUID(state["nurse_id"]) if assisted else None
+    answered_by = payload.answered_by or "patient"
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
         repository = IntakeRepository(connection, request.app.state.settings)
@@ -1343,6 +1397,9 @@ async def record_consent(
                 else "kiosk"
             ),
         )
+        await repository.set_answered_by(
+            hospital_id=hospital_id, visit_id=visit_id, who=answered_by
+        )
         if not payload.granted:
             await repository.set_visit_status(
                 hospital_id=hospital_id, visit_id=visit_id, status="cancelled"
@@ -1356,10 +1413,11 @@ async def record_consent(
             action="intake.consent.granted" if payload.granted else "intake.consent.declined",
             resource_type="visit",
             resource_id=visit_id,
-            meta={"language": language, "version": copy["version"]},
+            meta={"language": language, "version": copy["version"], "answered_by": answered_by},
         )
     if payload.granted:
         state["phase"] = "identity"
+        state["answered_by"] = answered_by
         await request.app.state.redis_state.set(
             _session_key(hospital_id, visit_id),
             json.dumps(state, separators=(",", ":")),
@@ -1403,7 +1461,8 @@ async def record_ai_consent(
     assisted = state.get("channel") == "nurse" and state.get("assisted") is True
     async with request.app.state.engine.begin() as connection:
         await set_hospital_scope(connection, hospital_id)
-        await IntakeRepository(connection, request.app.state.settings).record_ai_consent(
+        repository = IntakeRepository(connection, request.app.state.settings)
+        await repository.record_ai_consent(
             hospital_id=hospital_id,
             visit_id=visit_id,
             language=language,
@@ -1413,6 +1472,12 @@ async def record_ai_consent(
             channel=(
                 "nurse" if assisted else "mobile" if state.get("channel") == "mobile" else "kiosk"
             ),
+        )
+        # The same person who agreed to the care notice answers this one.
+        await repository.set_answered_by(
+            hospital_id=hospital_id,
+            visit_id=visit_id,
+            who=str(state.get("answered_by") or "patient"),
         )
         await audit(
             connection,
@@ -1455,6 +1520,15 @@ async def save_identity(
         raise _error(
             409, "FLOW_OUT_OF_ORDER", "Please continue in order", "Return to the current screen."
         )
+    if payload.age < _ANSWERER_REQUIRED_BELOW_AGE and payload.answered_by is None:
+        raise _error(
+            422,
+            "ANSWERER_REQUIRED",
+            "Who is answering?",
+            "Say who is answering for a patient under 18: the patient, a parent or guardian, "
+            "or someone else helping.",
+        )
+    answered_by = payload.answered_by or str(state.get("answered_by") or "patient")
     language: Language = context["language"]
     sms_copy = get_consent_copy(language, "sms")
     if payload.sms_consent is not None and (
@@ -1480,8 +1554,10 @@ async def save_identity(
         await set_hospital_scope(connection, hospital_id)
         repository = IntakeRepository(connection, request.app.state.settings)
         # SMS is the patient's own choice: a tick records the consent; an untick after going
-        # back records the change. No tick and no earlier answer records nothing.
-        if payload.sms_opt_in or await repository.has_consent_row(
+        # back records the change. No tick and no earlier answer records nothing. A tick
+        # from a screen shown before the hospital switched SMS off counts as no tick.
+        sms_opt_in = payload.sms_opt_in and await sms_messages_on(connection, hospital_id)
+        if sms_opt_in or await repository.has_consent_row(
             hospital_id=hospital_id, visit_id=visit_id, purpose="sms"
         ):
             await repository.record_sms_consent(
@@ -1490,7 +1566,7 @@ async def save_identity(
                 language=language,
                 version=sms_copy["version"],
                 text_sha256=sms_copy["sha256"],
-                granted=payload.sms_opt_in,
+                granted=sms_opt_in,
                 channel=channel,
             )
             await audit(
@@ -1505,7 +1581,7 @@ async def save_identity(
                 ),
                 action=(
                     "intake.sms_consent.granted"
-                    if payload.sms_opt_in
+                    if sms_opt_in
                     else "intake.sms_consent.declined"
                 ),
                 resource_type="visit",
@@ -1519,11 +1595,15 @@ async def save_identity(
             age=payload.age,
             sex=payload.sex,
             phone=payload.phone,
-            sms_opt_in=payload.sms_opt_in,
+            sms_opt_in=sms_opt_in,
             name=payload.name if state.get("assisted") is True else None,
             linked=context.get("patient_link") is not None,
         )
+        await repository.set_answered_by(
+            hospital_id=hospital_id, visit_id=visit_id, who=answered_by
+        )
     state["phase"] = "danger_signs"
+    state["answered_by"] = answered_by
     await request.app.state.redis_state.set(
         key,
         json.dumps(state, separators=(",", ":")),
@@ -1787,9 +1867,7 @@ async def save_danger_signs(
         red_flag_ids=tuple(payload.tile_ids),
         sex=context.get("sex"),
         age=context.get("age_years"),
-        extra_modules=(
-            (AYURVEDA_MODULE,) if await _hospital_ayurveda_enabled(request, hospital_id) else ()
-        ),
+        extra_modules=await _hospital_modules(request, hospital_id),
     )
     state["interview"] = interview_state.model_dump(mode="json")
     state["phase"] = "interview"
@@ -3216,15 +3294,21 @@ async def replay_offline_submission(
             "role": "patient",
         }
         consent = consent_copy
+        answered_by = payload.answered_by or "patient"
         await record_consent(
             visit_id,
-            ConsentPayload(version=consent["version"], sha256=consent["sha256"], granted=True),
+            ConsentPayload(
+                version=consent["version"],
+                sha256=consent["sha256"],
+                granted=True,
+                answered_by=answered_by,
+            ),
             request,
             patient_principal,
         )
         await save_identity(
             visit_id,
-            IdentityPayload(age=payload.age, sex=payload.sex),
+            IdentityPayload(age=payload.age, sex=payload.sex, answered_by=answered_by),
             request,
             patient_principal,
         )

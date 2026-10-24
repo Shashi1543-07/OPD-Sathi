@@ -92,3 +92,38 @@
 - **Decision:** No GlitchTip or Sentry. Errors are found through the structured logs (kept 180 days in the server's journal, without patient data), the `ApiErrorRateHigh` and `WorkerJobFailing` alerts, and the request id every error response carries (staff can quote it; `journalctl ... | grep <request id>` finds the trace).
 - **Reason:** An error tracker is another service to install, secure and keep patched on each hospital server, and stack traces risk carrying patient data off the request path; the alerts already tell a person when errors rise, and one server per hospital keeps logs searchable in place.
 - **Consequences:** No grouping of similar errors or release-by-release error trends; second-line support reads the journal when an alert or a staff report comes in. A multi-hospital hosted service would revisit this.
+
+## ADR 013 — No PgBouncer yet; a connection budget instead
+
+- **Status:** decided on 24 Oct 2026 by the owner (Phase 7, task 7.8.4); revisit when the trigger below is reached.
+- **Decision:** PostgreSQL is reached directly. Each API process keeps `DB_POOL_MIN` connections and opens up to `DB_POOL_MAX`; the worker and the close-out keep their own small pools. The budget in `docs/SCALING.md` (worst case `WEB_CONCURRENCY x DB_POOL_MAX` plus the worker and maintenance connections) must stay below `max_connections`. The tenant scope is set with `set_config('app.hospital_id', ..., true)` for each transaction, and a test proves that a reused connection carries no scope into the next transaction (`test_tenant_rls.py`), so PgBouncer in transaction mode can be added later without changing the application.
+- **Reason:** The load tests met every target on one server with direct connections (12 to 17 connections at the district-hospital peak, `docs/SCALING.md`); PgBouncer would be another service to install, configure, secure and monitor on each hospital server without a measured need.
+- **Trigger to revisit:** more API processes than the budget allows (for example three API replicas, task 7.8.6), a shared district server (task 7.8.10), or connection waits in the metrics. Then: PgBouncer in transaction mode with an ADR amendment, `server_reset_query` empty, and the scope test run through it.
+
+## ADR 014 — Patients do not see their records in OPD Saathi in v1
+
+- **Status:** decided on 24 Oct 2026 by the OPD Saathi team (Phase 7, task 7.11.8); revisit after the pilot.
+- **Decision:** Patients see their queue status, can stop AI help and SMS, and get their OPD card; they do not view their history, case sheets or papers in OPD Saathi. Records reach patients through the hospital (printed case sheet on request) and, later, through ABDM, where the patient's ABHA app is the place to see them (tasks 7.10.2 and 7.10.3).
+- **Reason:** A printed card with a six-digit PIN is enough to join today's visit to an earlier record at a kiosk staffed by the hospital, but not to open a medical record from any phone: that needs stronger sign-in (a one-time code to a verified number, or ABHA), and both bring their own risks (shared family phones, SIM changes) that the DPDP notice and counsel would need to cover.
+- **Consequences:** No patient sign-in to secure in v1. A patient's right to access their data (DPDP Act section 11) is met by the hospital's process, with the audit log showing who read what.
+
+## ADR 015 — No drug-interaction checks until a licensed, reviewed knowledge base is procured
+
+- **Status:** decided on 24 Oct 2026 by the OPD Saathi team (Phase 7, task 7.11.9).
+- **Decision:** OPD Saathi does not check medicines for interactions, doses or contraindications, and never asks a language model to. Medicines appear as the patient stated them or as read from a paper a doctor accepted, labelled as such.
+- **Reason:** An interaction check is clinical decision support: it needs a maintained, licensed knowledge base, clinical review of what is shown and when, and probably a change in the regulatory classification (task 7.5.11). An unreviewed AI judgement here could do harm in both directions (missed interactions, alert fatigue).
+- **Consequences:** Doctors use their own references, as today. Adding checks later needs: a procured knowledge base (with its licence and update process), a clinical safety case and hazard-log entries, sign-off by the clinical lead, and this ADR replaced.
+
+## ADR 016 — Web test coverage with `@vitest/coverage-v8`
+
+- **Status:** accepted on 24 Oct 2026 by the owner (Phase 7, task 7.13.6).
+- **Decision:** The web unit tests run with Vitest's own V8 coverage plugin in CI (`npm run test:coverage`). Every file under `apps/web/src` counts, tested or not (the generated API types, the entry point and the tests themselves excluded). The thresholds in `vite.config.ts` are the level reached when the gate was added and are only ever raised.
+- **Reason:** The API has had a 95% coverage gate on its core and domain code; the web app had none, so untested screens could grow unnoticed. The plugin is maintained with Vitest, matches its version, and uses the coverage built into Node, with no instrumentation step.
+- **Consequences:** A development dependency only; nothing changes in the built app. A change that lowers coverage below the thresholds fails CI until tests are added.
+
+## ADR 017 — FHIR export validated in tests with `fhir.resources`
+
+- **Status:** accepted on 24 Oct 2026 by the owner (Phase 7, task 7.10.1).
+- **Decision:** `GET /visits/{id}/fhir` builds a FHIR R4 `Bundle` from plain dictionaries (`app/domain/fhir_export.py`); no FHIR library is installed in the images. The tests parse every bundle with `fhir.resources` (a development dependency only) using its R4B models, the R4 technical correction, identical to R4 for every resource this export uses. Because the library checks structure and cardinality but not required terminology bindings, the tests also check each required-binding code the export sets (statuses, bundle type, condition and allergy statuses) against the R4 value sets. Bundles are tagged `not-abdm-certified`.
+- **Reason:** A hand-written check alone would miss structural mistakes; the official HL7 validator needs Java in CI. `fhir.resources` gives a real structural validation in the existing Python test run.
+- **Consequences:** The NRCeS (ABDM) profiles are not validated: that needs the HL7 validator with the NRCeS package, or ABDM's own sandbox checks, before certification (tasks 7.10.2, 7.10.3). Codes beyond text (SNOMED CT) come with task 7.10.6.

@@ -5,6 +5,7 @@ import re
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, Depends, Header, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -18,6 +19,7 @@ from app.core.auth import require_role
 from app.core.errors import ApiProblemError
 from app.db.repositories import (
     CaseSheetRepository,
+    DoctorNoteRepository,
     IntakeRepository,
     InterviewTurnRepository,
     PatientRepository,
@@ -29,6 +31,11 @@ from app.domain.redflags.engine import RULES
 from app.pdf import render_case_sheet_pdf
 
 router = APIRouter(tags=["case sheets"])
+# Printed on the PDF when someone else gave the history (task 7.11.7).
+_ANSWERED_BY_LINE = {
+    "guardian": "Answered by a parent or guardian",
+    "representative": "Answered by someone helping the patient",
+}
 _RULE_REASONS = {rule.id: rule.reason_en for rule in RULES}
 
 
@@ -80,6 +87,8 @@ class PatientContext(BaseModel):
     # The patient's choice about online AI help: "on", "off" (said no, or never asked), or
     # "withdrawn" (said yes, then stopped it; the AI draft is no longer shown).
     ai_help: Literal["on", "off", "withdrawn"] | None = None
+    # Who gave the history: the patient, a parent or guardian, or a representative.
+    answered_by: Literal["patient", "guardian", "representative"] | None = None
 
 
 class CaseSheetResponse(BaseModel):
@@ -154,7 +163,7 @@ async def get_case_sheet(
                     text(
                         "SELECT v.age_years, p.sex, v.language, v.token_label AS token, "
                         "v.urgency, v.status, d.name_en AS department_name, "
-                        "v.acuity AS triage, v.queued_at, "
+                        "v.acuity AS triage, v.queued_at, v.answered_by, "
                         "CASE WHEN a.withdrawn_at IS NOT NULL THEN 'withdrawn' "
                         "WHEN a.granted THEN 'on' ELSE 'off' END AS ai_help FROM visits v "
                         "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
@@ -246,7 +255,8 @@ async def export_case_sheet_pdf(
             (
                 await connection.execute(
                     text(
-                        "SELECT v.token_label, v.urgency_reasons, v.age_years, p.sex "
+                        "SELECT v.token_label, v.urgency_reasons, v.age_years, p.sex, "
+                        "v.answered_by "
                         "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
                         "AND p.id = v.patient_id "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
@@ -264,6 +274,9 @@ async def export_case_sheet_pdf(
                 "Visit not found",
                 "The requested visit is unavailable.",
             )
+        notes = await DoctorNoteRepository(connection, request.app.state.settings).versions(
+            hospital_id=hospital_id, visit_id=visit_id
+        )
         reasons = [
             str(
                 item.get("reason_en")
@@ -283,18 +296,24 @@ async def export_case_sheet_pdf(
             action="case_sheet.pdf_exported",
             resource_type="case_sheet",
             resource_id=saved["id"],
-            meta={"version": int(saved["version"]), "red_flag_count": len(reasons)},
+            meta={
+                "version": int(saved["version"]),
+                "red_flag_count": len(reasons),
+                "doctor_notes_version": notes[0]["version"] if notes else 0,
+            },
         )
     sex = {"female": "Female", "male": "Male", "other": "Other"}.get(str(visit.get("sex")), "")
     age = visit.get("age_years")
+    answered = _ANSWERED_BY_LINE.get(str(visit.get("answered_by")), "")
     patient_line = " · ".join(
-        part for part in (f"{age} years" if isinstance(age, int) else "", sex) if part
+        part for part in (f"{age} years" if isinstance(age, int) else "", sex, answered) if part
     )
     pdf = render_case_sheet_pdf(
         _without_ai_draft(saved["data"], withdrawn),
         queue_number=visit["token_label"] or "",
         attention_reasons=reasons,
         patient_line=patient_line,
+        doctor_notes=_printed_notes(notes[0]) if notes else None,
     )
     return StarletteResponse(
         content=pdf,
@@ -304,6 +323,18 @@ async def export_case_sheet_pdf(
             "Cache-Control": "no-store",
         },
     )
+
+
+def _printed_notes(latest: dict[str, Any]) -> dict[str, Any]:
+    """The latest notes with dates as people read them (India time)."""
+    at = latest["at"].astimezone(ZoneInfo("Asia/Kolkata"))
+    follow_up = latest.get("follow_up_on")
+    return {
+        **latest,
+        "by_name": f"Written by {latest['by_name']}",
+        "at": at.strftime("%d %b %Y, %H:%M"),
+        "follow_up_on": follow_up.strftime("%d %b %Y") if follow_up else None,
+    }
 
 
 @router.patch("/visits/{visit_id}/case-sheet", response_model=CaseSheetResponse)

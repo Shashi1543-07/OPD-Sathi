@@ -12,9 +12,13 @@ Language = Literal["en", "hi", "mr"]
 Sex = Literal["female", "male", "other", "unknown"]
 BANK_DIRECTORY = Path(__file__).with_name("bank")
 # Symptom and history modules, each in its own file next to core.json.
-MODULE_COUNT = 15
+MODULE_COUNT = 16
 # Asked only where the hospital turns on Ayurveda history (an AYUSH hospital).
 AYURVEDA_MODULE = "ayurveda"
+# A one-screen check of the other body systems, asked where the hospital turns it on.
+REVIEW_OF_SYSTEMS_MODULE = "review_of_systems"
+# Modules each hospital chooses; keyword triggers never select them.
+HOSPITAL_MODULES = (REVIEW_OF_SYSTEMS_MODULE, AYURVEDA_MODULE)
 
 
 class StrictModel(BaseModel):
@@ -208,12 +212,12 @@ def load_question_bank(
     ):
         raise ValueError("trigger terms must be non-empty strings")
     module_names = {question.module for question in questions.values()} - {"core"}
-    if len(module_names) != MODULE_COUNT or AYURVEDA_MODULE not in module_names:
+    if len(module_names) != MODULE_COUNT or set(HOSPITAL_MODULES) - module_names:
         raise ValueError(f"question bank must contain exactly {MODULE_COUNT} non-core modules")
     if set(triggers.get("always", [])) - module_names:
         raise ValueError("trigger configuration refers to an unknown always-on module")
-    if AYURVEDA_MODULE in triggers["always"] or AYURVEDA_MODULE in triggers["keywords"]:
-        raise ValueError("the Ayurveda module is chosen per hospital, never by triggers")
+    if set(HOSPITAL_MODULES) & {*triggers["always"], *triggers["keywords"]}:
+        raise ValueError("hospital-chosen modules are never selected by triggers")
     if set(triggers.get("keywords", {})) - module_names:
         raise ValueError("trigger configuration refers to an unknown module")
     if set(triggers["always"]) & set(triggers["keywords"]):

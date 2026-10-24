@@ -51,6 +51,8 @@ _TEARDOWN = (
     "DELETE FROM hospital_report_settings WHERE hospital_id = :id",
     "DELETE FROM hospital_queue_settings WHERE hospital_id = :id",
     "DELETE FROM hospital_interview_settings WHERE hospital_id = :id",
+    "DELETE FROM hospital_feature_settings WHERE hospital_id = :id",
+    "DELETE FROM hospital_privacy_settings WHERE hospital_id = :id",
     "DELETE FROM users WHERE hospital_id = :id",
     "DELETE FROM departments WHERE hospital_id = :id",
     "DELETE FROM hospitals WHERE id = :id",
@@ -251,11 +253,15 @@ class PatientSession:
     def get(self, path: str) -> Any:
         return self.client.get(f"/intake/sessions/{self.visit_id}{path}", headers=self.headers())
 
-    def agree(self) -> None:
-        response = self.post(
-            "/consent",
-            {"version": self.consent["version"], "sha256": self.consent["sha256"], "granted": True},
-        )
+    def agree(self, answered_by: str | None = None) -> None:
+        payload: dict[str, Any] = {
+            "version": self.consent["version"],
+            "sha256": self.consent["sha256"],
+            "granted": True,
+        }
+        if answered_by is not None:
+            payload["answered_by"] = answered_by
+        response = self.post("/consent", payload)
         assert response.status_code == 200, response.text
 
     def allow_ai(self, granted: bool = True) -> Any:
@@ -277,8 +283,12 @@ class PatientSession:
         sex: str = "female",
         phone: str | None = None,
         sms_opt_in: bool = False,
+        answered_by: str | None = None,
     ) -> Any:
         payload: dict[str, Any] = {"age": age, "sex": sex, "phone": phone}
+        # The kiosk always says who is answering for a child; a parent, unless a test says so.
+        if answered_by is not None or age < 18:
+            payload["answered_by"] = answered_by or "guardian"
         if sms_opt_in:
             # The patient ticked the box beside this notice themselves.
             assert self.sms_consent is not None, "the session was started without its SMS notice"
@@ -422,16 +432,19 @@ def complete_intake(
     answers: dict[str, str | int] | None = None,
     allow_ai: bool | None = None,
     sms_opt_in: bool = False,
+    answered_by: str | None = None,
 ) -> dict[str, Any]:
     """Consent, identity, danger signs and the interview, ending at the summary.
 
     ``allow_ai`` answers the optional AI-help question (None: the patient is not asked).
     """
-    session.agree()
+    session.agree(answered_by)
     if allow_ai is not None:
         answered = session.allow_ai(allow_ai)
         assert answered.status_code == 200, answered.text
-    identity = session.identity(age=age, sex=sex, phone=phone, sms_opt_in=sms_opt_in)
+    identity = session.identity(
+        age=age, sex=sex, phone=phone, sms_opt_in=sms_opt_in, answered_by=answered_by
+    )
     assert identity.status_code == 200, identity.text
     session.danger_signs(tiles)
     return session.answer_all({"chief_concern": complaint, **(answers or {})})

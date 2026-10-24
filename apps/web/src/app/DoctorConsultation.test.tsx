@@ -102,17 +102,20 @@ const noPapers = {
   earlier_shown: true,
   limit: 10,
 };
-/** The panels that load on their own: earlier visits, old papers and the queue timeline. */
+/** The panels that load on their own: earlier visits, old papers, the queue timeline, notes. */
 const ownRequest = (path: string) =>
   path.endsWith("/history") ||
   path.endsWith("/queue-events") ||
-  path.includes("/documents");
+  path.includes("/documents") ||
+  path.endsWith("/doctor-notes");
 
 /**
  * Answer the consultation's requests in order. The earlier-visits panel, the old papers and
  * the queue timeline load on their own and get their own answers, so they never take a
  * response meant for the case sheet.
  */
+const noNotes = { visit_id: "visit-1", version: 0, editable: true, versions: [] };
+
 function mockRequests(
   responses: Response[],
   history: object | (() => Response) = emptyHistory,
@@ -131,7 +134,9 @@ function mockRequests(
           ? new Response(JSON.stringify(events), { status: 200 })
           : path.includes("/documents")
             ? papers(path, init)
-            : (queue.shift() ?? new Response(null, { status: 500 })),
+            : path.endsWith("/doctor-notes")
+              ? new Response(JSON.stringify(noNotes), { status: 200 })
+              : (queue.shift() ?? new Response(null, { status: 500 })),
     ),
   );
   const calls = () => request.mock.calls.filter(([path]) => !ownRequest(String(path)));
@@ -348,7 +353,7 @@ describe("Phase 7.4 doctor consultation", () => {
       "aria-selected",
       "true",
     );
-    expect(screen.getByText(/are not stored in OPD Saathi yet/)).toBeVisible();
+    expect(await screen.findByText("No notes yet.")).toBeVisible();
   });
 
   it("marks a called patient absent once the grace period is over, then offers a recall", async () => {

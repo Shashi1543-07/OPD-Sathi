@@ -359,6 +359,9 @@ async def test_consent_grant_and_decline_persist_the_right_channel_and_next_step
         async def record_consent(self, **kwargs: object) -> None:
             recorded.append(kwargs)
 
+        async def set_answered_by(self, **_kwargs: object) -> None:
+            return None  # Covered by tests/integration/test_answered_by.py.
+
         async def set_visit_status(self, **kwargs: object) -> None:
             recorded.append(kwargs)
 
@@ -432,6 +435,9 @@ async def test_identity_and_danger_sign_routes_advance_only_in_order(
 
         async def update_identity(self, **kwargs: object) -> None:
             updates.append(kwargs)
+
+        async def set_answered_by(self, **_kwargs: object) -> None:
+            return None  # Covered by tests/integration/test_answered_by.py.
 
         async def has_consent_row(self, **_kwargs: object) -> bool:
             return False

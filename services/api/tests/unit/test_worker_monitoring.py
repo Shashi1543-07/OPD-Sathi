@@ -88,3 +88,49 @@ def test_certificate_expiry_is_none_when_nothing_answers() -> None:
     with socket.create_server(("127.0.0.1", 0)) as probe:
         port = probe.getsockname()[1]
     assert monitoring.certificate_expiry(f"127.0.0.1:{port}", timeout=1) is None
+
+
+async def test_the_worker_outlives_a_redis_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Redis down raises RedisDown; it must not take the worker and its metrics with it."""
+    from arq.worker import Worker
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    from app.workers import main
+    from app.workers.metrics import worker_metrics
+
+    async def unreachable(_self: Worker) -> None:
+        raise RedisConnectionError("simulated Redis outage")
+
+    pauses: list[float] = []
+
+    async def pause(seconds: float) -> None:
+        pauses.append(seconds)
+
+    monkeypatch.setattr(Worker, "_poll_iteration", unreachable)
+    monkeypatch.setattr(main.asyncio, "sleep", pause)
+    worker = main.ResilientWorker(
+        functions=[main.relay_queue_outbox], queue_name="test", handle_signals=False
+    )
+    redis_up = worker_metrics().dependency_up.labels("redis")
+    redis_up.set(1)
+
+    await worker._poll_iteration()
+
+    assert redis_up._value.get() == 0
+    assert pauses == [2]
+
+
+async def test_the_worker_still_fails_on_other_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    from arq.worker import Worker
+
+    from app.workers import main
+
+    async def broken(_self: Worker) -> None:
+        raise RuntimeError("a bug, not an outage")
+
+    monkeypatch.setattr(Worker, "_poll_iteration", broken)
+    worker = main.ResilientWorker(
+        functions=[main.relay_queue_outbox], queue_name="test", handle_signals=False
+    )
+    with pytest.raises(RuntimeError):
+        await worker._poll_iteration()
