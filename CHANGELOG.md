@@ -30,6 +30,7 @@ checklist are still open).
   voice and SMS are set up.
 - **Hindi and Marathi** staff screens: the recent-visits list and visit statuses showed
   "???"; they are translated again. Staff initials in the sidebar are correct for every name.
+- **Screen readers** hear a busy button as "Save working", not as one joined word.
 
 ### For hospital IT
 
@@ -67,3 +68,5 @@ checklist are still open).
   point-in-time recovery; k6 load and soak tests.
 - Database migrations up to `0028_worker_monitoring` (expand-only; the previous release runs
   on this schema).
+- Web app on React 19, jsdom 30 and Playwright 1.64. TypeScript stays on 5.7 until
+  typescript-eslint supports TypeScript 7.
