@@ -1378,6 +1378,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/patients/card/reissue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reissue Opd Card
+         * @description Give a patient who lost their OPD card a new PIN; the old PIN stops working (7.11.4).
+         *
+         *     The number stays the same, so the patient's record and earlier visits are unchanged. Staff
+         *     check the patient's age and sex against the lookup first. The new PIN is returned once,
+         *     to be written on a new card, and is never stored or logged. Audited.
+         */
+        post: operations["reissue_opd_card_patients_card_reissue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/queue/{visit_id}/link-patient": {
         parameters: {
             query?: never;
@@ -2903,6 +2927,13 @@ export interface components {
             evidence: string;
             /** Reason En */
             reason_en?: string | null;
+        };
+        /** ReissueCardPayload */
+        ReissueCardPayload: {
+            /** Opd Number */
+            opd_number: string;
+            /** Card Version */
+            card_version: number;
         };
         /** Remove */
         Remove: {
@@ -5660,6 +5691,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reissue_opd_card_patients_card_reissue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReissueCardPayload"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

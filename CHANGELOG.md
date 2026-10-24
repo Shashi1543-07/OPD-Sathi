@@ -20,6 +20,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **Results over time** (Old papers tab): test results a doctor accepted, from this and earlier
   visits, oldest first, each compared with the range printed on its own paper. Readings still
   awaiting a decision are counted but never shown there.
+- **Lost OPD card** (Patients, for nurses and administrators): find the patient, check age and
+  sex with them, and give a new PIN. The number and records stay the same; the old PIN stops
+  working at once.
 
 ### Technical
 
@@ -31,6 +34,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   interview set includes one review-of-systems case per language.
 - `GET /visits/{id}/investigations`: accepted readings only, built on the server; earlier
   visits follow the same "under care" rule as the papers list; audited.
+- `POST /patients/card/reissue` moves `patients.card_version` on (the PIN is derived, never
+  stored); the version from `/patients/lookup` guards against re-issuing twice. Audited
+  without the PIN.
 
 ## [0.7.0]
 

@@ -9,6 +9,7 @@ import { KioskIntake } from "./KioskIntake";
 import { intake } from "../lib/intake";
 import { staffAuth } from "../lib/auth";
 import { UrgencyBadge } from "../components/ui";
+import { OpdCardReissue } from "./OpdCardReissue";
 
 type VisitStatus =
   | "registering"
@@ -247,6 +248,8 @@ export function NurseConsole() {
           {error && <p className="pr-error" role="alert">{error}</p>}
         </article>
       )}
+
+      {(role === "nurse" || role === "admin") && <OpdCardReissue />}
 
       <div className="pr-tiles" role="group" aria-label={t("filterByStatus")}>
         {tiles.map((tile) => (

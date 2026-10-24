@@ -236,7 +236,8 @@ class PatientRepository:
         digest = lookup_digest(phone.strip(), key=self.settings.app_hmac_key_bytes)
         result = await self.connection.execute(
             text(
-                "SELECT p.id, p.mrn, p.year_of_birth, p.sex, count(v.id) AS visit_count, "
+                "SELECT p.id, p.mrn, p.card_version, p.year_of_birth, p.sex, "
+                "count(v.id) AS visit_count, "
                 "max(v.service_date) AS last_visit FROM patients p LEFT JOIN visits v "
                 "ON v.hospital_id = p.hospital_id AND v.patient_id = p.id "
                 "AND v.token_number IS NOT NULL "
@@ -247,6 +248,29 @@ class PatientRepository:
             {"hospital_id": hospital_id, "digest": digest},
         )
         return [dict(row) for row in result.mappings().all()]
+
+    async def reissue_card(
+        self, *, hospital_id: UUID, patient_id: UUID, expected_version: int
+    ) -> int | None:
+        """Move the patient's OPD card to its next version, so the old PIN stops working.
+
+        Returns the new version, or None when the card is no longer at ``expected_version``
+        (someone re-issued it meanwhile).
+        """
+        result = await self.connection.execute(
+            text(
+                "UPDATE patients SET card_version = card_version + 1 "
+                "WHERE hospital_id = :hospital_id AND id = :patient_id "
+                "AND card_version = :expected_version RETURNING card_version"
+            ),
+            {
+                "hospital_id": hospital_id,
+                "patient_id": patient_id,
+                "expected_version": expected_version,
+            },
+        )
+        version = result.scalar_one_or_none()
+        return int(version) if version is not None else None
 
     async def link_visit(
         self, *, hospital_id: UUID, visit_id: UUID, patient_id: UUID, source: str
