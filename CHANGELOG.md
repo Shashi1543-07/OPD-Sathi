@@ -50,6 +50,8 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **Fast on a hospital with years of visits**: the visit register, the audit log search by
   record or by person, and the end-of-day close-out were measured on a million visits and no
   longer slow down as the history grows.
+- **Language buttons named as they read**: the kiosk's language buttons are announced as they
+  look ("हिन्दी Hindi"), so someone using voice control can say either word.
 
 ### Technical
 
@@ -122,6 +124,12 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   from the privacy notice commit); a results-over-time test took its date from the runner's
   UTC clock and failed every evening from 18:30 UTC; the Lighthouse gate judges each page's
   median of three runs instead of failing on one noisy run, with the same thresholds.
+- Dependencies, tested together: @tanstack/react-query 5.104.5, eslint-plugin-react-refresh
+  0.5.7, TypeScript 5.9.3 (still pinned to patch releases; it found the one-tab-at-a-time lock
+  helper returning a promise of a promise), @axe-core/playwright 4.14 (its label-in-name check
+  found the language buttons' names), and the CI-only Semgrep lock regenerated (pydantic 2.14.1
+  with pydantic-core 2.50.1, bracex 3.2). Not taken: jsonschema 4.26, wrapt 2.5 and
+  exceptiongroup 1.3, which Semgrep caps; @vitejs/plugin-react 6, which needs Vite 8.
 
 ## [0.7.0]
 
