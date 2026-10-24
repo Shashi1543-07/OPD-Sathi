@@ -49,7 +49,13 @@ export function Button({
     >
       {busy ? <LoaderCircle className="ui-spin" aria-hidden="true" /> : icon}
       {children}
-      {busy && <span className="ui-sr-only">{t("busy")}</span>}
+      {/* The space keeps the label and "busy" apart in the accessible name. */}
+      {busy && (
+        <>
+          {" "}
+          <span className="ui-sr-only">{t("busy")}</span>
+        </>
+      )}
     </button>
   );
 }
