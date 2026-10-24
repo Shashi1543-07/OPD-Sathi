@@ -51,6 +51,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - Decisions recorded: no PgBouncer yet, with a connection budget and a test that keeps
   transaction pooling possible (ADR 013); patients do not view records in v1 (ADR 014); no
   drug-interaction checks (ADR 015). New: `docs/LIMITATIONS.md`, `docs/RAG_DESIGN.md`.
+- Web coverage gate in CI (`npm run test:coverage`, `@vitest/coverage-v8`, approved by the
+  owner): every source file counts; thresholds at the level reached (statements 56%,
+  branches 52%, functions 51%, lines 58%), to be raised, never lowered.
 
 ## [0.7.0]
 

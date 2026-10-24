@@ -121,7 +121,8 @@ jobs:
         working-directory: .
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test -- --reporter=dot
+      # Unit tests with the coverage gate (task 7.13.6; thresholds in vite.config.ts).
+      - run: npm run test:coverage -- --reporter=dot
       - run: npm run e2e
       - run: npm run e2e:pwa
       - run: npm run build
