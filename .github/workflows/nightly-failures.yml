@@ -1,0 +1,41 @@
+name: Nightly failure and restore drills
+
+# What breaks, and who would know (Phase 7, tasks 7.7.8 and 7.13.4): on the production-mode
+# stack, Redis, PostgreSQL and the worker are stopped one at a time and the data disk filled;
+# each must show its known state (the API not ready, or ready when only the worker is down)
+# and raise its alert, then recover. The stack's smoke test includes the restore drill
+# (task 7.7.5), so restores run nightly too. scripts/failure-drills.sh.
+on:
+  schedule:
+    - cron: "30 22 * * *" # 04:00 IST
+  # Also on a pull request that changes what the drills test.
+  pull_request:
+    paths:
+      - .github/workflows/nightly-failures.yml
+      - scripts/failure-drills.sh
+      - scripts/prod_smoke.sh
+      - scripts/restore-drill.sh
+      - infra/monitoring/**
+      - docker-compose.prod.yml
+      - services/api/app/workers/monitoring.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drills:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/api/requirements.lock.txt
+      - run: pip install --require-hashes -r services/api/requirements.lock.txt
+      - name: Failure drills
+        env:
+          OSA_LOG_DRIVER: journald
+        run: bash scripts/failure-drills.sh

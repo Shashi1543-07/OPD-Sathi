@@ -27,17 +27,21 @@ DRILLS="${DRILLS:-redis postgres worker disk}"
 WORK="$(mktemp -d)"
 host_path() { if command -v cygpath >/dev/null; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 
+C=()
+cleanup() {
+  # The smoke script leaves the stack running (KEEP=1) even when it fails; take it down.
+  if ((${#C[@]} == 0)) && [[ -s "$WORK/compose" ]]; then read -r -a C < "$WORK/compose"; fi
+  if ((${#C[@]} > 0)); then "${C[@]}" down -v --remove-orphans >/dev/null 2>&1 || true; fi
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+
 echo "==> Starting the production stack (scripts/prod_smoke.sh)"
 if ! KEEP=1 SMOKE_COMPOSE_FILE="$WORK/compose" bash scripts/prod_smoke.sh > "$WORK/stack.log" 2>&1; then
   echo "FAIL the production stack did not pass its smoke test:"; tail -40 "$WORK/stack.log"; exit 1
 fi
 grep -E "^(ok|FAIL) +restore drill" "$WORK/stack.log" || true
 read -r -a C < "$WORK/compose"
-cleanup() {
-  "${C[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
-  rm -rf "$WORK"
-}
-trap cleanup EXIT
 failed=0
 
 # The worker's disk probe, swapped for a small tmpfs during the disk drill.
@@ -51,9 +55,11 @@ services:
       - /var/lib/osa-disk:size=8m,mode=1777
 YAML
 
-readiness() {
-  curl -sk -o "$WORK/ready.json" -w '%{http_code}' "https://localhost:$HTTPS_PORT/api/readyz" ||
-    printf '000'
+readiness() { # The HTTP status of /readyz (000 when nothing answers); the body in ready.json.
+  local code
+  code="$(curl -sk -o "$(host_path "$WORK/ready.json")" -w '%{http_code}' \
+    "https://localhost:$HTTPS_PORT/api/readyz" 2>/dev/null || true)"
+  printf '%s' "${code:-000}"
 }
 
 # wait_ready CODE [SECONDS]: readiness answers CODE (503s must name the dependency problem).

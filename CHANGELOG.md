@@ -69,6 +69,12 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   complaint and conditions as unconfirmed, allergies, medicines as stated, accepted results
   with their printed ranges, the interview, papers, consents, and who answered), tagged
   not-ABDM-certified; doctors and administrators; audited (ADR 017).
+- Failure drills nightly (`scripts/failure-drills.sh`, workflow `nightly-failures.yml`):
+  Redis, PostgreSQL and the worker stopped and the data disk filled on the production-mode
+  stack; each shows its known state and raises its alert, then recovers. The first run found
+  that `RedisDown` could never fire: the worker exited when Redis went away, so monitoring saw
+  `WorkerDown` instead and the Redis gauge went stale. The worker now stays up through a Redis
+  outage, reports it, and resumes when Redis is back.
 
 ## [0.7.0]
 
