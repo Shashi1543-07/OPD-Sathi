@@ -25,6 +25,7 @@ import {
   type ConsentCopy,
   type DangerTile as DangerOption,
   type IntakeResponse,
+  type AnsweredBy,
   type OpdCard,
   type Question,
   useKioskHospitalName,
@@ -70,6 +71,13 @@ type QueueTicket = {
   waitMinutes: number | null;
   opdCard: OpdCard | null;
 };
+
+/** Who is answering, as each choice reads on the consent and details screens. */
+const ANSWERED_LABELS = {
+  patient: "answeredPatient",
+  guardian: "answeredGuardian",
+  representative: "answeredRepresentative",
+} as const;
 
 const STEPS: { stage: Stage[]; key: string }[] = [
   { stage: ["consent", "ai"], key: "stepConsent" },
@@ -578,6 +586,10 @@ export function KioskIntake() {
   const [phone, setPhone] = useState("");
   // Queue messages only when the patient ticks the box themselves; never pre-ticked.
   const [smsOptIn, setSmsOptIn] = useState(false);
+  // Who is answering (tasks 7.5.3, 7.11.7): asked with the consent, and asked again for a
+  // child, where it must be chosen (never assumed to be the child).
+  const [answeredBy, setAnsweredBy] = useState<AnsweredBy>("patient");
+  const [childAnswerer, setChildAnswerer] = useState<AnsweredBy | null>(null);
   // "Have you visited before?": ask, then the OPD card (number and PIN), then whether
   // today is about the same problem as the earlier visit.
   const [returningStep, setReturningStep] = useState<"ask" | "card" | "followup">("ask");
@@ -754,6 +766,7 @@ export function KioskIntake() {
       phone || undefined,
       session?.assisted ? name.trim() : undefined,
       smsOptIn ? smsConsent : undefined,
+      isChild ? (childAnswerer ?? undefined) : answeredBy,
     );
     // At the desk the nurse finds an earlier record from the consultation screen.
     if (session?.assisted) {
@@ -840,6 +853,7 @@ export function KioskIntake() {
   if (!session || !consent) return null;
 
   const phoneValid = phone === "" || /^[6-9]\d{9}$/.test(phone);
+  const isChild = age !== "" && Number(age) < 18;
   const ageValid = age !== "" && Number(age) >= 0 && Number(age) <= 120;
   const currentQuestion = editing ?? question;
 
@@ -910,6 +924,32 @@ export function KioskIntake() {
                   : undefined
               }
             />
+            <div className="intake-field">
+              <span id="answered-by-label">{t("whoAnswering")}</span>
+              <div
+                className="intake-segmented intake-segmented--stack"
+                role="radiogroup"
+                aria-labelledby="answered-by-label"
+              >
+                {(["patient", "guardian", "representative"] as const).map((value) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={answeredBy === value}
+                    key={value}
+                    className={answeredBy === value ? "is-selected" : ""}
+                    onClick={() => {
+                      setAnsweredBy(value);
+                      // For a child the details screen asks again, starting from this choice
+                      // unless it was "the patient".
+                      setChildAnswerer(value === "patient" ? null : value);
+                    }}
+                  >
+                    {t(ANSWERED_LABELS[value])}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="intake-actions intake-actions--stack">
               <button
                 type="button"
@@ -917,7 +957,7 @@ export function KioskIntake() {
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
-                    await intake.consent(consent, true);
+                    await intake.consent(consent, true, answeredBy);
                     setConsentGiven(true);
                     // Online AI help is a separate question with its own notice.
                     move(aiConsent ? "ai" : "identity");
@@ -1034,6 +1074,29 @@ export function KioskIntake() {
                 ))}
               </div>
             </div>
+            {isChild && (
+              <div className="intake-field">
+                <span id="child-answerer-label">{t("whoAnsweringChild")}</span>
+                <div
+                  className="intake-segmented intake-segmented--stack"
+                  role="radiogroup"
+                  aria-labelledby="child-answerer-label"
+                >
+                  {(["patient", "guardian", "representative"] as const).map((value) => (
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={childAnswerer === value}
+                      key={value}
+                      className={childAnswerer === value ? "is-selected" : ""}
+                      onClick={() => setChildAnswerer(value)}
+                    >
+                      {t(value === "patient" ? "answeredChildSelf" : ANSWERED_LABELS[value])}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <label className="intake-field">
               <span>{t("phoneQuestion")}</span>
               <small>{t("phoneHint")}</small>
@@ -1084,6 +1147,7 @@ export function KioskIntake() {
                   !ageValid ||
                   !sex ||
                   !phoneValid ||
+                  (isChild && !childAnswerer) ||
                   (session.assisted === true && !name.trim())
                 }
                 onClick={() => void run(submitIdentity)}

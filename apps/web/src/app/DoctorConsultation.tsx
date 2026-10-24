@@ -93,6 +93,8 @@ type PatientContext = {
   queued_at?: string | null;
   /** The patient's choice about online AI help for this visit. */
   ai_help?: "on" | "off" | "withdrawn" | null;
+  /** Who gave the history: the patient, a parent or guardian, or someone helping. */
+  answered_by?: "patient" | "guardian" | "representative" | null;
 };
 type TranscriptTurn = {
   turn_index: number;
@@ -1609,6 +1611,12 @@ export function DoctorConsultation() {
                 <span>
                   <Languages aria-hidden="true" size={14} />
                   {t("answeredIn", { language: t(`lang_${patient.language}`) })}
+                </span>
+              )}
+              {(patient?.answered_by === "guardian" || patient?.answered_by === "representative") && (
+                <span className="cx-answered-by">
+                  <UserRound aria-hidden="true" size={14} />
+                  {t(`answeredBy_${patient.answered_by}`)}
                 </span>
               )}
               <span>

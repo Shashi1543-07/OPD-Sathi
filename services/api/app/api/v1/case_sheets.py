@@ -31,6 +31,11 @@ from app.domain.redflags.engine import RULES
 from app.pdf import render_case_sheet_pdf
 
 router = APIRouter(tags=["case sheets"])
+# Printed on the PDF when someone else gave the history (task 7.11.7).
+_ANSWERED_BY_LINE = {
+    "guardian": "Answered by a parent or guardian",
+    "representative": "Answered by someone helping the patient",
+}
 _RULE_REASONS = {rule.id: rule.reason_en for rule in RULES}
 
 
@@ -82,6 +87,8 @@ class PatientContext(BaseModel):
     # The patient's choice about online AI help: "on", "off" (said no, or never asked), or
     # "withdrawn" (said yes, then stopped it; the AI draft is no longer shown).
     ai_help: Literal["on", "off", "withdrawn"] | None = None
+    # Who gave the history: the patient, a parent or guardian, or a representative.
+    answered_by: Literal["patient", "guardian", "representative"] | None = None
 
 
 class CaseSheetResponse(BaseModel):
@@ -156,7 +163,7 @@ async def get_case_sheet(
                     text(
                         "SELECT v.age_years, p.sex, v.language, v.token_label AS token, "
                         "v.urgency, v.status, d.name_en AS department_name, "
-                        "v.acuity AS triage, v.queued_at, "
+                        "v.acuity AS triage, v.queued_at, v.answered_by, "
                         "CASE WHEN a.withdrawn_at IS NOT NULL THEN 'withdrawn' "
                         "WHEN a.granted THEN 'on' ELSE 'off' END AS ai_help FROM visits v "
                         "JOIN patients p ON p.hospital_id = v.hospital_id AND p.id = v.patient_id "
@@ -248,7 +255,8 @@ async def export_case_sheet_pdf(
             (
                 await connection.execute(
                     text(
-                        "SELECT v.token_label, v.urgency_reasons, v.age_years, p.sex "
+                        "SELECT v.token_label, v.urgency_reasons, v.age_years, p.sex, "
+                        "v.answered_by "
                         "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
                         "AND p.id = v.patient_id "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
@@ -296,8 +304,9 @@ async def export_case_sheet_pdf(
         )
     sex = {"female": "Female", "male": "Male", "other": "Other"}.get(str(visit.get("sex")), "")
     age = visit.get("age_years")
+    answered = _ANSWERED_BY_LINE.get(str(visit.get("answered_by")), "")
     patient_line = " · ".join(
-        part for part in (f"{age} years" if isinstance(age, int) else "", sex) if part
+        part for part in (f"{age} years" if isinstance(age, int) else "", sex, answered) if part
     )
     pdf = render_case_sheet_pdf(
         _without_ai_draft(saved["data"], withdrawn),

@@ -16,6 +16,7 @@ All patient-facing consent, question-bank, danger-tile, and red-flag content bel
 | Red-flag patient messages in `services/api/app/api/v1/intake.py` | Confirm neutral wording and Hindi/Marathi translations | Pending |
 | Phase 14 judge-mode disclaimer and staff “How it works” panel | Clinician safety wording plus Hindi/Marathi translation review before localized use | Pending |
 
+| "Who is answering?" (kiosk consent and details screens, offline form; tasks 7.5.3 and 7.11.7) | Wording in Hindi and Marathi; with counsel: when a parent's or guardian's verifiable consent is needed and whether a child of 12 to 17 may answer alone (the kiosk allows it today when told so) | Pending |
 | `services/api/app/domain/triage/weights.yaml` | Every weight and threshold; that a patient's own rating cannot move them far | Pending |
 
 No clinical sign-off is implied by passing automated checks. Track reviewer names, dates, and approved content versions here after review.

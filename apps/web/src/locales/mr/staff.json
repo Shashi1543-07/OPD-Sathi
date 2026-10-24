@@ -879,5 +879,7 @@
   "systemKiosk_silent": "संपर्क नाही",
   "systemKiosk_not_paired": "जोडलेले नाही",
   "systemKiosk_inactive": "बंद केलेला",
-  "systemKiosk_poster": "फोन चेक-इन पोस्टर"
+  "systemKiosk_poster": "फोन चेक-इन पोस्टर",
+  "answeredBy_guardian": "आई-वडील किंवा पालकांनी उत्तरे दिली",
+  "answeredBy_representative": "रुग्णाला मदत करणाऱ्याने उत्तरे दिली"
 }

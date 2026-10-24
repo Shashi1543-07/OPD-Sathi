@@ -1779,6 +1779,28 @@ class IntakeRepository:
             },
         )
 
+    async def set_answered_by(self, *, hospital_id: UUID, visit_id: UUID, who: str) -> None:
+        """Record who is answering for the patient on the visit and on each of its consents.
+
+        Changes only while the visit is registering; afterwards the record stays as given.
+        """
+        params = {"hospital_id": hospital_id, "visit_id": visit_id, "who": who}
+        await self.connection.execute(
+            text(
+                "UPDATE visits SET answered_by = :who WHERE hospital_id = :hospital_id "
+                "AND id = :visit_id AND status = 'registering'"
+            ),
+            params,
+        )
+        await self.connection.execute(
+            text(
+                "UPDATE consents SET given_by = :who WHERE hospital_id = :hospital_id "
+                "AND visit_id = :visit_id AND given_by <> :who AND EXISTS (SELECT 1 FROM visits "
+                "WHERE hospital_id = :hospital_id AND id = :visit_id AND status = 'registering')"
+            ),
+            params,
+        )
+
     async def withdraw_ai_consent(self, *, hospital_id: UUID, visit_id: UUID, by: str) -> bool:
         """Stop online AI help for a visit; False if it was never granted or already stopped."""
         withdrawn = await self.connection.scalar(

@@ -26,6 +26,10 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **Online AI help switch** (Settings → Departments): administrators turn AI off or on for the
   hospital. The card says when no choice is saved yet (AI is on where the server has it) and
   when the server has no AI, so the switch does nothing.
+- **Who is answering** (kiosk, phone and desk): the consent screen asks whether the patient, a
+  parent or guardian, or someone helping is answering; for a child the details screen asks
+  again and needs a choice. The doctor's screen and the case sheet PDF say when someone else
+  gave the history. The offline short form asks it too.
 
 ### Technical
 
@@ -41,6 +45,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   stored); the version from `/patients/lookup` guards against re-issuing twice. Audited
   without the PIN.
 - `/admin/ai-settings` also returns `chosen` and `available`.
+- `visits.answered_by` and `consents.given_by` (migration `0031_answered_by`); `answered_by`
+  on the consent, identity (required under 18: `ANSWERER_REQUIRED`) and offline submission
+  payloads; forms queued by older kiosks are recorded as the patient's own.
 
 ## [0.7.0]
 

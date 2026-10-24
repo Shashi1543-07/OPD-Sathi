@@ -3803,6 +3803,111 @@
       "duration_seconds": 0.12
     },
     {
+      "id": "ui.kiosk.offlineAnsweredBy",
+      "lang": "en",
+      "text_sha256": "15cee356c00b56ac87a554513d4b9f613311d5d630f3cbad10f769853a0bb13d",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredBy",
+      "lang": "hi",
+      "text_sha256": "c44f251bff25c572f9109cbfbb0cc2c2d813ccb3e87a01dd2eb4080a04e51916",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredBy",
+      "lang": "mr",
+      "text_sha256": "12eae52694258288ee7db34205c9576029011001dea327c22cb448e5fb62e7bc",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredChoose",
+      "lang": "en",
+      "text_sha256": "0b24aed53ab654eae8cd8d2b2c7196527480b3591d079fb08cbbd697dfe4169e",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredChoose",
+      "lang": "hi",
+      "text_sha256": "eba3e010d596e41d623404b1da05273a1cd91074883ffb27a7e644622b9809c7",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredChoose",
+      "lang": "mr",
+      "text_sha256": "16196c9b36d65b8eabed39325b1e92450d25f6467687ce59fe14f90b5ba8f91e",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredGuardian",
+      "lang": "en",
+      "text_sha256": "b953198047beec9287b907714f415ebea60f515d96645f1fe7483891477985df",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredGuardian",
+      "lang": "hi",
+      "text_sha256": "3f532d189dbecac4870e6052f180530fdcf6d065ae390d81ca23835b32d6257a",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredGuardian",
+      "lang": "mr",
+      "text_sha256": "2bd676544343642f83a6dbb853258a1b581d987d1a12bd3a9b69d2013ad7393c",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredPatient",
+      "lang": "en",
+      "text_sha256": "7ecd304013ea04720d821bfcfc6738e094b3f65b3948b58920b557160c07bb99",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredPatient",
+      "lang": "hi",
+      "text_sha256": "9f4c696b29b88cff59f1a5284b957fa5446af3edd77bf370539154ad44e5cf9c",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredPatient",
+      "lang": "mr",
+      "text_sha256": "66b55f5bf73f6d1cf0e3cbb2b171fe2714c378b6da4cb0a1bfc8d6e9ae774ed3",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredRepresentative",
+      "lang": "en",
+      "text_sha256": "5e0c97844847612b73a047d2786eaff962e14aff30ebaf210e3a667a06cbd425",
+      "file": "en/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredRepresentative",
+      "lang": "hi",
+      "text_sha256": "ae9a8f21bf5bc3f55bb955707ce2f78b8541ba45a80f055621ac1d573727e688",
+      "file": "hi/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
+      "id": "ui.kiosk.offlineAnsweredRepresentative",
+      "lang": "mr",
+      "text_sha256": "76f0e454dff5e9d7eae5f138af61c792161ed51dd47fe4e3edf9bc05c310ecd1",
+      "file": "mr/mock-tone.wav",
+      "duration_seconds": 0.12
+    },
+    {
       "id": "ui.kiosk.offlineBack",
       "lang": "en",
       "text_sha256": "69855b44164c92a12ffc8b9c0c37672eac58d93680a3864df81ee93aa63e9ee3",

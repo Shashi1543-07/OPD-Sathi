@@ -879,5 +879,7 @@
   "systemKiosk_silent": "Silent",
   "systemKiosk_not_paired": "Not paired",
   "systemKiosk_inactive": "Switched off",
-  "systemKiosk_poster": "Phone check-in poster"
+  "systemKiosk_poster": "Phone check-in poster",
+  "answeredBy_guardian": "Answered by a parent or guardian",
+  "answeredBy_representative": "Answered by someone helping the patient"
 }

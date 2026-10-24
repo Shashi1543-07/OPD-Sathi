@@ -2297,6 +2297,8 @@ export interface components {
             sha256: string;
             /** Granted */
             granted: boolean;
+            /** Answered By */
+            answered_by?: ("patient" | "guardian" | "representative") | null;
         };
         /** CreateAssistedSessionPayload */
         CreateAssistedSessionPayload: {
@@ -2475,6 +2477,8 @@ export interface components {
              */
             sms_opt_in: boolean;
             sms_consent?: components["schemas"]["ConsentNoticeRef"] | null;
+            /** Answered By */
+            answered_by?: ("patient" | "guardian" | "representative") | null;
         };
         /**
          * InterviewSettingsPatch
@@ -2707,6 +2711,8 @@ export interface components {
             allergies: string;
             /** Danger Tile Ids */
             danger_tile_ids?: string[];
+            /** Answered By */
+            answered_by?: ("patient" | "guardian" | "representative") | null;
         };
         /** OpdCardPayload */
         OpdCardPayload: {
@@ -2778,6 +2784,8 @@ export interface components {
             queued_at?: string | null;
             /** Ai Help */
             ai_help?: ("on" | "off" | "withdrawn") | null;
+            /** Answered By */
+            answered_by?: ("patient" | "guardian" | "representative") | null;
         };
         /** PatientDocument */
         PatientDocument: {

@@ -189,5 +189,10 @@
   "mobileResume": "Continue where I left off",
   "mobileStartOver": "Start again",
   "mobileVoiceNote": "Speaking your answers needs the hospital's secure link. You can tap or type your answers.",
-  "mobileKeepPage": "Keep this page open. If you close it, open the same check-in link again on this phone."
+  "mobileKeepPage": "Keep this page open. If you close it, open the same check-in link again on this phone.",
+  "offlineAnsweredBy": "Who is answering?",
+  "offlineAnsweredChoose": "Choose one",
+  "offlineAnsweredPatient": "The patient",
+  "offlineAnsweredGuardian": "A parent or guardian",
+  "offlineAnsweredRepresentative": "Someone helping the patient"
 }

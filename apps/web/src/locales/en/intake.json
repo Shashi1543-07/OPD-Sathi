@@ -132,5 +132,11 @@
   "papersRemove": "Remove",
   "papersRemoveLabel": "Remove photo {{number}}: {{kind}}",
   "papersRemoved": "Photo removed.",
-  "papersPhotoAlt": "Photo {{number}}: {{kind}}"
+  "papersPhotoAlt": "Photo {{number}}: {{kind}}",
+  "whoAnswering": "Who is answering?",
+  "answeredPatient": "I am the patient",
+  "answeredGuardian": "I am a parent or guardian",
+  "answeredRepresentative": "I am helping the patient",
+  "whoAnsweringChild": "Who is answering for this child?",
+  "answeredChildSelf": "The child is answering"
 }

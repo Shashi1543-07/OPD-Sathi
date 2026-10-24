@@ -72,7 +72,14 @@ async function signedInDoctor(page: Page) {
       case_sheet: caseSheet(review, examination),
       confirmed_by_patient: true,
       confirmed_at: "2026-10-16T05:00:00Z",
-      patient: { token: "MED-021", age_years: 52, sex: "female", language: "hi", urgency: "routine" },
+      patient: {
+        token: "MED-021",
+        age_years: 52,
+        sex: "female",
+        language: "hi",
+        urgency: "routine",
+        answered_by: "representative",
+      },
     },
     headers: { ETag: `"${version}"` },
   });
@@ -132,6 +139,8 @@ test("a doctor checks the AI draft against its sources, accepts it and records A
   const requests = await signedInDoctor(page);
   await page.goto(`/staff/consultations?visit_id=${visitId}&status=in_consult`);
 
+  // Someone else gave the history; the doctor sees that first.
+  await expect(page.getByText("Answered by someone helping the patient")).toBeVisible();
   const ai = page.locator(".cx-card--ai").first();
   await expect(ai.getByText("Draft · not reviewed")).toBeVisible();
   // Each sentence cites the answers it rests on; one tap opens that answer.

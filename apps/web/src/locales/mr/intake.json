@@ -132,5 +132,11 @@
   "papersRemove": "काढून टाका",
   "papersRemoveLabel": "फोटो {{number}} काढून टाका: {{kind}}",
   "papersRemoved": "फोटो काढून टाकला.",
-  "papersPhotoAlt": "फोटो {{number}}: {{kind}}"
+  "papersPhotoAlt": "फोटो {{number}}: {{kind}}",
+  "whoAnswering": "कोण उत्तर देत आहे?",
+  "answeredPatient": "मी रुग्ण आहे",
+  "answeredGuardian": "मी आई-वडील किंवा पालक आहे",
+  "answeredRepresentative": "मी रुग्णाला मदत करत आहे",
+  "whoAnsweringChild": "या मुलासाठी कोण उत्तर देत आहे?",
+  "answeredChildSelf": "मूल स्वतः उत्तर देत आहे"
 }
