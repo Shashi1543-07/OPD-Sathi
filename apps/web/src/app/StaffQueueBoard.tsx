@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import "../locales/staff";
 import {
@@ -108,31 +109,33 @@ function initialSoundPreference(): boolean {
   }
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  queued: "Waiting",
-  called: "Called",
-  in_consult: "In consultation",
-};
-
+/** Routing codes with a name of their own on the board; others are shown as written. */
 const ROUTE_LABELS: Record<string, string> = {
-  NURSE_TRIAGE: "Nurse triage",
-  GEN: "General Medicine",
-  MED: "General Medicine",
-  PED: "Pediatrics",
+  NURSE_TRIAGE: "qbRouteNurseTriage",
+  GEN: "qbRouteGeneralMedicine",
+  MED: "qbRouteGeneralMedicine",
+  PED: "qbRoutePaediatrics",
 };
 
-function statusLabel(status: string) {
-  return STATUS_LABELS[status] ?? status.replace(/_/g, " ");
+function statusLabel(status: string, t: TFunction) {
+  return t(`queueStatus_${status}`, { defaultValue: status.replace(/_/g, " ") });
 }
 
-function routeLabel(code: string | null | undefined) {
-  if (!code) return "Not decided";
-  return ROUTE_LABELS[code] ?? code.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+function routeLabel(code: string | null | undefined, t: TFunction) {
+  if (!code) return t("qbRouteUndecided");
+  const key = ROUTE_LABELS[code];
+  return key
+    ? t(key)
+    : code.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
-function sexLabel(sex: string | null | undefined) {
-  if (!sex) return "Sex —";
-  return sex.charAt(0).toUpperCase() + sex.slice(1);
+function sexLabel(sex: string | null | undefined, t: TFunction) {
+  if (!sex) return t("qbSexUnknown");
+  return t(`sex_${sex}`, { defaultValue: sex.charAt(0).toUpperCase() + sex.slice(1) });
+}
+
+function ageLabel(age: number | null, t: TFunction) {
+  return age === null ? t("qbAgeUnknown") : t("yearsShort", { age });
 }
 
 function sentenceCase(text: string | null | undefined) {
@@ -140,13 +143,13 @@ function sentenceCase(text: string | null | undefined) {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : "";
 }
 
-function formatWait(minutes: number | null) {
+function formatWait(minutes: number | null, t: TFunction) {
   if (minutes === null) return "—";
-  if (minutes < 1) return "Just arrived";
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 1) return t("qbJustArrived");
+  if (minutes < 60) return t("qbWaitMinutes", { minutes });
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest ? `${hours} h ${rest} m` : `${hours} h`;
+  return rest ? t("qbWaitHoursMinutes", { hours, minutes: rest }) : t("qbWaitHours", { hours });
 }
 
 export function StaffQueueBoard() {
@@ -224,15 +227,9 @@ export function StaffQueueBoard() {
         cache: "no-store",
       });
       if (!response.ok) {
-        if (response.status === 401)
-          throw new Error("Your staff session expired. Sign in again.");
-        if (response.status === 403)
-          throw new Error(
-            "This staff account cannot access the selected queue.",
-          );
-        throw new Error(
-          `Queue is temporarily unavailable (API ${response.status}).`,
-        );
+        if (response.status === 401) throw new Error(t("qbSessionExpired"));
+        if (response.status === 403) throw new Error(t("qbNoAccess"));
+        throw new Error(t("qbUnavailableStatus", { status: response.status }));
       }
       const body = (await response.json()) as {
         items: QueueItem[];
@@ -280,7 +277,7 @@ export function StaffQueueBoard() {
         );
       }
     },
-    [departmentId, statusFilter, hospitalId, userScope],
+    [departmentId, statusFilter, hospitalId, userScope, t],
   );
 
   const refreshAlerts = useCallback(async () => {
@@ -343,9 +340,9 @@ export function StaffQueueBoard() {
       void refresh().catch((cause) => {
         setConnection("offline");
         setError(
-          cause instanceof Error
-            ? `${cause.message} Reconnecting…`
-            : "Queue is temporarily unavailable. Reconnecting…",
+          t("qbReconnecting", {
+            message: cause instanceof Error ? cause.message : t("qbUnavailable"),
+          }),
         );
       });
       void refreshAlerts();
@@ -481,11 +478,7 @@ export function StaffQueueBoard() {
       })
       .catch((cause) => {
         setConnection("offline");
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Queue is temporarily unavailable.",
-        );
+        setError(cause instanceof Error ? cause.message : t("qbUnavailable"));
       });
     if (departmentId) {
       connect();
@@ -507,6 +500,7 @@ export function StaffQueueBoard() {
     chime,
     hospitalId,
     userScope,
+    t,
   ]);
 
   useEffect(() => {
@@ -530,7 +524,7 @@ export function StaffQueueBoard() {
       headers: { "Idempotency-Key": newRequestId() },
     });
     if (!response.ok) {
-      setError("Could not acknowledge this alert. Refresh and try again.");
+      setError(t("qbAckFailed"));
       return;
     }
     setAlerts((current) => current.filter((alert) => alert.id !== alertId));
@@ -547,10 +541,10 @@ export function StaffQueueBoard() {
       });
       if (!response.ok)
         throw new Error(
-          (await queueProblem(response, t)) ?? "That queue action is no longer available.",
+          (await queueProblem(response, t)) ?? t("qbActionUnavailable"),
         );
     } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : "Queue action failed.");
+      setActionError(cause instanceof Error ? cause.message : t("qbActionFailed"));
     } finally {
       setWorking(undefined);
     }
@@ -570,12 +564,12 @@ export function StaffQueueBoard() {
       );
       if (!response.ok)
         throw new Error(
-          (await queueProblem(response, t)) ?? "Could not call the next patient.",
+          (await queueProblem(response, t)) ?? t("qbCallNextFailed"),
         );
       const body = (await response.json()) as { token?: string };
       if (body.token) setNotice(t("calledToken", { token: body.token }));
     } catch (cause) {
-      setActionError(cause instanceof Error ? cause.message : "Could not call the next patient.");
+      setActionError(cause instanceof Error ? cause.message : t("qbCallNextFailed"));
     } finally {
       setWorking(undefined);
     }
@@ -599,16 +593,14 @@ export function StaffQueueBoard() {
           reason: value.reason.trim(),
         }),
       });
-      if (!response.ok) throw new Error("Could not update the queue priority.");
+      if (!response.ok) throw new Error(t("qbOverrideFailed"));
       setOverrideValues((current) => ({
         ...current,
         [visitId]: { ...value, reason: "" },
       }));
       await refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Queue override failed.",
-      );
+      setError(cause instanceof Error ? cause.message : t("qbOverrideFailed"));
     } finally {
       setWorking(undefined);
     }
@@ -631,12 +623,10 @@ export function StaffQueueBoard() {
           body: JSON.stringify({ reason }),
         },
       );
-      if (!response.ok) throw new Error("Could not confirm this route.");
+      if (!response.ok) throw new Error(t("qbRouteFailed"));
       await refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Route confirmation failed.",
-      );
+      setError(cause instanceof Error ? cause.message : t("qbRouteFailed"));
     } finally {
       setWorking(undefined);
     }
@@ -648,11 +638,7 @@ export function StaffQueueBoard() {
     try {
       await refresh(nextCursor, true);
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not load more patients.",
-      );
+      setError(cause instanceof Error ? cause.message : t("qbLoadMoreFailed"));
     } finally {
       setLoadingMore(false);
     }
@@ -701,9 +687,15 @@ export function StaffQueueBoard() {
   };
   const activeDepartment = departments.find((department) => department.id === departmentId);
   const kpis = [
-    { key: "queued", label: "Waiting", value: counts.queued, icon: Users, tone: "wait" },
-    { key: "called", label: "Called", value: counts.called, icon: PhoneCall, tone: "called" },
-    { key: "in_consult", label: "In consultation", value: counts.in_consult, icon: Stethoscope, tone: "consult" },
+    { key: "queued", label: t("queueStatus_queued"), value: counts.queued, icon: Users, tone: "wait" },
+    { key: "called", label: t("queueStatus_called"), value: counts.called, icon: PhoneCall, tone: "called" },
+    {
+      key: "in_consult",
+      label: t("queueStatus_in_consult"),
+      value: counts.in_consult,
+      icon: Stethoscope,
+      tone: "consult",
+    },
   ] as const;
 
   function primaryAction(item: QueueItem) {
@@ -711,7 +703,7 @@ export function StaffQueueBoard() {
       return { name: "call" as const, label: t("callPatient"), Icon: PhoneCall, wait: 0 };
     if (item.status === "called") {
       if (canConsult)
-        return { name: "start" as const, label: "Start consult", Icon: Stethoscope, wait: 0 };
+        return { name: "start" as const, label: t("qbStartConsult"), Icon: Stethoscope, wait: 0 };
       // At the desk, the next step for a called patient who has not come is a missed call.
       const wait = graceLeft(item.called_at, graceSeconds, now);
       return {
@@ -722,7 +714,7 @@ export function StaffQueueBoard() {
       };
     }
     if (!canConsult) return null;
-    return { name: "complete" as const, label: "Complete", Icon: CheckCircle2, wait: 0 };
+    return { name: "complete" as const, label: t("qbComplete"), Icon: CheckCircle2, wait: 0 };
   }
 
   // Built once per language: the board re-renders on every live update of a long queue.
@@ -743,40 +735,40 @@ export function StaffQueueBoard() {
   }
 
   return (
-    <section className="staff-queue qb" aria-label="Live patient queue">
+    <section className="staff-queue qb" aria-label={t("qbLiveQueue")}>
       <header className="qb-head">
         <div className="qb-head-title">
           <h2>
-            Queue
+            {t("queue")}
             {activeDepartment && <span className="qb-dept-name"> · {activeDepartment.name}</span>}
           </h2>
-          <p>Today's waiting room · calling order</p>
+          <p>{t("qbSubtitle")}</p>
         </div>
         <div className="qb-head-actions">
           <ConnectionIndicator state={connection} />
-          <label className="qb-sound" title="Play a sound when a new alert arrives">
+          <label className="qb-sound" title={t("qbSoundHint")}>
             <input
               type="checkbox"
               checked={soundEnabled}
               onChange={(event) => setSoundEnabled(event.target.checked)}
             />
             {soundEnabled ? <Bell aria-hidden="true" size={16} /> : <BellOff aria-hidden="true" size={16} />}
-            Alert sound
+            {t("qbSound")}
           </label>
           <button type="button" className="qb-btn" onClick={() => void refresh()}>
-            <RefreshCw aria-hidden="true" size={16} /> Refresh
+            <RefreshCw aria-hidden="true" size={16} /> {t("refreshPatients")}
           </button>
         </div>
       </header>
 
-      <div className="qb-stats" role="group" aria-label="Queue summary">
+      <div className="qb-stats" role="group" aria-label={t("qbSummary")}>
         {kpis.map(({ key, label, value, icon: Icon, tone }) => (
           <button
             type="button"
             key={key}
             className={`qb-stat qb-stat--${tone}`}
             aria-pressed={statusFilter === key}
-            title={`Show ${label.toLowerCase()} patients only`}
+            title={t("qbShowOnly", { status: label })}
             onClick={() => setStatusFilter(statusFilter === key ? "all" : key)}
           >
             <span className="qb-stat-icon" aria-hidden="true">
@@ -792,7 +784,7 @@ export function StaffQueueBoard() {
           type="button"
           className="qb-stat qb-stat--attention"
           aria-pressed={attentionOnly}
-          title="Show priority and urgent patients only"
+          title={t("qbShowAttention")}
           onClick={() => setAttentionOnly(!attentionOnly)}
         >
           <span className="qb-stat-icon" aria-hidden="true">
@@ -800,18 +792,18 @@ export function StaffQueueBoard() {
           </span>
           <span className="qb-stat-text">
             <strong>{counts.attention}</strong>
-            <span>Priority / urgent</span>
+            <span>{t("qbAttention")}</span>
           </span>
         </button>
       </div>
 
-      <div className="qb-filters" role="search" aria-label="Queue filters">
+      <div className="qb-filters" role="search" aria-label={t("qbFilters")}>
         <label className="qb-field">
-          <span>Department</span>
+          <span>{t("department")}</span>
           <span className="qb-control">
             <Stethoscope aria-hidden="true" size={16} />
             <select
-              aria-label="Department"
+              aria-label={t("department")}
               value={departmentId}
               disabled={departments.length === 0}
               onChange={(event) => {
@@ -819,7 +811,7 @@ export function StaffQueueBoard() {
                 setDepartmentId(event.target.value);
               }}
             >
-              {departments.length === 0 && <option value="">Loading…</option>}
+              {departments.length === 0 && <option value="">{t("qbLoading")}</option>}
               {departments.map((department) => (
                 <option key={department.id} value={department.id}>
                   {department.name}
@@ -829,29 +821,29 @@ export function StaffQueueBoard() {
           </span>
         </label>
         <label className="qb-field">
-          <span>Patient status</span>
+          <span>{t("qbStatusFilter")}</span>
           <span className="qb-control">
             <select
-              aria-label="Status"
+              aria-label={t("visitStatus")}
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as QueueStatus)}
             >
-              <option value="all">All active</option>
-              <option value="queued">Waiting</option>
-              <option value="called">Called</option>
-              <option value="in_consult">In consultation</option>
+              <option value="all">{t("qbAllActive")}</option>
+              <option value="queued">{t("queueStatus_queued")}</option>
+              <option value="called">{t("queueStatus_called")}</option>
+              <option value="in_consult">{t("queueStatus_in_consult")}</option>
             </select>
           </span>
         </label>
         <label className="qb-field qb-field--search">
-          <span>Search</span>
+          <span>{t("qbSearch")}</span>
           <span className="qb-control">
             <Search aria-hidden="true" size={16} />
             <input
               type="search"
               value={search}
-              placeholder="Token or complaint…"
-              aria-label="Search token or complaint"
+              placeholder={t("qbSearchPlaceholder")}
+              aria-label={t("qbSearchLabel")}
               onChange={(event) => setSearch(event.target.value)}
             />
           </span>
@@ -862,15 +854,15 @@ export function StaffQueueBoard() {
             checked={attentionOnly}
             onChange={(event) => setAttentionOnly(event.target.checked)}
           />
-          Priority / urgent only
+          {t("qbAttentionOnly")}
         </label>
       </div>
 
       {alerts.length > 1 && (
-        <p className="qb-alerts-title">{alerts.length} alerts need attention · newest first</p>
+        <p className="qb-alerts-title">{t("qbAlertsCount", { count: alerts.length })}</p>
       )}
       {alerts.length > 0 && (
-        <section className="qb-alerts" aria-label="Unacknowledged staff alerts" aria-live="assertive">
+        <section className="qb-alerts" aria-label={t("qbAlertsLabel")} aria-live="assertive">
           {alerts.map((alert) => {
             const help = alert.rule_id === "PATIENT_HELP";
             // A danger-sign tile is stored by its code; say what the patient tapped.
@@ -886,21 +878,21 @@ export function StaffQueueBoard() {
                   <strong>
                     {help ? t("helpRequested") : alert.level === "priority" ? t("priorityAlert") : t("urgentAlert")}
                     {" · "}
-                    {alert.token_label ?? "Patient at kiosk"}
+                    {alert.token_label ?? t("qbAlertAtKiosk")}
                   </strong>
                   <span>
-                    {alert.reason_en ?? alert.rule_id ?? "Review this patient now."}
+                    {alert.reason_en ?? alert.rule_id ?? t("qbAlertReview")}
                     {alert.evidence && !help
                       ? alert.rule_id === "AI_TRIAGE_REVIEW" || alert.source === "llm"
-                        ? ` — AI quoted: “${alert.evidence}”`
+                        ? t("qbAlertAiQuoted", { text: alert.evidence })
                         : tile
-                          ? ` — patient tapped “${tile}”`
-                          : ` — patient said “${alert.evidence}”`
+                          ? t("qbAlertTapped", { text: tile })
+                          : t("qbAlertSaid", { text: alert.evidence })
                       : ""}
                   </span>
                 </div>
                 <button type="button" className="qb-btn" onClick={() => void acknowledge(alert.id)}>
-                  Acknowledge
+                  {t("qbAcknowledge")}
                 </button>
               </article>
             );
@@ -927,7 +919,7 @@ export function StaffQueueBoard() {
                 <strong className="qb-missed-token">{patient.token}</strong>
                 <span className="qb-missed-text">
                   <span>
-                    {patient.age_years === null ? "Age —" : `${patient.age_years} y`} · {sexLabel(patient.sex)}
+                    {ageLabel(patient.age_years, t)} · {sexLabel(patient.sex, t)}
                     {patient.complaint ? ` · ${sentenceCase(patient.complaint)}` : ""}
                   </span>
                   <small>
@@ -953,7 +945,7 @@ export function StaffQueueBoard() {
                     align="end"
                     triggerClassName="qb-more"
                     panelClassName="qb-menu"
-                    ariaLabel={`More actions for ${patient.token}`}
+                    ariaLabel={t("qbMoreActionsFor", { token: patient.token })}
                     label={<MoreHorizontal aria-hidden="true" size={18} />}
                   >
                     {(closeMenu) => (
@@ -977,18 +969,18 @@ export function StaffQueueBoard() {
         </section>
       )}
 
-      <section className="qb-list" aria-label="Patients in queue">
+      <section className="qb-list" aria-label={t("qbPatientsInQueue")}>
         <header className="qb-list-head">
           <h3>
-            <Users aria-hidden="true" size={18} /> Patients in queue
+            <Users aria-hidden="true" size={18} /> {t("qbPatientsInQueue")}
             <span className="qb-count">
               {orderedItems.length === items.length
-                ? `${items.length} ${items.length === 1 ? "patient" : "patients"}`
-                : `${orderedItems.length} of ${items.length}`}
+                ? t("qbPatientCount", { count: items.length })
+                : t("qbShownOf", { shown: orderedItems.length, total: items.length })}
             </span>
           </h3>
           <span className="qb-sort">
-            <ListOrdered aria-hidden="true" size={16} /> Sorted by calling order
+            <ListOrdered aria-hidden="true" size={16} /> {t("qbSorted")}
           </span>
         </header>
 
@@ -999,10 +991,10 @@ export function StaffQueueBoard() {
         {queueLoaded && departments.length > 0 && orderedItems.length === 0 && (
           <div className="qb-empty" role="status">
             <Users aria-hidden="true" size={28} />
-            <p>{items.length > 0 ? "No patients match these filters." : t("noQueueMatches")}</p>
+            <p>{items.length > 0 ? t("qbNoFilterMatches") : t("noQueueMatches")}</p>
             {filtersActive && (
               <button type="button" className="qb-btn" onClick={clearFilters}>
-                Clear filters
+                {t("clearFilters")}
               </button>
             )}
           </div>
@@ -1011,15 +1003,15 @@ export function StaffQueueBoard() {
         {orderedItems.length > 0 && (
           <div className="qb-table">
             <div className="qb-row qb-row--head" aria-hidden="true">
-              <span>Token</span>
-              <span>Patient</span>
-              <span>Complaint</span>
-              <span>Priority</span>
-              <span>Waiting</span>
-              <span>Status</span>
-              <span className="qb-col-actions">Actions</span>
+              <span>{t("visitToken")}</span>
+              <span>{t("patientColumn")}</span>
+              <span>{t("qbColComplaint")}</span>
+              <span>{t("qbColPriority")}</span>
+              <span>{t("qbColWaiting")}</span>
+              <span>{t("visitStatus")}</span>
+              <span className="qb-col-actions">{t("qbColActions")}</span>
             </div>
-            <div className="staff-queue-viewport qb-viewport" ref={scrollRef} role="region" aria-label="Queue patients">
+            <div className="staff-queue-viewport qb-viewport" ref={scrollRef} role="region" aria-label={t("qbViewport")}>
               <div className="staff-queue-virtual" style={{ height: `${virtualizer.getTotalSize()}px` }}>
                 {virtualizer.getVirtualItems().map((virtualRow) => {
                   const item = orderedItems[virtualRow.index];
@@ -1040,17 +1032,17 @@ export function StaffQueueBoard() {
                         <div className="qb-row">
                           <div className="qb-token">
                             <strong>{item.token}</strong>
-                            <span>#{item.position} in line</span>
+                            <span>{t("qbPosition", { position: item.position })}</span>
                           </div>
                           <div className="qb-patient">
                             <UserRound aria-hidden="true" size={16} />
                             <span>
-                              {item.age_years === null ? "Age —" : `${item.age_years} y`} · {sexLabel(item.sex)}
+                              {ageLabel(item.age_years, t)} · {sexLabel(item.sex, t)}
                             </span>
                           </div>
                           <div className="qb-complaint" title={item.complaint}>
                             <span className="qb-complaint-text">
-                              {sentenceCase(item.complaint) || <span className="qb-muted">Not recorded</span>}
+                              {sentenceCase(item.complaint) || <span className="qb-muted">{t("qbNotRecorded")}</span>}
                             </span>
                             {item.needs_assistance && (
                               <span className="qb-flag">
@@ -1080,10 +1072,10 @@ export function StaffQueueBoard() {
                           </div>
                           <div className="qb-wait">
                             <Clock3 aria-hidden="true" size={15} />
-                            {formatWait(waitMinutes(item.queued_at, now))}
+                            {formatWait(waitMinutes(item.queued_at, now), t)}
                           </div>
                           <div className="qb-status-cell">
-                            <span className={`qb-status qb-status--${item.status}`}>{statusLabel(item.status)}</span>
+                            <span className={`qb-status qb-status--${item.status}`}>{statusLabel(item.status, t)}</span>
                             {item.status !== "queued" && (item.called_by_me || item.called_by_name) && (
                               <small className="qb-called-by">
                                 {item.called_by_me
@@ -1116,7 +1108,7 @@ export function StaffQueueBoard() {
                                 align="end"
                                 triggerClassName="qb-more"
                                 panelClassName="qb-menu"
-                                ariaLabel={`More actions for ${item.token}`}
+                                ariaLabel={t("qbMoreActionsFor", { token: item.token })}
                                 label={<MoreHorizontal aria-hidden="true" size={18} />}
                               >
                                 {(closeMenu) => (
@@ -1155,9 +1147,9 @@ export function StaffQueueBoard() {
                                     )}
                                     {canOverride && item.status === "queued" && (
                                       <div className="qb-override">
-                                        <strong>Change priority</strong>
+                                        <strong>{t("qbChangePriority")}</strong>
                                         <label>
-                                          Priority
+                                          {t("qbColPriority")}
                                           <select
                                             value={overrideValues[item.visit_id]?.urgency ?? item.urgency}
                                             onChange={(event) =>
@@ -1170,18 +1162,18 @@ export function StaffQueueBoard() {
                                               }))
                                             }
                                           >
-                                            <option value="routine">Routine</option>
-                                            <option value="priority">Priority</option>
-                                            <option value="urgent">Urgent</option>
+                                            <option value="routine">{t("qbLevelRoutine")}</option>
+                                            <option value="priority">{t("qbLevelPriority")}</option>
+                                            <option value="urgent">{t("qbLevelUrgent")}</option>
                                           </select>
                                         </label>
                                         <label>
-                                          Reason
+                                          {t("qbReason")}
                                           <input
                                             value={overrideValues[item.visit_id]?.reason ?? ""}
                                             maxLength={500}
                                             minLength={5}
-                                            placeholder="At least 5 characters"
+                                            placeholder={t("qbReasonHint")}
                                             onChange={(event) =>
                                               setOverrideValues((current) => ({
                                                 ...current,
@@ -1202,7 +1194,7 @@ export function StaffQueueBoard() {
                                             void override(item.visit_id);
                                           }}
                                         >
-                                          Apply override
+                                          {t("qbApplyOverride")}
                                         </button>
                                       </div>
                                     )}
@@ -1216,13 +1208,13 @@ export function StaffQueueBoard() {
                           <div className="qb-route">
                             <AlertTriangle aria-hidden="true" size={15} />
                             <span>
-                              Department not confirmed — suggested: <b>{routeLabel(item.routing.department_code)}</b>
+                              {t("qbRouteUnconfirmed")} <b>{routeLabel(item.routing.department_code, t)}</b>
                             </span>
                             {canOverride ? (
                               <span className="qb-route-form">
                                 <input
-                                  aria-label="Reason"
-                                  placeholder="Reason (5+ characters)"
+                                  aria-label={t("qbReason")}
+                                  placeholder={t("qbReasonPlaceholder")}
                                   value={routeReasons[item.visit_id] ?? ""}
                                   maxLength={500}
                                   minLength={5}
@@ -1236,11 +1228,11 @@ export function StaffQueueBoard() {
                                   disabled={busy || (routeReasons[item.visit_id]?.trim().length ?? 0) < 5}
                                   onClick={() => void confirmRoute(item.visit_id)}
                                 >
-                                  Confirm department
+                                  {t("qbConfirmDepartment")}
                                 </button>
                               </span>
                             ) : (
-                              <span className="qb-muted">A nurse will confirm.</span>
+                              <span className="qb-muted">{t("qbNurseWillConfirm")}</span>
                             )}
                           </div>
                         )}
@@ -1257,7 +1249,7 @@ export function StaffQueueBoard() {
                 disabled={loadingMore}
                 onClick={() => void loadMore()}
               >
-                {loadingMore ? "Loading…" : "Load more patients"}
+                {loadingMore ? t("qbLoading") : t("qbLoadMore")}
               </button>
             )}
           </div>
@@ -1265,14 +1257,14 @@ export function StaffQueueBoard() {
       </section>
 
       {nextPatient && (
-        <section className="qb-next" aria-label="Next action">
+        <section className="qb-next" aria-label={t("qbNextAction")}>
           <div className="qb-next-text">
             <span className="qb-next-label">
-              <PhoneCall aria-hidden="true" size={16} /> Next to call
+              <PhoneCall aria-hidden="true" size={16} /> {t("qbNextToCall")}
             </span>
             <strong>{nextPatient.token}</strong>
             <span>
-              {nextPatient.age_years === null ? "Age —" : `${nextPatient.age_years} y`} · {sexLabel(nextPatient.sex)}
+              {ageLabel(nextPatient.age_years, t)} · {sexLabel(nextPatient.sex, t)}
               {nextPatient.complaint ? ` · ${sentenceCase(nextPatient.complaint)}` : ""}
             </span>
           </div>
