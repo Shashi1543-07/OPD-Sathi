@@ -48,6 +48,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - `visits.answered_by` and `consents.given_by` (migration `0031_answered_by`); `answered_by`
   on the consent, identity (required under 18: `ANSWERER_REQUIRED`) and offline submission
   payloads; forms queued by older kiosks are recorded as the patient's own.
+- Decisions recorded: no PgBouncer yet, with a connection budget and a test that keeps
+  transaction pooling possible (ADR 013); patients do not view records in v1 (ADR 014); no
+  drug-interaction checks (ADR 015). New: `docs/LIMITATIONS.md`, `docs/RAG_DESIGN.md`.
 
 ## [0.7.0]
 

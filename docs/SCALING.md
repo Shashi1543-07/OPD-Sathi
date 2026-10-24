@@ -22,7 +22,7 @@ WEB_CONCURRENCY x DB_POOL_MAX   (API)
 must stay below PostgreSQL max_connections (100 by default)
 ```
 
-With the defaults that is 2 x 20 + 15 + 5 = 60. Raising `WEB_CONCURRENCY` to 4 needs `DB_POOL_MAX` of 20 at most (80 + 20 = 100 is already the limit, so lower it to 15) or a higher `max_connections`. PgBouncer is not configured yet (task 7.8.4).
+With the defaults that is 2 x 20 + 15 + 5 = 60. Raising `WEB_CONCURRENCY` to 4 needs `DB_POOL_MAX` of 20 at most (80 + 20 = 100 is already the limit, so lower it to 15) or a higher `max_connections`. PgBouncer is not used (ADR 013: the trigger to add it, and the test that keeps transaction pooling possible).
 
 `DATABASE_READ_URL`, when set, is used for the one pure-read heavy query: the report CSV export. Every other report route also writes an audit entry in the same transaction and stays on the primary. Leave it empty unless a replica exists; the export then reads from the primary.
 
