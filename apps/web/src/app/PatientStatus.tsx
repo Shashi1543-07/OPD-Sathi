@@ -126,7 +126,7 @@ export function PatientStatus() {
   const [error, setError] = useState(false);
   const [updatedAt, setUpdatedAt] = useState(() => new Date());
   const languageChosen = useRef(false);
-  const previousState = useRef<Status["state"]>();
+  const previousState = useRef<Status["state"] | undefined>(undefined);
 
   useEffect(() => {
     if (demo || typeof EventSource === "undefined") return;
