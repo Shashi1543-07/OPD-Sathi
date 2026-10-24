@@ -856,6 +856,14 @@ fastapi==0.142.2 \
     --hash=sha256:06366626f2e70576367714d9ab2fe8472e6c8456dba69b399f9f797ab5e92570 \
     --hash=sha256:bd5f4d81f1e93a88bcd77caf4dfe3c2dbffc3805407a0007e9a114c18b3a670b
     # via -r services/api/requirements-runtime.in
+fhir-core==1.1.12 \
+    --hash=sha256:2ae218ed43b32705ce1c37150253942bd88350248a77f66e8ca2b6c3ed8263b2 \
+    --hash=sha256:8f1674104ff575ff00dd2b4ff7ed6caf043d6d5a306990536e1b6ee2ccd06732
+    # via fhir-resources
+fhir-resources==8.3.0 \
+    --hash=sha256:151e6c9b4336e36383cc2aaf2067a6f112a420fce1c7bd289182e55dd950871b \
+    --hash=sha256:bdfd1c7bd1b89bfa269c1f435727771f6c632cd857e2848221713b3f8b9f46e8
+    # via -r services/api/requirements.in
 filelock==4.2.4 \
     --hash=sha256:301241438c57936ef93f4243a94f2559022268bfcf9b375a9a72eb0f8db8358e \
     --hash=sha256:c6d8663535e1650ee430507b4ffbac7b464dd64b7647ea0112a9f406499d163d
@@ -1917,6 +1925,7 @@ pydantic==2.14.1 \
     --hash=sha256:94f478203dd03404682a1ada216965651dd74b1d2d5ffd62e00e0837caab5c26
     # via
     #   fastapi
+    #   fhir-core
     #   google-genai
     #   pydantic-settings
 pydantic-core==2.50.1 \

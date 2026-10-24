@@ -120,3 +120,10 @@
 - **Decision:** The web unit tests run with Vitest's own V8 coverage plugin in CI (`npm run test:coverage`). Every file under `apps/web/src` counts, tested or not (the generated API types, the entry point and the tests themselves excluded). The thresholds in `vite.config.ts` are the level reached when the gate was added and are only ever raised.
 - **Reason:** The API has had a 95% coverage gate on its core and domain code; the web app had none, so untested screens could grow unnoticed. The plugin is maintained with Vitest, matches its version, and uses the coverage built into Node, with no instrumentation step.
 - **Consequences:** A development dependency only; nothing changes in the built app. A change that lowers coverage below the thresholds fails CI until tests are added.
+
+## ADR 017 — FHIR export validated in tests with `fhir.resources`
+
+- **Status:** accepted on 24 Oct 2026 by the owner (Phase 7, task 7.10.1).
+- **Decision:** `GET /visits/{id}/fhir` builds a FHIR R4 `Bundle` from plain dictionaries (`app/domain/fhir_export.py`); no FHIR library is installed in the images. The tests parse every bundle with `fhir.resources` (a development dependency only) using its R4B models, the R4 technical correction, identical to R4 for every resource this export uses. Because the library checks structure and cardinality but not required terminology bindings, the tests also check each required-binding code the export sets (statuses, bundle type, condition and allergy statuses) against the R4 value sets. Bundles are tagged `not-abdm-certified`.
+- **Reason:** A hand-written check alone would miss structural mistakes; the official HL7 validator needs Java in CI. `fhir.resources` gives a real structural validation in the existing Python test run.
+- **Consequences:** The NRCeS (ABDM) profiles are not validated: that needs the HL7 validator with the NRCeS package, or ABDM's own sandbox checks, before certification (tasks 7.10.2, 7.10.3). Codes beyond text (SNOMED CT) come with task 7.10.6.

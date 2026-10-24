@@ -1874,6 +1874,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/visits/{visit_id}/fhir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Visit Fhir
+         * @description The visit as a FHIR R4 bundle: patient, encounter, what the patient reported, accepted
+         *     results from their papers, the interview and the consents. Not ABDM-certified (tagged).
+         *
+         *     For doctors of the visit's department and administrators. Audited, without contents.
+         */
+        get: operations["export_visit_fhir_visits__visit_id__fhir_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/intake/sessions/{visit_id}/documents": {
         parameters: {
             query?: never;
@@ -6586,6 +6609,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DoctorNotesResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_visit_fhir_visits__visit_id__fhir_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                visit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

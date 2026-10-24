@@ -88,6 +88,7 @@ VISIT_PROBES = (
         headers={"If-Match": '"0"'},
     ),
     Probe("GET", "/visits/{visit}/investigations", _STAFF),
+    Probe("GET", "/visits/{visit}/fhir", ("doctor", "admin")),
     Probe("GET", "/visits/{visit}/documents", _STAFF),
     Probe(
         "POST", "/visits/{visit}/documents", ("doctor", "nurse"), content=_JPEG, headers=_PHOTO
