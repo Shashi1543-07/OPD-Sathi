@@ -12,7 +12,6 @@ import {
   BarChart3,
   ClipboardList,
   FileSearch,
-  HeartPulse,
   LogOut,
   Settings,
   ShieldCheck,
@@ -195,9 +194,7 @@ export function StaffShell() {
       {user ? (
         <aside className="staff-sidebar">
           <a className="staff-brand" href="/staff">
-            <span className="staff-brand-mark" aria-hidden="true">
-              <HeartPulse size={20} />
-            </span>
+            <img className="staff-brand-mark" src="/saathi-icon.svg" alt="" />
             <span className="staff-brand-text">
               {t("appName", { ns: "common" })}
               <small>OPD Management</small>

@@ -29,7 +29,7 @@ export default defineConfig({
       // kept running the old version until every tab closed. A reload resumes a patient's
       // check-in from session storage, and a doctor's unsaved edit still asks before leaving.
       registerType: "autoUpdate",
-      includeAssets: ["saathi-icon.svg"],
+      includeAssets: ["saathi-icon.svg", "saathi-mark.svg", "favicon.svg", "apple-touch-icon.png"],
       manifest: {
         name: "OPD Saathi",
         short_name: "OPD Saathi",
@@ -37,12 +37,31 @@ export default defineConfig({
         theme_color: "#0F766E",
         start_url: "/kiosk",
         display: "standalone",
+        // The PNGs, for devices that take no SVG icon, come from scripts/render-icons.mjs.
         icons: [
           {
             src: "/saathi-icon.svg",
             sizes: "any",
             type: "image/svg+xml",
             purpose: "any",
+          },
+          {
+            src: "/saathi-icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "/saathi-icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "/saathi-icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
           },
         ],
       },
