@@ -715,13 +715,11 @@ async def clear_bulk(connection: AsyncConnection, *, hospital_id: UUID) -> tuple
 
 
 async def refresh_reports(connection: AsyncConnection) -> bool:
-    """Rebuild the reporting rollup now instead of waiting for the 5-minute worker job."""
+    """Recount every day of the reports now, instead of at the worker's nightly rebuild."""
     # Run in a transaction of its own: the role change lasts until it ends.
     try:
         await connection.execute(text("SET LOCAL ROLE osa_analytics_worker"))
-        await connection.execute(
-            text("REFRESH MATERIALIZED VIEW osa_analytics.analytics_daily_department")
-        )
-    except Exception:  # the worker refreshes it within 5 minutes anyway
+        await connection.execute(text("SELECT osa_analytics.rebuild_daily_department()"))
+    except Exception:  # the worker recounts today and yesterday within 5 minutes, the rest at night
         return False
     return True

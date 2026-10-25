@@ -37,11 +37,10 @@ With the defaults that is 2 x 20 + 15 + 5 = 60. Raising `WEB_CONCURRENCY` to 4 n
 ## Growth path and unfinished work
 
 1. The optional local Prometheus/Grafana profile and HTTP request metrics are described in `docs/OBSERVABILITY.md`. Before relying on metrics operationally, replace the process-local exporter with a multi-worker-safe collector and add provider, queue, WebSocket, outbox, delivery, and database-pool metrics.
-2. Replace the full refresh of the analytics rollup with a per-day one before a busy hospital's history grows large (see "Index review on a million visits" below; task 7.8.5).
-3. Test PgBouncer transaction pooling with `SET LOCAL`/RLS before adopting it. Add a separate read-only analytics engine and lag-aware behavior.
-4. Partition high-volume `audit_log` and `interview_turns` only after migration rehearsals and retention requirements are approved.
-5. Scale API replicas behind a TLS reverse proxy, then scale workers according to outbox age and queue processing delay. Use managed PostgreSQL/Redis with tested restore procedures for multi-clinic deployments.
-6. Add per-clinic dashboards and alerts for database pool saturation, queue update delay, outbox age, and Redis memory pressure.
+2. Test PgBouncer transaction pooling with `SET LOCAL`/RLS before adopting it. A read-only engine for the reports is not needed while they stay this cheap ("The reports rollup, per day" below).
+3. Partition high-volume `audit_log` and `interview_turns` only after migration rehearsals and retention requirements are approved.
+4. Scale API replicas behind a TLS reverse proxy, then scale workers according to outbox age and queue processing delay. Use managed PostgreSQL/Redis with tested restore procedures for multi-clinic deployments.
+5. Add per-clinic dashboards and alerts for database pool saturation, queue update delay, outbox age, and Redis memory pressure.
 
 The local Compose stack and its smoke tests are development tools. They do not establish a production capacity, recovery objective, or security certification.
 
@@ -137,16 +136,14 @@ After the migration no statement of a route averages more than 11 ms; of the wor
 jobs, only the analytics rollup refresh is slower (the first item below). What the review
 measured and left as it is:
 
-- **The analytics rollup refresh is the cost that grows** (task 7.8.5). Every 5 minutes it
-  recomputes every day of the hospital's history: here 10 seconds of query, reading 11.5 million
-  answers, a million visits and a million case sheets, and writing about 1 GB of temporary files
-  with the default work memory (with 64 MB: 9.0 s, so memory is not the fix). That is roughly
-  an hour of database time a day at a million visits, and it grows with every day kept; at
-  100,000 visits it is about a second. No index can make a full recount cheap. The decision
-  from this measurement: keep the 5-minute refresh for a pilot, and before a busy hospital's
-  history passes about 250,000 visits (four months at 2,000 patients a day) replace it with a
-  per-day rollup that recomputes only today, yesterday and any day whose visits changed. A
-  read replica (`DATABASE_READ_URL`) would move this cost, not remove it.
+- **The analytics rollup refresh was the cost that grows** (task 7.8.5, since done: "The
+  reports rollup, per day" below). Every 5 minutes it recomputed every day of the hospital's
+  history: here 10 seconds of query, reading 11.5 million answers, a million visits and a
+  million case sheets, and writing about 1 GB of temporary files with the default work memory
+  (with 64 MB: 9.0 s, so memory is not the fix). That is roughly an hour of database time a day
+  at a million visits, and it grows with every day kept; at 100,000 visits it is about a
+  second. No index can make a full recount cheap. A read replica (`DATABASE_READ_URL`) would
+  move this cost, not remove it.
 - **Audit search by action alone** (for example every `auth.login.failed`) reads the whole log
   newest first: 0.9–1.4 s here, so about 5 seconds, the statement time limit, on a real million
   visits. "Contains" cannot use an ordinary index. With a record, a person or a date range the
@@ -165,3 +162,37 @@ patient with one and then three earlier visits; the reports for an empty and the
 A count that grows with the data (a query per row) fails, and so does a count over its budget
 (today 3 to 7 statements a request, all included). Planting one extra query per waiting
 patient in the board's repository made it fail as it should (board 9 → 14).
+
+## The reports rollup, per day (Phase 7, task 7.8.5)
+
+**What changed, and why (migration `0035_analytics_per_day`).** The reports read one row a day
+per department. It was a materialized view, which PostgreSQL refreshes only as a whole, so the
+worker's 5-minute refresh recounted every day ever kept: 10 seconds at a million visits, and
+growing. Worse, the worker runs every statement under a 5-second limit (`app/db/session.py`):
+from about half a million visits the refresh would have been cancelled every time and the
+reports would have stopped moving. The index review had timed it on a connection without that
+limit; it now uses the worker's own engine. The rollup is now a table with the same name and
+columns, kept by two functions of the worker role:
+
+| Worker job | When | What it recounts | At a million visits |
+|---|---|---|---|
+| `refresh_analytics`: `refresh_daily_department(today - 1, today)` | Every 5 minutes | The hospital's today and yesterday, through each visit's and its answers' indexes | 0.12–0.19 s warm, whatever the size of the history; up to 4.6 s from a cold cache, so it runs under a 1-minute limit of its own |
+| `rebuild_analytics`: `rebuild_daily_department()` | 03:07 every night (India time) | Every day, for changes to earlier ones (a doctor's late edit to a case sheet shows the next morning) | 17–26 s, under a 15-minute limit of its own |
+
+Both delete their days and insert them again in one transaction, so a report never finds a day
+missing. One lock keeps two runs from inserting the same day; a refresh that finds the rebuild
+running skips its turn (in 5 ms) instead of waiting. Database time for the reports falls from
+about an hour a day to a minute or two. The rebuild's rows are identical, row for row, to the
+materialized view's on the million visits. The demo tools (`seed-demo-history`,
+`clear-demo-history`, `clear-bulk`) run the rebuild themselves after rewriting history.
+
+**What was measured and decided on the way.** The migration takes 24 s on the million visits
+(it fills the table with one rebuild) and its downgrade 16 s. The rebuild reads the whole
+history with index scans switched off: PostgreSQL cannot run an INSERT in parallel, and without
+parallel workers its planner chose to read the 11.5 million answers in index order, 90 s.
+Recounting the history in month-sized pieces is no cheaper, because the answers carry no date:
+each piece reads all of them (11.6 s a month). Exact tracking of the changed days would need
+triggers on visits, case sheets and answers, the busiest tables; the nightly rebuild bounds a
+late change to a day instead. `tests/integration/test_analytics_rollup.py` runs both worker jobs
+against PostgreSQL: today recounted and an earlier day left for the night, a day whose visits
+are gone removed, the refresh skipping while the rollup is locked.

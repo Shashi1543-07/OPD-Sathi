@@ -172,17 +172,12 @@ async def test_the_case_sheet_screen_costs_the_same_for_a_short_or_long_history(
 
 
 async def _refresh_rollup(settings: Settings) -> None:
-    """The worker's 5-minute rollup refresh, run now."""
+    """Every day of the rollup recounted now, as the worker's nightly rebuild does."""
     engine = create_async_engine(settings.migrations_database_url)
     try:
         async with engine.begin() as connection:
             await connection.execute(text("SET ROLE osa_analytics_worker"))
-            await connection.execute(
-                text(
-                    "REFRESH MATERIALIZED VIEW CONCURRENTLY "
-                    "osa_analytics.analytics_daily_department"
-                )
-            )
+            await connection.execute(text("SELECT osa_analytics.rebuild_daily_department()"))
             await connection.execute(text("RESET ROLE"))
     finally:
         await engine.dispose()

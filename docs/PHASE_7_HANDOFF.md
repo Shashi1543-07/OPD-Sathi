@@ -14,6 +14,7 @@ and section 11 for where every workstream stands.
 | G3 Pilot-ready, engineering | #59 | The table below |
 | Dependencies | #36, #48, then `deps/2026-10-24` | Updates tested together; React 19 (#48); the next set in its own pull request after G3 (below) |
 | Release | tag `v0.7.0` | First release, cut on `main` at #48 |
+| After G3 | #72, #73, #74 | The team's feature guide rewritten (18 pages) and three icon fixes; the OPD Saathi logo in the app; the reports counted per day (7.8.5, migration 0035) |
 
 ## G3: what was built (pull request #59)
 
@@ -59,17 +60,17 @@ only once a hospital agrees to a pilot.
 
 ## Next engineering work, most valuable first
 
-1. **A per-day analytics rollup (7.8.5).** The 5-minute refresh recomputes the whole history:
-   10 s and about 1 GB of temporary files at a million visits, about an hour of database time a
-   day. Replace it before a busy hospital passes about 250,000 visits (four months at 2,000 a
-   day): recompute today, yesterday and any day whose visits changed. `docs/SCALING.md`, "Index
-   review on a million visits".
-2. **Audit search by action alone** reads the whole log (about 5 s, the statement limit, on a
+Done since: the per-day analytics rollup (7.8.5, migration 0035). The 5-minute refresh recounts
+today and yesterday, 0.1–0.2 s at a million visits where the full refresh took 10 s, over the
+worker's 5-second statement limit, and a nightly rebuild recounts every day.
+`docs/SCALING.md`, "The reports rollup, per day".
+
+1. **Audit search by action alone** reads the whole log (about 5 s, the statement limit, on a
    real million visits). Either require a date range with an action search, or a trigram index
    (`pg_trgm`, a new component: ADR and the owner's approval first). The runbook already asks
    investigators for a date range.
-3. **Load and soak results into the release notes** of the next release candidate (7.13.5).
-4. **An error boundary for staff screens.** A card that throws while rendering takes the whole
+2. **Load and soak results into the release notes** of the next release candidate (7.13.5).
+3. **An error boundary for staff screens.** A card that throws while rendering takes the whole
    screen to the router's default error page (seen in the e2e crash above); a per-screen
    boundary with a "Reload" button would contain it.
 

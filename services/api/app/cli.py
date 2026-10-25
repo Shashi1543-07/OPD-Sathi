@@ -1415,7 +1415,7 @@ async def _demo_history(command: str, days: int = 30) -> None:
     print(
         "Reports refreshed."
         if refreshed
-        else "Reports will show the change within 5 minutes (the worker refreshes them)."
+        else "Reports will show the change after the worker's nightly recount, at 03:07."
     )
 
 

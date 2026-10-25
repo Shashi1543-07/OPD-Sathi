@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import redis.asyncio as redis
 import structlog
@@ -447,14 +448,39 @@ async def relay_queue_outbox(ctx: dict[str, Any]) -> None:
 
 @_measured
 async def refresh_analytics(ctx: dict[str, Any]) -> None:
-    """Refresh the daily materialized rollup owned by the restricted worker schema."""
+    """Recount the reports of the hospital's today and yesterday (task 7.8.5).
+
+    Its cost follows the patients of two days, not the size of the history. Earlier days
+    change rarely (a doctor's late edit to a case sheet); the nightly rebuild recounts them.
+    """
     async with ctx["engine"].begin() as connection:
         await connection.execute(text("SET ROLE osa_analytics_worker"))
-        await connection.execute(
-            text("REFRESH MATERIALIZED VIEW CONCURRENTLY osa_analytics.analytics_daily_department")
+        # A fraction of a second warm, but seconds from a cold cache (4.6 s once at a million
+        # visits): past the 5-second limit meant for the API's statements.
+        await connection.execute(text("SET LOCAL statement_timeout = '1min'"))
+        written = await connection.scalar(
+            text(
+                "SELECT osa_analytics.refresh_daily_department(today - 1, today) "
+                "FROM (SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date AS today) AS hospital_day"
+            )
         )
         await connection.execute(text("RESET ROLE"))
-    logger.info("analytics_materialized_view_refreshed")
+    if written is None:
+        logger.info("analytics_refresh_skipped", reason="rebuild_running")
+    else:
+        logger.info("analytics_rollup_refreshed", rows=written)
+
+
+@_measured
+async def rebuild_analytics(ctx: dict[str, Any]) -> None:
+    """Recount every day of the reports, once a night, for changes to earlier days."""
+    async with ctx["engine"].begin() as connection:
+        await connection.execute(text("SET ROLE osa_analytics_worker"))
+        # Past the 5-second limit of every other statement: 17 seconds at a million visits.
+        await connection.execute(text("SET LOCAL statement_timeout = '15min'"))
+        written = await connection.scalar(text("SELECT osa_analytics.rebuild_daily_department()"))
+        await connection.execute(text("RESET ROLE"))
+    logger.info("analytics_rollup_rebuilt", rows=written)
 
 
 @_measured
@@ -489,9 +515,13 @@ class WorkerSettings:
     """ARQ worker configuration; cron ticks on every even second."""
 
     functions = [relay_queue_outbox]
+    # The hospital's clock, like the close-out's day; the image itself runs on UTC.
+    timezone = ZoneInfo("Asia/Kolkata")
     cron_jobs = [
         cron(relay_queue_outbox, second=set(range(0, 60, 2))),
         cron(refresh_analytics, minute=set(range(0, 60, 5))),
+        # 03:07, the quietest hour, between two refreshes, which skip while it runs.
+        cron(rebuild_analytics, hour={3}, minute={7}),
         cron(close_out_previous_days, minute={1, 16, 31, 46}),
         cron(refresh_operational_metrics, second={15, 45}),
     ]

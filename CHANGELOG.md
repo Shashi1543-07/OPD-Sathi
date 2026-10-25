@@ -62,6 +62,10 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   conversation and voice. It replaces the placeholder icon in the browser tab, on the phone or
   tablet home screen, on the loading screen and in the staff sidebar, and the "O" in the kiosk
   header (a hospital's own logo, when one is set, still shows there instead).
+- **Reports keep up as the years add up**: every 5 minutes the reports recount today and
+  yesterday instead of every day ever kept, which took 10 seconds at a million visits and
+  would have stopped the reports updating at about half a million. Earlier days are recounted
+  every night, so a late change to an older visit shows by the next morning.
 
 ### Technical
 
@@ -149,6 +153,15 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   The PNGs for Android and iOS (`saathi-icon-192.png`, `saathi-icon-512.png`,
   `saathi-icon-maskable-512.png`, `apple-touch-icon.png`) come from `scripts/render-icons.mjs`;
   the PWA manifest lists them beside the SVG.
+- Reports rollup per day (task 7.8.5, migration `0035_analytics_per_day`):
+  `osa_analytics.analytics_daily_department` is now a table with the materialized view's name
+  and columns, kept by `refresh_daily_department(first_day, last_day)` (the worker, every 5
+  minutes, for the hospital's today and yesterday: 0.12–0.19 s warm at a million visits) and
+  `rebuild_daily_department()` (03:07 India time, nightly: 17–26 s). Both run under statement
+  limits of their own: the view's refresh took 10 s at a million visits, over the 5-second
+  limit of the worker's engine, which the index review's own engine did not have (the review
+  now uses the worker's). The worker's cron runs on India time. On the million visits the
+  table equals the view row for row; the migration takes 24 s there, its downgrade 16 s.
 
 ## [0.7.0]
 
