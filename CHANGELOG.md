@@ -66,6 +66,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   yesterday instead of every day ever kept, which took 10 seconds at a million visits and
   would have stopped the reports updating at about half a million. Earlier days are recounted
   every night, so a late change to an older visit shows by the next morning.
+- **The complete guide** (`docs/OPD-Saathi-Complete-Guide.pdf`, 19 pages): how a visit works
+  end to end, every question the interview asks, the OPD card, every screen with its address,
+  AI, security, the technology, tests and results, what was built when, and how to run the demo.
 
 ### Technical
 
@@ -162,6 +165,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   limit of the worker's engine, which the index review's own engine did not have (the review
   now uses the worker's). The worker's cron runs on India time. On the million visits the
   table equals the view row for row; the migration takes 24 s there, its downgrade 16 s.
+- The complete guide is built from `docs/complete-guide/guide.html` by `render-pdf.mjs` beside
+  it, which refuses to write the PDF when a section would spill onto a second page; it reuses
+  the feature guide's screenshots, and its question tables follow the question bank.
 
 ## [0.7.0]
 
