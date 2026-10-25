@@ -133,8 +133,9 @@ longer audit log takes longer, and upgrades run outside OPD hours (`docs/DEPLOYM
 | Worker: queue rebuild (at start and after a close-out that closed visits) | 780–944 | 736–847 |
 | Worker: analytics rollup refresh (every 5 minutes) | 11,772–12,369 | 9,695–11,120 |
 
-After the migration no statement of a route or a frequent job averages more than 11 ms. What
-the review measured and left as it is:
+After the migration no statement of a route averages more than 11 ms; of the worker's frequent
+jobs, only the analytics rollup refresh is slower (the first item below). What the review
+measured and left as it is:
 
 - **The analytics rollup refresh is the cost that grows** (task 7.8.5). Every 5 minutes it
   recomputes every day of the hospital's history: here 10 seconds of query, reading 11.5 million
