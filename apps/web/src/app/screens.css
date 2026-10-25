@@ -5822,6 +5822,11 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
 }
+/* The icon stays on the line of the disclosure arrow and the words. */
+.dn-earlier summary svg {
+  display: inline-block;
+  vertical-align: -2px;
+}
 .dn-version + .dn-version {
   border-top: 1px solid var(--border);
   margin-top: 0.5rem;
@@ -7243,11 +7248,16 @@
   padding: 0.6rem 0.75rem;
   user-select: all;
 }
-.adm-activation button {
+/* Also the privacy card's "Open the notice" link and poster button, outside the panel: the
+   icon sits beside the words (base styles make an icon a block of its own). */
+.adm-activation button,
+.adm-activation-actions > a,
+.adm-activation-actions > button:not(.adm-submit) {
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
+  color: inherit;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -7256,6 +7266,7 @@
   justify-self: start;
   min-height: 2.4rem;
   padding: 0 0.9rem;
+  text-decoration: none;
 }
 .adm-activation-actions {
   display: flex;
@@ -8656,6 +8667,11 @@
   overflow-x: auto;
 }
 /* Prior investigations (task 7.11.3). */
+.dp-timeline h4 {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+}
 .dp-timeline .dp-results caption {
   font-weight: 700;
   padding: 0.5rem 0 0.25rem;
