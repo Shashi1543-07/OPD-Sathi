@@ -35,6 +35,8 @@ export function KioskShell({ mode = "kiosk" }: { mode?: "kiosk" | "mobile" }) {
   const judgeMode = new URLSearchParams(location.search).get("demo") === "1";
   const hospitalLogo = import.meta.env.VITE_HOSPITAL_LOGO_URL?.trim();
   const hospitalName = useKioskHospitalName();
+  // The wordmark: first word navy, the rest teal ("OPD Saathi", "ओपीडी साथी").
+  const [brandFirst, ...brandRest] = t("appName").split(" ");
   const [warning, setWarning] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -159,12 +161,16 @@ export function KioskShell({ mode = "kiosk" }: { mode?: "kiosk" | "mobile" }) {
               alt=""
             />
           ) : (
-            <span className="kiosk-mark" aria-hidden="true">
-              O
-            </span>
+            <img
+              className="kiosk-mark kiosk-saathi-mark"
+              src="/saathi-mark.svg"
+              alt=""
+            />
           )}
           <div>
-            <strong>{t("appName")}</strong>
+            <strong>
+              <span>{brandFirst}</span> {brandRest.join(" ")}
+            </strong>
             {hospitalName && <small>{hospitalName}</small>}
           </div>
         </div>

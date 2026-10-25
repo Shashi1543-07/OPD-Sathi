@@ -52,9 +52,13 @@
 .kiosk-brand strong {
   color: var(--primary);
   font-size: 1.0625rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.2;
+}
+.kiosk-brand strong span {
+  color: var(--navy-900);
+  font-weight: 800;
 }
 .kiosk-brand small {
   color: var(--text-muted);
@@ -78,6 +82,12 @@
 .kiosk-hospital-logo {
   background: transparent;
   object-fit: contain;
+}
+.kiosk-saathi-mark {
+  background: transparent;
+  border-radius: 0;
+  height: 46px;
+  width: 46px;
 }
 
 .kiosk-tools {
@@ -802,14 +812,10 @@
   text-decoration: none;
 }
 .staff-brand-mark {
-  align-items: center;
-  background: linear-gradient(135deg, #14b8a6, #0d9488);
-  border-radius: 0.6rem;
-  display: inline-flex;
+  display: block;
   flex: 0 0 auto;
-  height: 2.1rem;
-  justify-content: center;
-  width: 2.1rem;
+  height: 2.4rem;
+  width: 2.4rem;
 }
 .staff-brand-text {
   display: grid;
@@ -3501,6 +3507,10 @@
   .kiosk-mark {
     height: 2rem;
     width: 2rem;
+  }
+  .kiosk-saathi-mark {
+    height: 2.5rem;
+    width: 2.5rem;
   }
   .kiosk-tools {
     flex: 0 0 auto;

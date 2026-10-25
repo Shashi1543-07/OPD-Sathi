@@ -58,6 +58,10 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **Feature guide for the team** (`docs/OPD-Saathi-Feature-Guide.pdf`), rewritten: 18 pages
   instead of 32, what is new since 11 October marked, with how each feature works and what it
   improves, what the system cannot do, and current screenshots.
+- **A logo of its own**: a plus that speaks, with a voice wave at its centre, for care,
+  conversation and voice. It replaces the placeholder icon in the browser tab, on the phone or
+  tablet home screen, on the loading screen and in the staff sidebar, and the "O" in the kiosk
+  header (a hospital's own logo, when one is set, still shows there instead).
 
 ### Technical
 
@@ -140,6 +144,11 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   `render-pdf.mjs` beside it, which refuses to write the PDF when a section would spill onto a
   second page. `docs/LIMITATIONS.md` and `docs/SCALING.md` corrected (the FHIR export exists;
   the analytics rollup is the one slow frequent job).
+- Brand icons in `apps/web/public`: `saathi-icon.svg` (the app icon), `saathi-mark.svg`,
+  `favicon.svg` (without the voice wave, for 16 and 32 px tabs) and `saathi-icon-maskable.svg`.
+  The PNGs for Android and iOS (`saathi-icon-192.png`, `saathi-icon-512.png`,
+  `saathi-icon-maskable-512.png`, `apple-touch-icon.png`) come from `scripts/render-icons.mjs`;
+  the PWA manifest lists them beside the SVG.
 
 ## [0.7.0]
 
