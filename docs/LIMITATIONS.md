@@ -49,8 +49,9 @@ for who is seen first.
 
 ## Systems and data
 
-- It is not connected to ABDM or to the hospital's HIS yet. A FHIR export is the next step
-  (task 7.10.1); ABDM certification is months of external process (tasks 7.10.2, 7.10.3).
+- It is not connected to ABDM or to the hospital's HIS yet. A visit can be exported as a FHIR R4
+  bundle through the API (task 7.10.1, marked not ABDM-certified), the first step towards both;
+  ABDM certification is months of external process (tasks 7.10.2, 7.10.3).
 - It runs on one server per hospital, inside the hospital network, over HTTPS. It is not built
   to face the internet, and Kubernetes is not supported.
 - The kiosk's offline short form covers a lost network, not a stopped server: then the paper

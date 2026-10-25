@@ -52,6 +52,12 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   longer slow down as the history grows.
 - **Language buttons named as they read**: the kiosk's language buttons are announced as they
   look ("हिन्दी Hindi"), so someone using voice control can say either word.
+- **Fixed:** three icons sat on a line of their own above their words: "Earlier versions" of
+  the doctor's notes, the "Results over time" heading, and the privacy card's "Open the notice"
+  and "Poster with QR" (now buttons like the kiosk panel's).
+- **Feature guide for the team** (`docs/OPD-Saathi-Feature-Guide.pdf`), rewritten: 18 pages
+  instead of 32, what is new since 11 October marked, with how each feature works and what it
+  improves, what the system cannot do, and current screenshots.
 
 ### Technical
 
@@ -130,6 +136,10 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   found the language buttons' names), and the CI-only Semgrep lock regenerated (pydantic 2.14.1
   with pydantic-core 2.50.1, bracex 3.2). Not taken: jsonschema 4.26, wrapt 2.5 and
   exceptiongroup 1.3, which Semgrep caps; @vitejs/plugin-react 6, which needs Vite 8.
+- The feature guide is built from `docs/feature-guide-screenshots/guide.html` by
+  `render-pdf.mjs` beside it, which refuses to write the PDF when a section would spill onto a
+  second page. `docs/LIMITATIONS.md` and `docs/SCALING.md` corrected (the FHIR export exists;
+  the analytics rollup is the one slow frequent job).
 
 ## [0.7.0]
 
