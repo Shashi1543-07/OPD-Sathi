@@ -14,6 +14,7 @@ and section 11 for where every workstream stands.
 | G3 Pilot-ready, engineering | #59 | The table below |
 | Dependencies | #36, #48, then `deps/2026-10-24` | Updates tested together; React 19 (#48); the next set in its own pull request after G3 (below) |
 | Release | tag `v0.7.0` | First release, cut on `main` at #48 |
+| After G3 | #72, #73, #74 | The team's feature guide rewritten (18 pages) and three icon fixes; the OPD Saathi logo in the app; the reports counted per day (7.8.5, migration 0035) |
 
 ## G3: what was built (pull request #59)
 
