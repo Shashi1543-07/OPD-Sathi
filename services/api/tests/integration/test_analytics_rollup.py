@@ -1,16 +1,18 @@
 """Database-backed checks for Phase 11 rollup arithmetic, refresh, and tenant scope."""
 
 import os
-from datetime import UTC, date, datetime
-from uuid import uuid4
+from datetime import UTC, date, datetime, timedelta
+from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.crypto import encrypt_field
-from app.db.session import set_hospital_scope
+from app.db.session import create_engine, set_hospital_scope
+from app.workers.main import rebuild_analytics, refresh_analytics
 
 
 def _database_urls() -> tuple[str, str] | None:
@@ -138,20 +140,15 @@ async def test_daily_analytics_rollup_refresh_and_tenant_filter() -> None:
 
         async with migrator_engine.begin() as connection:
             await connection.execute(text("SET ROLE osa_analytics_worker"))
-            await connection.execute(
-                text(
-                    "REFRESH MATERIALIZED VIEW CONCURRENTLY "
-                    "osa_analytics.analytics_daily_department"
-                )
-            )
-            materialized_count = await connection.scalar(
+            await connection.execute(text("SELECT osa_analytics.rebuild_daily_department()"))
+            rolled_up = await connection.scalar(
                 text(
                     "SELECT count(*) FROM osa_analytics.analytics_daily_department "
                     "WHERE hospital_id = :hospital_id"
                 ),
                 {"hospital_id": hospital_id},
             )
-            assert int(materialized_count or 0) == 1
+            assert int(rolled_up or 0) == 1
             await connection.execute(text("RESET ROLE"))
 
         async with app_engine.begin() as connection:
@@ -218,12 +215,137 @@ async def test_daily_analytics_rollup_refresh_and_tenant_filter() -> None:
             )
         async with migrator_engine.begin() as connection:
             await connection.execute(text("SET ROLE osa_analytics_worker"))
-            await connection.execute(
-                text(
-                    "REFRESH MATERIALIZED VIEW CONCURRENTLY "
-                    "osa_analytics.analytics_daily_department"
-                )
-            )
+            await connection.execute(text("SELECT osa_analytics.rebuild_daily_department()"))
             await connection.execute(text("RESET ROLE"))
         await app_engine.dispose()
         await migrator_engine.dispose()
+
+
+async def _add_visits(
+    connection: AsyncConnection,
+    clinic: dict[str, UUID],
+    day: date,
+    *tokens: int,
+) -> None:
+    await set_hospital_scope(connection, clinic["hospital_id"])
+    for token in tokens:
+        await connection.execute(
+            text(
+                "INSERT INTO visits (id, hospital_id, patient_id, department_id, status, "
+                "urgency, service_date, language, registered_at, token_number, token_label) "
+                "VALUES (:id, :hospital_id, :patient_id, :department_id, 'done', 'routine', "
+                ":day, 'en', now(), :token, :label)"
+            ),
+            {**clinic, "id": uuid4(), "day": day, "token": token, "label": f"GEN-{token:03d}"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_the_refresh_recounts_two_days_and_the_rebuild_every_day() -> None:
+    """The worker's 5-minute refresh and nightly rebuild (task 7.8.5), as the worker runs them."""
+    urls = _database_urls()
+    if urls is None:
+        pytest.skip("database credentials are required for PostgreSQL analytics integration")
+    clinic = {"hospital_id": uuid4(), "department_id": uuid4(), "patient_id": uuid4()}
+    hospital_id = clinic["hospital_id"]
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    earlier = today - timedelta(days=10)
+    # The worker's own engine, its 5-second statement limit included.
+    engine = create_engine(urls[1])
+    ctx = {"engine": engine}
+
+    async def patients_by_day() -> dict[date, int]:
+        async with engine.begin() as connection:
+            await connection.execute(text("SET LOCAL ROLE osa_analytics_worker"))
+            rows = await connection.execute(
+                text(
+                    "SELECT service_date, patient_count FROM "
+                    "osa_analytics.analytics_daily_department WHERE hospital_id = :id"
+                ),
+                {"id": hospital_id},
+            )
+            return {row.service_date: int(row.patient_count) for row in rows}
+
+    try:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            await connection.execute(
+                text("INSERT INTO hospitals (id, name, code) VALUES (:id, :name, :code)"),
+                {"id": hospital_id, "name": "Synthetic rollup clinic", "code": str(hospital_id)},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO departments (id, hospital_id, code, token_prefix, name_en, "
+                    "name_hi, name_mr) VALUES (:id, :hospital_id, 'GENMED', 'GEN', "
+                    "'General Medicine', 'सामान्य चिकित्सा', 'सामान्य औषधोपचार')"
+                ),
+                {"id": clinic["department_id"], "hospital_id": hospital_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO patients (id, hospital_id, name_enc, sex, preferred_language) "
+                    "VALUES (:id, :hospital_id, :name_enc, 'unknown', 'en')"
+                ),
+                {
+                    "id": clinic["patient_id"],
+                    "hospital_id": hospital_id,
+                    "name_enc": encrypt_field(
+                        "Synthetic rollup patient",
+                        key=b"d" * 32,
+                        associated_data=f"patients:name_enc:{clinic['patient_id']}",
+                    ),
+                },
+            )
+            await _add_visits(connection, clinic, today, 1)
+            await _add_visits(connection, clinic, earlier, 1)
+        await rebuild_analytics(ctx)
+        assert await patients_by_day() == {today: 1, earlier: 1}
+
+        async with engine.begin() as connection:
+            await _add_visits(connection, clinic, today, 2)
+            await _add_visits(connection, clinic, earlier, 2)
+        await refresh_analytics(ctx)
+        # Today is recounted; the earlier day waits for the night.
+        assert await patients_by_day() == {today: 2, earlier: 1}
+        await rebuild_analytics(ctx)
+        assert await patients_by_day() == {today: 2, earlier: 2}
+
+        # A day whose visits are all gone leaves the rollup.
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            await connection.execute(
+                text("DELETE FROM visits WHERE hospital_id = :id AND service_date = :day"),
+                {"id": hospital_id, "day": today},
+            )
+        await refresh_analytics(ctx)
+        assert await patients_by_day() == {earlier: 2}
+
+        # While a rebuild holds the rollup, the refresh skips its turn instead of waiting.
+        async with engine.begin() as connection:
+            await _add_visits(connection, clinic, today, 3)
+        async with engine.begin() as rebuild:
+            await rebuild.execute(
+                text(
+                    "SELECT pg_advisory_xact_lock("
+                    "hashtextextended('osa_analytics.analytics_daily_department', 0))"
+                )
+            )
+            await refresh_analytics(ctx)
+        assert await patients_by_day() == {earlier: 2}
+    finally:
+        async with engine.begin() as connection:
+            await set_hospital_scope(connection, hospital_id)
+            await connection.execute(
+                text("DELETE FROM visits WHERE hospital_id = :id"), {"id": hospital_id}
+            )
+            await connection.execute(
+                text("DELETE FROM patients WHERE hospital_id = :id"), {"id": hospital_id}
+            )
+            await connection.execute(
+                text("DELETE FROM departments WHERE hospital_id = :id"), {"id": hospital_id}
+            )
+            await connection.execute(
+                text("DELETE FROM hospitals WHERE id = :id"), {"id": hospital_id}
+            )
+        await rebuild_analytics(ctx)
+        await engine.dispose()

@@ -30,16 +30,17 @@ from zoneinfo import ZoneInfo
 
 import asyncpg
 import redis.asyncio as redis
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.crypto import encrypt_field, lookup_digest
 from app.core.ids import uuid7
 from app.core.security import digest_secret, hash_password
+from app.db.session import create_engine
 from app.domain.patients import format_mrn
 from app.workers.main import (
     close_previous_days,
     collect_operational_metrics,
     rebuild_all,
+    rebuild_analytics,
     refresh_analytics,
     relay_once,
 )
@@ -364,7 +365,8 @@ async def worker_jobs(
     settings: Any, names: tuple[str, ...], *, when: str
 ) -> list[tuple[str, int, float]]:
     """The named worker jobs, each in its own transaction, as the worker runs them."""
-    engine = create_async_engine(settings.worker_database_url or settings.database_url)
+    # The worker's own engine, its 5-second statement limit included: a job over it fails here.
+    engine = create_engine(settings.worker_database_url or settings.database_url)
     state = redis.from_url(settings.redis_state_url, decode_responses=True)  # type: ignore[no-untyped-call]
     jobs = {
         "close-out": lambda c: close_previous_days(c),
@@ -378,6 +380,8 @@ async def worker_jobs(
             started = time.perf_counter()
             if name == "analytics refresh":
                 await refresh_analytics({"engine": engine})
+            elif name == "analytics rebuild":
+                await rebuild_analytics({"engine": engine})
             else:
                 async with engine.begin() as connection:
                     await jobs[name](connection)
@@ -449,10 +453,18 @@ async def drive(hospital: Any, facts: dict[str, Any]) -> list[tuple[str, int, fl
                 f"/queue/{consult}/start", headers=hospital.staff("doctor2")))
             timed(routes, "complete consult", lambda consult=consult: client.post(
                 f"/queue/{consult}/complete", headers=hospital.staff("doctor2")))
-    # The day's recurring jobs: every 2 s (relay), 30 s (gauges), 5 min (rollup), 15 min.
+    # The day's recurring jobs: every 2 s (relay), 30 s (gauges), 5 min (rollup), 15 min, and
+    # the nightly rebuild of the rollup.
     return results + routes + await worker_jobs(
         settings,
-        ("outbox relay", "monitoring gauges", "analytics refresh", "close-out", "queue rebuild"),
+        (
+            "outbox relay",
+            "monitoring gauges",
+            "analytics refresh",
+            "close-out",
+            "queue rebuild",
+            "analytics rebuild",
+        ),
         when="worker",
     )
 
