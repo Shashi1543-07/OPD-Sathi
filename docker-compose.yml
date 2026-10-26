@@ -2,7 +2,7 @@ name: opd-saathi
 
 services:
   postgres:
-    image: postgres:16.14@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+    image: postgres:16.15@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?Copy .env.example to .env}
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
@@ -66,7 +66,7 @@ services:
     restart: unless-stopped
 
   worker-role-bootstrap:
-    image: postgres:16.14@sha256:95206741a5b214807675e14165369d05b93a9cf692223b616d07cca227e74b0b
+    image: postgres:16.15@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
     command: ["sh", "/scripts/bootstrap-worker-role.sh"]
     environment:
       POSTGRES_HOST: postgres
@@ -198,7 +198,7 @@ services:
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
     profiles: [observability]
     command:
       - --config.file=/etc/prometheus/prometheus.yml
