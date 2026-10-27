@@ -1,49 +1,36 @@
 # Problem statement
 
-**Status: verified from secondary copies on 16 October 2026; official wording still to be confirmed.**
-The official listing (<https://sih.gov.in/sih2026PS>) loads problem statements in pages and SIH26047 is
-not in the part that can be fetched automatically. Two independent copies of the official entry agree
-on every field below except the theme. Before submission, open the official portal in a browser, search
-for 26047, and record any differences here.
+Government hospital outpatient departments (OPDs) in Maharashtra are crowded. A doctor has a few
+minutes for each patient, and much of that time goes on basic questions: what the problem is, since
+when, which illnesses, medicines and allergies. Patients speak Marathi, Hindi or English, many cannot
+read well, and each describes the problem in their own way. They bring old prescriptions and test
+reports on paper that nobody has time to read. Nobody in the waiting hall knows when their turn will
+come, and a patient with a warning sign can wait unnoticed behind routine visits.
 
-- **ID and title:** SIH26047 — Patient Case-Taking Software
-- **Organisation:** Ministry of Ayush
-- **Department:** All India Institute of Ayurveda (AIIA)
-- **Category:** Software
-- **Theme:** MedTech / BioTech / HealthTech (one copy lists "Smart Automation")
+## Who is affected
 
-## What the statement asks for
+- **Patients** wait without knowing their turn, repeat their story at every desk, and are not always
+  understood in their own language.
+- **Doctors** start each consultation with an empty page and a few minutes.
+- **Nurses and desk staff** manage the crowd and have to spot urgent patients by eye.
+- **Hospital administrators** cannot see waiting times, department load or the language mix to plan
+  staff.
 
-Outpatient consultations in Indian public hospitals last only minutes, so histories are often
-incomplete, and AYUSH practice needs a more extensive history (Prakriti, Vikriti, Agni). Patients bring
-fragmented paper prescriptions, reports and discharge summaries. ABDM provides national infrastructure,
-but no patient-facing tool solves the "first mile": capturing history and digitising documents before
-the consultation.
+## What a solution has to do
 
-The expected solution has four modules:
+1. Take the history before the consultation, in the patient's language, by voice or touch, so that
+   it works for people who cannot read.
+2. Ask about danger signs first, and alert staff at once.
+3. Give the doctor a short, structured history in English, with the patient's own words and their old
+   papers beside it, as a draft the doctor checks and corrects.
+4. Give every patient a fair, explained place in the queue, and show it on their phone.
+5. Ask for consent for each purpose, and protect health data as the DPDP Act 2023 requires.
+6. Keep working without internet and without AI.
+7. Never diagnose, name a disease or recommend treatment.
 
-- **A. Conversational history engine:** adaptive voice-and-touch interview in the patient's language,
-  SOCRATES-style follow-up questions, an AYUSH extended mode (Dashavidha Pariksha), and red-flag
-  detection that raises priority triage alerts.
-- **B. Document digitisation:** multilingual OCR for printed and handwritten documents; extraction of
-  diagnoses, medicines, lab values and procedures; a chronological timeline; flags for abnormal values
-  and potential drug interactions.
-- **C. Summary generator:** a standard-format summary (chief complaint, HPI, past history, drugs and
-  allergies, family, personal, review of systems, prior investigations) that the physician can edit,
-  accept or reject. It is a draft, never an autonomous diagnosis. Patient-facing audio is in the local
-  language; physician-facing output is in English or Hindi.
-- **D. Consent, privacy and ABDM integration:** ABHA-based authentication, granular and revocable consent
-  with audio explanation, secure processing, session data cleared after submission, and FHIR-based
-  transfer to the hospital system and the ABHA personal health record, in line with the DPDP Act 2023.
+## How OPD Saathi answers it
 
-## How OPD Saathi maps to it
-
-OPD Saathi collects a structured patient history before the consultation and helps staff manage the
-queue. It does not diagnose or recommend treatment. The requirement-by-requirement mapping, current
-gaps and planned work are in [IITB_READINESS_PLAN.md](IITB_READINESS_PLAN.md#21-requirements-matrix).
-
-## Sources
-
-- Official listing: <https://sih.gov.in/sih2026PS> (SIH26047 not reachable by automated fetch)
-- Copy of the full entry: <https://sih-explorer.amanuniyal47.workers.dev/problem/SIH26047>
-- Repository quoting the official metadata: <https://github.com/xarjunpatil/SIH26047-Patient-Case-Taking-Software>
+OPD Saathi collects a structured history before the consultation and helps staff run the queue. It
+does not diagnose or recommend treatment. What it does for each person is in the
+[README](../README.md); how it is built is in [ARCHITECTURE.md](ARCHITECTURE.md); what it
+deliberately does not do, and why, is in [LIMITATIONS.md](LIMITATIONS.md).

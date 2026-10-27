@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OPD Saathi Documentation</title>
-<meta name="description" content="Complete product and technical documentation of OPD Saathi (SIH26047): features, screens, algorithms, architecture, security, operations and the road to production.">
+<meta name="description" content="Complete product and technical documentation of OPD Saathi: features, screens, algorithms, architecture, security, operations and the road to production.">
 <!-- Source of docs/OPD_Saathi_Documentation.pdf. Rebuild the PDF with:
      node docs/documentation/render-pdf.mjs   (Playwright from apps/web/node_modules) -->
 <style>
@@ -195,7 +195,7 @@ figcaption b { color: var(--ink-2); }
   <div class="ring"></div><div class="ring2"></div>
   <div class="brand">
     <div class="logo"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.2 12h4.3l1.5-3 3 6 1.5-3h7.3"/></svg></div>
-    <div><div class="brand-name">OPD Saathi</div><div class="brand-sub">Smart India Hackathon · SIH26047</div></div>
+    <div><div class="brand-name">OPD Saathi</div><div class="brand-sub">Patient history-taking and queue software</div></div>
   </div>
   <h1>Complete product and technical documentation</h1>
   <p class="subtitle">A multilingual check-in kiosk, phone check-in and live queue for crowded government OPDs. The patient's history is ready before they reach the doctor.</p>
@@ -245,7 +245,7 @@ figcaption b { color: var(--ink-2); }
     <thead><tr><th style="width:34%">Document</th><th>Topic</th></tr></thead>
     <tbody>
       <tr><td><code>docs/PHASE_7_PRODUCTION_PLAN.md</code></td><td>The final phase: everything left before a real hospital deployment (131 tasks, gates, go-live checklist).</td></tr>
-      <tr><td><code>docs/IITB_READINESS_PLAN.md</code></td><td>Audit, requirements matrix against SIH26047, and the Phase 0–6 build log with test evidence.</td></tr>
+      <tr><td><code>docs/IITB_READINESS_PLAN.md</code></td><td>Audit, requirements matrix, and the Phase 0–6 build log with test evidence.</td></tr>
       <tr><td><code>docs/QUEUE_POLICY.md</code></td><td>Calling order, missed calls, recall, permissions, decisions the hospital signs off.</td></tr>
       <tr><td><code>docs/PRIVACY.md</code></td><td>Data map, consent by purpose, old papers, returning patients, retention.</td></tr>
       <tr><td><code>docs/E2E_SCENARIOS.md</code></td><td>The fifteen end-to-end scenarios, their tests and the defects they found.</td></tr>
@@ -315,26 +315,24 @@ figcaption b { color: var(--ink-2); }
 <h1 class="chapter" id="ch1"><span class="num">1</span> Why OPD Saathi exists</h1>
 <p class="lead">Government outpatient departments (OPDs) see hundreds of patients every morning. Consultations last a few minutes, patients speak many languages and describe their problems in their own way, papers from earlier visits are scattered, and nobody in the waiting hall knows when their turn will come. The doctor spends much of those few minutes collecting basic history.</p>
 
-<h2>The problem statement: SIH26047</h2>
+<h2>The problem</h2>
 <table class="compact">
   <tbody>
-    <tr><td style="width:24%"><b>Title</b></td><td>Patient Case-Taking Software (SIH26047)</td></tr>
-    <tr><td><b>Organisation</b></td><td>Ministry of Ayush · All India Institute of Ayurveda (AIIA)</td></tr>
-    <tr><td><b>Category · theme</b></td><td>Software · MedTech / BioTech / HealthTech</td></tr>
-    <tr><td><b>The need</b></td><td>Histories are incomplete because consultations are short; AYUSH practice needs an even more extensive history (Prakriti, Vikriti, Agni); patients bring fragmented paper records; ABDM exists, but there is no patient-facing "first mile" tool that captures history and digitises documents before the visit.</td></tr>
-    <tr><td><b>Expected journey</b></td><td>Identify and consent → converse → scan documents → summarise and route → physician reviews.</td></tr>
+    <tr><td style="width:24%"><b>Where</b></td><td>Crowded government hospital OPDs in Maharashtra</td></tr>
+    <tr><td><b>Who is affected</b></td><td>Patients who wait without knowing their turn and are not always understood in their language; doctors with a few minutes and an empty page; nurses spotting urgent patients by eye; administrators without a picture of the day</td></tr>
+    <tr><td><b>The need</b></td><td>Take the history before the consultation, in the patient's language and by voice or touch; catch danger signs first; read the old papers patients bring; give the doctor a structured history to check; run a fair, visible queue; protect health data; never diagnose.</td></tr>
   </tbody>
 </table>
-<p class="small">The wording was verified from two independent copies of the official entry (the official portal could not be fetched automatically). See <code>docs/PROBLEM_STATEMENT.md</code>.</p>
+<p class="small">In full: <code>docs/PROBLEM_STATEMENT.md</code>.</p>
 
-<h2>The four modules asked for, and what OPD Saathi delivers</h2>
+<h2>What a solution has to do, and what OPD Saathi delivers</h2>
 <table>
-  <thead><tr><th style="width:17%">Module</th><th style="width:43%">What is built</th><th>What is not built yet (and why)</th></tr></thead>
+  <thead><tr><th style="width:17%">Need</th><th style="width:43%">What is built</th><th>What is not built yet (and why)</th></tr></thead>
   <tbody>
-    <tr><td><b>A. Conversational history engine</b></td><td>An adaptive interview by voice, touch or typing in Hindi, Marathi and English (chapter 3, section 16.1); complaint-specific question modules; up to three AI-written follow-up questions, validated like bank questions; surgical and personal history; "don't know" and "prefer not to say" kept apart from "no"; an optional Ayurveda history; danger-sign tiles and 15 red-flag rules that raise urgent staff alerts (16.2).</td><td>A short review-of-systems screen (Phase 7 task 7.11.2). All clinical content still needs clinician sign-off.</td></tr>
-    <tr><td><b>B. Document digitisation</b></td><td>The patient photographs old prescriptions, test reports and discharge papers; with their consent AI reads each into an unconfirmed draft (diagnoses, medicines, results with the printed reference range, procedures, the printed date); the doctor compares draft and photo and accepts or rejects it; results are flagged above/below/within only against the range printed on the same paper (16.10).</td><td>A merged timeline across papers (7.11.3); drug-interaction checks and general reference ranges are deliberately excluded until a licensed, reviewed knowledge base exists.</td></tr>
-    <tr><td><b>C. Summary generator</b></td><td>A structured, versioned English case sheet (complaint, history of present illness, past history and operations, medicines, allergies, family and personal history, open questions); an AI brief in which every sentence cites the answers it rests on, which the doctor accepts, rewrites or rejects; the patient hears and confirms a read-back in their own language; a printable PDF (chapter 7).</td><td>Review of systems and a "prior investigations" section built from accepted readings (7.11.2, 7.11.3). The doctor's own examination and plan notes (7.11.1).</td></tr>
-    <tr><td><b>D. Consent, privacy and ABDM</b></td><td>Consent by purpose: care (required) and online AI help (optional, withdrawable from the patient's own phone); encrypted patient fields, transcripts, case sheets and photos; per-hospital isolation inside the database; session data cleared after submission; an append-only audit log (chapter 19).</td><td>ABHA authentication, ABDM linking and FHIR transfer (7.10); a legal DPDP review (7.5).</td></tr>
+    <tr><td><b>History interview</b></td><td>An adaptive interview by voice, touch or typing in Hindi, Marathi and English (chapter 3, section 16.1); complaint-specific question modules; up to three AI-written follow-up questions, validated like bank questions; surgical and personal history; "don't know" and "prefer not to say" kept apart from "no"; an optional Ayurveda history; danger-sign tiles and 15 red-flag rules that raise urgent staff alerts (16.2).</td><td>A short review-of-systems screen (Phase 7 task 7.11.2). All clinical content still needs clinician sign-off.</td></tr>
+    <tr><td><b>Old papers</b></td><td>The patient photographs old prescriptions, test reports and discharge papers; with their consent AI reads each into an unconfirmed draft (diagnoses, medicines, results with the printed reference range, procedures, the printed date); the doctor compares draft and photo and accepts or rejects it; results are flagged above/below/within only against the range printed on the same paper (16.10).</td><td>A merged timeline across papers (7.11.3); drug-interaction checks and general reference ranges are deliberately excluded until a licensed, reviewed knowledge base exists.</td></tr>
+    <tr><td><b>Case sheet for the doctor</b></td><td>A structured, versioned English case sheet (complaint, history of present illness, past history and operations, medicines, allergies, family and personal history, open questions); an AI brief in which every sentence cites the answers it rests on, which the doctor accepts, rewrites or rejects; the patient hears and confirms a read-back in their own language; a printable PDF (chapter 7).</td><td>Review of systems and a "prior investigations" section built from accepted readings (7.11.2, 7.11.3). The doctor's own examination and plan notes (7.11.1).</td></tr>
+    <tr><td><b>Consent, privacy and ABDM</b></td><td>Consent by purpose: care (required) and online AI help (optional, withdrawable from the patient's own phone); encrypted patient fields, transcripts, case sheets and photos; per-hospital isolation inside the database; session data cleared after submission; an append-only audit log (chapter 19).</td><td>ABHA authentication, ABDM linking and FHIR transfer (7.10); a legal DPDP review (7.5).</td></tr>
   </tbody>
 </table>
 

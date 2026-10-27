@@ -270,7 +270,7 @@ hazard log) and [SECURITY.md](SECURITY.md) (reporting a vulnerability).
 | Document | What it covers |
 |---|---|
 | [docs/DEMO.md](docs/DEMO.md) | The ten-minute demo script |
-| [docs/PROBLEM_STATEMENT.md](docs/PROBLEM_STATEMENT.md) | The original problem statement (SIH26047) the project started from |
+| [docs/PROBLEM_STATEMENT.md](docs/PROBLEM_STATEMENT.md) | The problem OPD Saathi addresses, and what a solution has to do |
 | [docs/OPD-Saathi-Feature-Guide.pdf](docs/OPD-Saathi-Feature-Guide.pdf) | A shorter feature guide with screenshots |
 | [docs/EVALUATION.md](docs/EVALUATION.md) | Results of the synthetic evaluations |
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
