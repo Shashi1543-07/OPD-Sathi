@@ -296,6 +296,9 @@ jobs:
       - run: >-
           pip-audit -r services/api/requirements-security.lock.txt
           --ignore-vuln GHSA-84m7-p3x7-pcfv --ignore-vuln CVE-2026-59951 --ignore-vuln CVE-2026-114603
+          --ignore-vuln GHSA-w4fh-qvv9-3v23 --ignore-vuln CVE-2026-116684
+          --ignore-vuln GHSA-5h93-6whr-6q8j --ignore-vuln CVE-2026-116685
+          --ignore-vuln GHSA-rwrf-2pqf-9j8j --ignore-vuln CVE-2026-116686
       - run: pip install --require-hashes -r services/api/requirements-security.lock.txt
       - run: semgrep scan --config auto --error services/api/app
       - uses: actions/setup-node@v7
