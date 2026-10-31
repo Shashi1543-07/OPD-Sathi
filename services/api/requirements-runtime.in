@@ -3,7 +3,7 @@
 fastapi
 gunicorn
 uvicorn-worker
-uvicorn[standard]<0.54
+uvicorn[standard]<0.55
 pydantic-settings
 structlog
 sqlalchemy[asyncio]
