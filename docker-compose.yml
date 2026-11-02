@@ -24,7 +24,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7.4.11-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+    image: redis:7.4.12-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
     command:
       [
         "sh",
@@ -45,7 +45,7 @@ services:
     restart: unless-stopped
 
   redis-cache:
-    image: redis:7.4.11-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+    image: redis:7.4.12-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
     command:
       [
         "sh",
@@ -198,7 +198,7 @@ services:
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+    image: prom/prometheus:v3.15.1@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2
     profiles: [observability]
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -217,7 +217,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:12.4.13@sha256:41bbc1b5e04416f81891806076db2a2ff60a5d4da5f78d36a88b033a8c199185
+    image: grafana/grafana:12.4.14@sha256:ae509d9ae8c1021ca32ec370a9ca975d40165eda9fccd1e1102d317ff8787cd7
     profiles: [observability]
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "false"
