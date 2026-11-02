@@ -1,7 +1,7 @@
 # PostgreSQL with pgBackRest for point-in-time recovery (Phase 7, task 7.7.2; ADR 011).
 # The same image runs the database (which archives every WAL segment as it completes) and the
 # backup service (scheduled full and differential backups into the same repository).
-FROM postgres:16.15-bookworm@sha256:d81f7b51697014367236d07ec58b54153fc28f828b72bf247fe5c7487520bcb0
+FROM postgres:16.15-bookworm@sha256:e8a07d2c7579b038938cdba6c539e580e5001caf9ea203d397b5cc83e76bd938
 
 # Debian security updates since the base image was built, then pgBackRest from the PostgreSQL
 # project's own repository (already configured in this image). The upstream gosu binary is
