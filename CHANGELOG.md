@@ -86,6 +86,9 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **Fixed, wording:** the read-back said the patient's rating in English word order in Hindi
   and Marathi ("…बताया 6 10 में से", "…सांगितला 6 १० पैकी"). It now reads "10 में से 6 बताया"
   and "10 पैकी 6 सांगितला". For the language reviewers: please check both sentences.
+- **Fixed:** after an update or a change of network every screen could show "offline" and
+  sign-in could fail (the web server answered 502) until it was restarted by hand. The web
+  server now finds the restarted application again by itself within seconds.
 - **Fixed:** in Settings → Departments each department's code was drawn over its name
   ("Ear, Nose and Throat" was cut by "ENT").
 - **The doctor's English page survives a busy AI service**: when the AI service is busy for a
