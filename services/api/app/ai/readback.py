@@ -5,6 +5,9 @@ from typing import Any, cast
 
 from app.domain.interview.bank import Language
 
+# The rating is spoken as "<severity> <number> <out_of>.". English ends with "out of 10";
+# Hindi and Marathi put the verb last ("10 में से 6 बताया", "10 पैकी 6 सांगितला"), so there
+# "out_of" holds the verb. Digits are Latin, as everywhere else on the screen.
 _LABELS = {
     "en": {
         "opening": "You told us",
@@ -20,8 +23,8 @@ _LABELS = {
     "hi": {
         "opening": "आपने हमें बताया",
         "duration": "यह परेशानी इतने समय से है",
-        "severity": "आपने इसका असर बताया",
-        "out_of": "10 में से",
+        "severity": "आपने इसका असर 10 में से",
+        "out_of": "बताया",
         "symptoms": "आपने ये बातें भी बताईं",
         "conditions": "आपने ये स्वास्थ्य स्थितियाँ बताईं",
         "medications": "आपने बताया कि आप ये दवाएँ लेते हैं",
@@ -31,8 +34,8 @@ _LABELS = {
     "mr": {
         "opening": "तुम्ही आम्हाला सांगितले",
         "duration": "हा त्रास इतक्या काळापासून आहे",
-        "severity": "तुम्ही याचा परिणाम सांगितला",
-        "out_of": "१० पैकी",
+        "severity": "तुम्ही याचा परिणाम 10 पैकी",
+        "out_of": "सांगितला",
         "symptoms": "तुम्ही या गोष्टीही सांगितल्या",
         "conditions": "तुम्ही या आरोग्यविषयक स्थिती सांगितल्या",
         "medications": "तुम्ही ही औषधे घेत असल्याचे सांगितले",

@@ -117,7 +117,13 @@ async def test_case_sheet_pdf_is_department_scoped_and_audited(monkeypatch) -> N
             return Result()
 
     def render_pdf(
-        case_sheet, *, queue_number, attention_reasons, patient_line="", doctor_notes=None
+        case_sheet,
+        *,
+        queue_number,
+        attention_reasons,
+        patient_line="",
+        doctor_notes=None,
+        department_name="",
     ):
         rendered.append(
             {

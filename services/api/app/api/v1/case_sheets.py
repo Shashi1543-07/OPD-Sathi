@@ -256,9 +256,10 @@ async def export_case_sheet_pdf(
                 await connection.execute(
                     text(
                         "SELECT v.token_label, v.urgency_reasons, v.age_years, p.sex, "
-                        "v.answered_by "
+                        "v.answered_by, d.name_en AS department "
                         "FROM visits v JOIN patients p ON p.hospital_id = v.hospital_id "
-                        "AND p.id = v.patient_id "
+                        "AND p.id = v.patient_id LEFT JOIN departments d "
+                        "ON d.hospital_id = v.hospital_id AND d.id = v.department_id "
                         "WHERE v.hospital_id = :hospital_id AND v.id = :visit_id"
                     ),
                     {"hospital_id": hospital_id, "visit_id": visit_id},
@@ -314,6 +315,8 @@ async def export_case_sheet_pdf(
         attention_reasons=reasons,
         patient_line=patient_line,
         doctor_notes=_printed_notes(notes[0]) if notes else None,
+        # The department the visit is queued in, by name, not the routing rule's code.
+        department_name=str(visit.get("department") or ""),
     )
     return StarletteResponse(
         content=pdf,

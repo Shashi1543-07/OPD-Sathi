@@ -843,6 +843,20 @@ def _summary_answers(interview_state: InterviewState) -> list[dict[str, str]]:
     ]
 
 
+# The doctor's English page is made after the patient has their answer, so a model that is
+# busy for a moment (it answers 503 at times) gets one more try.
+_ENRICHMENT_RETRY_SECONDS = 1.5
+
+
+async def _summarize_with_one_retry(provider: Any, **inputs: Any) -> dict[str, Any] | None:
+    output = await summarize_interview(provider, **inputs)
+    if output is None and inputs.get("answers"):
+        _AI_LOGGER.info("llm_case_sheet_enrichment_retry")
+        await asyncio.sleep(_ENRICHMENT_RETRY_SECONDS)
+        output = await summarize_interview(provider, **inputs)
+    return output
+
+
 async def _persist_case_sheet_enrichment(
     request: Request,
     *,
@@ -869,7 +883,7 @@ async def _persist_case_sheet_enrichment(
                 .first()
             )
         provider = request.app.state.llm_provider
-        output = await summarize_interview(
+        output = await _summarize_with_one_retry(
             provider,
             language=interview_state.language,
             age=patient["age_years"] if patient else None,
