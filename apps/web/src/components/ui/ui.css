@@ -766,6 +766,45 @@
 }
 
 /* ------------------------------------------------------------
+   Sound bars: shown instead of the speaker icon while reading aloud
+   ------------------------------------------------------------ */
+.sound-bars {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  height: 1.15rem;
+}
+.sound-bars i {
+  animation: ui-sound-bar 0.9s ease-in-out infinite;
+  background: currentColor;
+  border-radius: 2px;
+  height: 100%;
+  width: 3px;
+}
+.sound-bars i:nth-child(1) {
+  animation-delay: -0.6s;
+}
+.sound-bars i:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.sound-bars i:nth-child(3) {
+  animation-delay: -0.75s;
+}
+.sound-bars i:nth-child(4) {
+  animation-delay: -0.15s;
+}
+@keyframes ui-sound-bar {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* ------------------------------------------------------------
    Responsive & Motion Overrides
    ------------------------------------------------------------ */
 @media (max-width: 600px) {
@@ -799,6 +838,14 @@
   }
   .ui-connection--live > span {
     animation: none;
+  }
+  /* Still bars of different heights say "sound" without moving. */
+  .sound-bars i {
+    animation: none;
+    transform: scaleY(0.55);
+  }
+  .sound-bars i:nth-child(2n) {
+    transform: scaleY(1);
   }
 }
 

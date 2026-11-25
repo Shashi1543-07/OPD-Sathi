@@ -930,6 +930,235 @@
   }
 }
 
+/* Touch feedback and motion. Every control answers a touch at once (it presses in), a choice
+   confirms itself with a small pop, and each new step settles into place. Steps move without
+   fading, so their text is at full contrast from the first frame. All of it is decoration:
+   the prefers-reduced-motion rule in styles.css switches it off. */
+.intake-chip,
+.intake-segmented button,
+.intake-lang button,
+.intake-danger,
+.intake-scale-step,
+.intake-type-toggle,
+.intake-speak {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.12s var(--motion-ease),
+    border-color 0.15s,
+    box-shadow 0.15s,
+    filter 0.15s;
+}
+/* Only where the words stay dark on a light ground from start to end. A choice that turns
+   teal with white words (a language, a yes or no, a number, "Stop") changes at once: fading
+   it would pass through words nobody can read. */
+.intake-chip,
+.intake-danger,
+.intake-type-toggle {
+  transition:
+    transform 0.12s var(--motion-ease),
+    background-color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s,
+    filter 0.15s;
+}
+.intake-mic {
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    box-shadow 0.08s linear,
+    transform 0.12s var(--motion-ease),
+    background-color 0.2s;
+}
+.intake-chip:active,
+.intake-segmented button:active,
+.intake-lang button:active:not(:disabled),
+.intake-danger:active,
+.intake-type-toggle:active:not(:disabled),
+.intake-speak:active,
+.intake-mic:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.intake-scale-step:active {
+  transform: scale(0.92);
+}
+/* Hover is for the mouse only: on a touch screen it would stick to the last thing tapped. */
+@media (hover: hover) {
+  .intake-segmented button:hover:not(.is-selected),
+  .intake-lang button:hover:not(.is-selected):not(:disabled),
+  .intake-type-toggle:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+  .intake-scale-step:hover:not(.is-selected),
+  .intake-danger:hover:not(.is-selected) {
+    filter: brightness(0.96);
+  }
+  .intake-speak:hover,
+  .intake-mic:hover:not(:disabled):not(.is-listening) {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+  .intake-btn--primary:hover:not(:disabled) {
+    box-shadow: 0 10px 22px -10px rgba(15, 118, 110, 0.85);
+  }
+}
+
+@keyframes intake-pop {
+  0% {
+    transform: scale(0.96);
+  }
+  55% {
+    transform: scale(1.03);
+  }
+}
+@keyframes intake-pop-scale {
+  0% {
+    transform: scale(0.94);
+  }
+  55% {
+    transform: scale(1.13);
+  }
+}
+@keyframes intake-check-in {
+  from {
+    transform: scale(0) rotate(-25deg);
+  }
+}
+.intake-chip.is-selected,
+.intake-segmented button.is-selected,
+.intake-danger.is-selected,
+.intake-papers-list li {
+  animation: intake-pop 0.24s var(--motion-ease);
+}
+.intake-scale-step.is-selected {
+  animation: intake-pop-scale 0.24s var(--motion-ease);
+}
+.intake-chip.is-selected > svg,
+.intake-danger-check {
+  animation: intake-check-in 0.22s var(--motion-ease) backwards;
+}
+
+/* A new step, a new question and each answer panel settle into place, one after another.
+   They come from just above, never from below: a part that started lower would make the
+   page taller for a moment and a full kiosk screen would scroll. */
+@keyframes intake-rise {
+  from {
+    transform: translateY(-10px);
+  }
+}
+.intake-card > * {
+  animation: intake-rise 0.3s var(--motion-ease) backwards;
+}
+.intake-card > :nth-child(2) {
+  animation-delay: 0.04s;
+}
+.intake-card > :nth-child(3) {
+  animation-delay: 0.08s;
+}
+.intake-card > :nth-child(n + 4) {
+  animation-delay: 0.12s;
+}
+
+.intake-stepper-dot,
+.intake-stepper li::after {
+  transition:
+    background-color 0.25s,
+    border-color 0.25s,
+    color 0.25s,
+    box-shadow 0.25s;
+}
+.intake-stepper li.is-current .intake-stepper-dot {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Reading aloud and listening: the button itself shows that sound is going out or coming in. */
+@keyframes intake-speaking {
+  from {
+    box-shadow: 0 0 0 0 rgb(15 118 110 / 45%);
+  }
+  to {
+    box-shadow: 0 0 0 12px rgb(15 118 110 / 0%);
+  }
+}
+@keyframes intake-mic-ring {
+  from {
+    box-shadow: 0 0 0 0 rgb(185 28 28 / 45%);
+  }
+  to {
+    box-shadow: 0 0 0 16px rgb(185 28 28 / 0%);
+  }
+}
+.intake-speak.is-playing {
+  animation: intake-speaking 1.6s ease-out infinite;
+}
+.intake-mic.is-listening::after {
+  animation: intake-mic-ring 1.4s ease-out infinite;
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+/* The token: the tick draws itself, a ring spreads once, and the number steps forward. */
+@keyframes intake-ok-pop {
+  0% {
+    transform: scale(0.3);
+  }
+  60% {
+    transform: scale(1.14);
+  }
+}
+@keyframes intake-ok-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+@keyframes intake-ok-draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+}
+@keyframes intake-token-in {
+  from {
+    transform: scale(0.86);
+  }
+}
+.intake-ticket > * {
+  animation: intake-rise 0.35s var(--motion-ease) backwards;
+}
+.intake-ticket > :nth-child(3) {
+  animation-delay: 0.1s;
+}
+.intake-ticket > :nth-child(n + 4) {
+  animation-delay: 0.18s;
+}
+.intake-ticket > .intake-ticket-ok {
+  animation: intake-ok-pop 0.5s var(--motion-ease) 0.05s backwards;
+  position: relative;
+}
+.intake-ticket-ok::after {
+  animation: intake-ok-ring 0.9s ease-out 0.3s backwards;
+  border: 2px solid var(--routine);
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+.intake-ticket-ok svg {
+  animation: intake-ok-draw 0.4s ease-out 0.25s backwards;
+  stroke-dasharray: 24;
+}
+.intake-ticket-token .status-token {
+  animation: intake-token-in 0.45s var(--motion-ease) 0.2s backwards;
+  transform-origin: left center;
+}
+
 /* Short kiosk screens (e.g. 1280x800): keep each step on one screen without scrolling. */
 @media (max-height: 920px) {
   .kiosk-main.intake {
