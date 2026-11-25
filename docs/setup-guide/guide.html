@@ -386,7 +386,7 @@ docker compose run --rm api python -m app.cli seed-demo-returning --reset
     <tr><td>“Docker Desktop is not running” / cannot connect to the Docker daemon</td><td>Start Docker Desktop, wait for “Engine running”, run the script again.</td></tr>
     <tr><td>The kiosk says <b>Activate this kiosk</b></td><td>This browser is not paired (another browser, another port, or cleared data). Make a new link (table above) and open it once here.</td></tr>
     <tr><td>The page looks old after an update</td><td>Reload it once. From then on open pages update themselves.</td></tr>
-    <tr><td>The page does not load</td><td>Wait 20 seconds and reload. Then <code>docker compose ps</code>: every line should say Up. If not, run the start script again.</td></tr>
+    <tr><td>The page does not load, or every screen says “offline” and sign-in fails</td><td>Wait 20 seconds and reload. Then <code>docker compose restart web</code>. Still not? <code>docker compose ps</code>: every line should say Up; if not, run the start script again.</td></tr>
     <tr><td><code>[warn] AI: Gemini did not answer</code></td><td>No internet, or the free AI service is busy. Try <code>ai-check</code> again in a minute. Meanwhile choose <b>No, continue without AI</b> at the kiosk.</td></tr>
     <tr><td>The voice answer is not heard</td><td>Allow the microphone (the icon in the address bar), or tap <b>Type instead</b>.</td></tr>
     <tr><td>The doctor's page has no AI brief</td><td>It arrives a few seconds after the token; press refresh. If AI was busy, the page still has the history from the question bank.</td></tr>

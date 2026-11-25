@@ -195,6 +195,11 @@ services:
     depends_on:
       api:
         condition: service_healthy
+        # nginx looks up the API's address once, when it starts. A recreated API container
+        # (a rebuild, or a new PUBLIC_WEB_URL on another network) can come back on another
+        # address, and every /api call then answered 502 until nginx was restarted. With
+        # this, "docker compose up" restarts the web container whenever it replaces the API.
+        restart: true
     restart: unless-stopped
 
   prometheus:
