@@ -11,3 +11,12 @@ CVE-2026-84445 exp:2026-11-30
 CVE-2026-111943 exp:2026-11-30
 CVE-2026-78667 exp:2026-11-30
 CVE-2026-97031 exp:2026-11-30
+
+# golang.org/x/net/html: denial of service through crafted HTML, in bin/alertmanager and
+# bin/amtool. Fixed in x/net 0.62.0, which no Alertmanager release is built with yet: checked
+# v0.34.1 (0.58.0), v0.34.2 (0.60.0), v0.35.0 and v0.35.1 (0.61.0) on 26 Nov 2026. Exposure as
+# above: Alertmanager parses no HTML from outside; only Prometheus reaches it, on the private
+# Docker network. Accepted by the owner on 26 Nov 2026; expires on 31 Dec 2026. Upgrading to
+# v0.34.2 or later already removes the five entries above, and should be done before they
+# expire on 30 Nov 2026.
+CVE-2026-78661 exp:2026-12-31

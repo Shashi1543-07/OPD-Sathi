@@ -212,6 +212,12 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - The setup guide is built from `docs/setup-guide/guide.html` by `render-pdf.mjs` beside it;
   commands never break at a hyphen, so they copy out of the PDF intact.
 - `AudioPrompt.test.tsx` covers the read-aloud button: speaking, stopping, no leftover text.
+- `opentelemetry-api` 1.45.2 in the application locks (CVE-2026-126360, a denial of service in
+  trace-header parsing). Four advisories with no fixed release to move to are waived in
+  writing, approved by the owner on 26 Nov 2026: three in the CI-only Semgrep scanner's lock
+  (ADR 006, amendment of that date) and one in the Alertmanager image (`.trivyignore`, until
+  31 Dec 2026). Upgrading Alertmanager to 0.34.2 or later removes its five older waivers,
+  which expire on 30 Nov 2026.
 
 ## [0.7.0]
 

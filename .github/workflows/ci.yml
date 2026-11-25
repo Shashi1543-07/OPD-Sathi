@@ -291,14 +291,18 @@ jobs:
       - run: pip install --require-hashes -r services/api/requirements.lock.txt
       - run: bandit -q -r services/api/app
       - run: pip-audit -r services/api/requirements.lock.txt
-      # Temporary waivers for the CI-only Semgrep scanner, which pins mcp==1.29.0 and
-      # opentelemetry-api~=1.37.0 in every release; neither reaches the application. See ADR 006.
+      # Temporary waivers for the CI-only Semgrep scanner, which pins mcp==1.29.0,
+      # opentelemetry-api~=1.37.0 and wcmatch~=8.3 in every release; none reaches the
+      # application. See ADR 006 and its amendments (the last three lines: 26 Nov 2026).
       - run: >-
           pip-audit -r services/api/requirements-security.lock.txt
           --ignore-vuln GHSA-84m7-p3x7-pcfv --ignore-vuln CVE-2026-59951 --ignore-vuln CVE-2026-114603
           --ignore-vuln GHSA-w4fh-qvv9-3v23 --ignore-vuln CVE-2026-116684
           --ignore-vuln GHSA-5h93-6whr-6q8j --ignore-vuln CVE-2026-116685
           --ignore-vuln GHSA-rwrf-2pqf-9j8j --ignore-vuln CVE-2026-116686
+          --ignore-vuln GHSA-qx49-fqc8-xw99 --ignore-vuln CVE-2026-115563
+          --ignore-vuln GHSA-mf5v-w3w3-f6cg --ignore-vuln CVE-2026-126360
+          --ignore-vuln GHSA-53pm-wgxf-c6qf --ignore-vuln CVE-2026-132276
       - run: pip install --require-hashes -r services/api/requirements-security.lock.txt
       - run: semgrep scan --config auto --error services/api/app
       - uses: actions/setup-node@v7
