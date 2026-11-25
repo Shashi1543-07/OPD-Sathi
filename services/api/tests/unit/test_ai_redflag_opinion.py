@@ -51,11 +51,12 @@ def test_schema_limits_model_output_to_configured_rules_and_quotes() -> None:
 
 @pytest.mark.asyncio
 async def test_adds_only_configured_flags_with_exact_quote_and_neutral_visibility() -> None:
-    rule = next(rule for rule in RULES if rule.level == "urgent" and rule.all_groups)
-    provider = FixtureProvider({"flags": [{"rule_id": rule.id, "evidence": "severe chest pain"}]})
+    # A rule with one sign group; rules that need several signs together are tested below.
+    rule = next(rule for rule in RULES if rule.level == "urgent" and len(rule.all_groups) == 1)
+    provider = FixtureProvider({"flags": [{"rule_id": rule.id, "evidence": "gasping for air"}]})
     flags = await second_opinion_flags(
         provider,
-        transcript="patient reports severe chest pain today",
+        transcript="patient is gasping for air today",
         language="en",
         session_id="synthetic-session",
     )
@@ -64,8 +65,85 @@ async def test_adds_only_configured_flags_with_exact_quote_and_neutral_visibilit
     assert flags[0].level == "urgent"
     assert flags[0].source == "llm"
     assert flags[0].visible_to_patient is False
-    assert flags[0].evidence == "severe chest pain"
+    assert flags[0].evidence == "gasping for air"
     assert provider.timeout < MAX_REDFLAG_SECONDS
+
+
+def _two_sign_rule() -> tuple[str, str, str]:
+    """A rule that needs a sign from each of two groups, and the IDs of its two groups."""
+    rule = next(rule for rule in RULES if len(rule.all_groups) == 2 and not rule.conditions)
+    return rule.id, f"{rule.id}__SIGN_1", f"{rule.id}__SIGN_2"
+
+
+@pytest.mark.asyncio
+async def test_a_rule_that_needs_two_signs_is_not_raised_from_one_of_them() -> None:
+    rule_id, first, second = _two_sign_rule()
+    # Seen live: "chest discomfort with another concerning symptom", urgent, from dizziness
+    # alone. The whole rule is no longer offered; one of its two groups raises nothing.
+    for flags_from_model in (
+        [{"rule_id": rule_id, "evidence": "feeling dizzy"}],
+        [{"rule_id": second, "evidence": "feeling dizzy"}],
+    ):
+        provider = FixtureProvider({"flags": flags_from_model})
+        flags = await second_opinion_flags(
+            provider,
+            transcript="tired for two weeks and feeling dizzy",
+            language="en",
+            session_id="synthetic-session",
+        )
+        assert flags == []
+        offered = provider.schema["properties"]["flags"]["items"]["properties"]["rule_id"]["enum"]
+        assert rule_id not in offered and {first, second} <= set(offered)
+
+
+@pytest.mark.asyncio
+async def test_a_rule_that_needs_two_signs_is_raised_when_both_are_shown() -> None:
+    rule_id, first, second = _two_sign_rule()
+    # Both groups in the patient's own words, each quoted by the model.
+    both = await second_opinion_flags(
+        FixtureProvider(
+            {
+                "flags": [
+                    {"rule_id": first, "evidence": "a heavy squeezing in my chest"},
+                    {"rule_id": second, "evidence": "my shirt is soaked"},
+                ]
+            }
+        ),
+        transcript="a heavy squeezing in my chest and my shirt is soaked",
+        language="en",
+        session_id="synthetic-session",
+    )
+    assert [(flag.id, flag.level, flag.source) for flag in both] == [(rule_id, "urgent", "llm")]
+    assert both[0].evidence == "a heavy squeezing in my chest; my shirt is soaked"
+
+    # One group in the patient's own words, the other in the rule's listed words.
+    mixed = await second_opinion_flags(
+        FixtureProvider(
+            {"flags": [{"rule_id": first, "evidence": "a heavy squeezing in my chest"}]}
+        ),
+        transcript="a heavy squeezing in my chest with sweating",
+        language="en",
+        session_id="synthetic-session",
+    )
+    assert [flag.id for flag in mixed] == [rule_id]
+    assert mixed[0].evidence == "a heavy squeezing in my chest; sweating"
+
+    # The first group quoted under the one-group rule that lists the same signs.
+    same_signs = next(
+        rule.id
+        for rule in RULES
+        if len(rule.all_groups) == 1
+        and rule.all_groups[0] == next(r for r in RULES if r.id == rule_id).all_groups[0]
+    )
+    shared = await second_opinion_flags(
+        FixtureProvider(
+            {"flags": [{"rule_id": same_signs, "evidence": "a heavy squeezing in my chest"}]}
+        ),
+        transcript="a heavy squeezing in my chest with sweating",
+        language="en",
+        session_id="synthetic-session",
+    )
+    assert {flag.id for flag in shared} == {rule_id, same_signs}
 
 
 @pytest.mark.asyncio

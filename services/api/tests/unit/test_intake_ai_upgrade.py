@@ -201,6 +201,46 @@ class _Provider:
 
 
 @pytest.mark.asyncio
+async def test_a_busy_model_gets_one_more_try_for_the_doctors_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api.v1 import intake
+
+    monkeypatch.setattr(intake, "_ENRICHMENT_RETRY_SECONDS", 0)
+    inputs: dict[str, Any] = {
+        "language": "hi",
+        "age": 34,
+        "sex": "female",
+        "answers": [
+            {"question_id": "chief_concern", "question_en": "Main problem?", "answer": "x"}
+        ],
+        "danger_signs": [],
+        "session_id": "s",
+    }
+
+    class BusyOnce(_Provider):
+        async def generate_json(self, prompt: Any, schema: Any, **kwargs: Any) -> Any:
+            if not self.calls:
+                self.calls.append({"prompt": prompt})
+                raise LLMUnavailableError("busy")
+            return await super().generate_json(prompt, schema, **kwargs)
+
+    busy = BusyOnce(_summary())
+    assert await intake._summarize_with_one_retry(busy, **inputs) == _summary()
+    assert len(busy.calls) == 2
+
+    # Still down: two tries, then the sheet stays as the rules and the question bank made it.
+    down = _Provider(LLMUnavailableError("down"))
+    assert await intake._summarize_with_one_retry(down, **inputs) is None
+    assert len(down.calls) == 2
+
+    # Nothing to summarise is not a failure and is not tried again.
+    idle = _Provider(_summary())
+    assert await intake._summarize_with_one_retry(idle, **{**inputs, "answers": []}) is None
+    assert idle.calls == []
+
+
+@pytest.mark.asyncio
 async def test_summarize_interview_falls_back_quietly() -> None:
     answers = [{"question_id": "chief_concern", "question_en": "Main problem?", "answer": "x"}]
     ok = _Provider(_summary())

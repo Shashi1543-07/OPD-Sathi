@@ -196,12 +196,15 @@ def render_case_sheet_pdf(
     attention_reasons: list[str],
     patient_line: str = "",
     doctor_notes: dict[str, Any] | None = None,
+    department_name: str = "",
 ) -> bytes:
     """Return an A4 HTML-rendered PDF with escaped patient-provided text.
 
     The sheet is for the doctor, so labels and values are English; the patient's own
     words follow each translated value in brackets. ``doctor_notes`` is the latest saved
     version of the doctor's own notes (task 7.11.1), printed apart from the history.
+    ``department_name`` is the department the visit is queued in; without it the routing
+    code is printed.
     """
     from weasyprint import HTML
 
@@ -357,7 +360,7 @@ ul {{ margin:2pt 0 0; padding-left:14pt; }}
 <div class="columns">
   <section><h2>{escape(labels["present"])}</h2><dl>{hpi_rows}</dl></section>
   <section><h2>{escape(labels["past"])}</h2><dl>{past_rows}</dl>
-    {_row(labels["routing"], routing.get("department_code"), language)}
+    {_row(labels["routing"], department_name or routing.get("department_code"), language)}
     {family_rows}
     {social_block}
     {women_block}

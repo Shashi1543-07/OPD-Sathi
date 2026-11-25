@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPD Saathi · the patient speaks, the doctor reads one page</title>
+<meta name="description" content="OPD Saathi: a voice-first, multilingual patient history-taking and queue kiosk for government hospital OPDs. A walk through the product with real screens of fictional patients.">
+<!--
+  Built by docs/showcase/build.mjs from showcase.template.html. Edit the template, not this file.
+  Every screen shown is a real capture of the running app with synthetic (fictional) patients.
+-->
+<style>
+/*__FONTS__*/
+:root {
+  --bg: #f2f9f8; --bg-2: #e3f2ef; --ink: #0b2545; --ink-2: #33506e; --muted: #5b7186;
+  --line: rgba(11, 37, 69, .13); --card: rgba(255, 255, 255, .78); --card-solid: #ffffff;
+  --accent: #0f766e; --accent-2: #0d9488; --accent-ink: #ffffff; --glow: rgba(15, 118, 110, .28);
+  --warn: #b45309; --danger: #b91c1c; --ok: #15803d;
+  --blob-1: rgba(45, 212, 191, .42); --blob-2: rgba(56, 132, 255, .2); --blob-3: rgba(15, 118, 110, .22);
+  --bezel: #0b1626; --bezel-edge: #26384f; --shadow: 0 40px 90px -30px rgba(11, 37, 69, .45);
+  --dim: rgba(8, 24, 44, .3);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #04111e; --bg-2: #071d34; --ink: #ecf6f7; --ink-2: #c3d6e0; --muted: #8fa9ba;
+  --line: rgba(255, 255, 255, .12); --card: rgba(255, 255, 255, .055); --card-solid: #0b2238;
+  --accent: #2dd4bf; --accent-2: #5eead4; --accent-ink: #04201d; --glow: rgba(45, 212, 191, .34);
+  --warn: #fbbf24; --danger: #f87171; --ok: #4ade80;
+  --blob-1: rgba(20, 184, 166, .34); --blob-2: rgba(37, 99, 235, .26); --blob-3: rgba(45, 212, 191, .16);
+  --bezel: #050b14; --bezel-edge: #1c2c40; --shadow: 0 50px 110px -30px rgba(0, 0, 0, .8);
+  --dim: rgba(2, 8, 16, .4);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { font-size: clamp(11px, 0.82vw + 0.52vh, 22px); }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: "Inter", "Noto Sans Devanagari", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  transition: background-color .5s, color .5s;
+}
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+h1, h2, h3, p { margin: 0; }
+.hi { font-family: "Noto Sans Devanagari", "Inter", sans-serif; }
+
+/* ---------- backdrop: slow light, a fine grid, and the voice wave of the logo ---------- */
+.backdrop { position: fixed; inset: 0; overflow: hidden; z-index: 0;
+  background: radial-gradient(120% 90% at 50% 0%, var(--bg-2), var(--bg) 62%); transition: background .5s; }
+.blob { position: absolute; border-radius: 50%; filter: blur(70px); will-change: transform; }
+.blob.b1 { width: 46vw; height: 46vw; left: -10vw; top: -16vw; background: var(--blob-1); animation: drift-a 26s ease-in-out infinite alternate; }
+.blob.b2 { width: 40vw; height: 40vw; right: -8vw; top: 12vh; background: var(--blob-2); animation: drift-b 32s ease-in-out infinite alternate; }
+.blob.b3 { width: 36vw; height: 36vw; left: 28vw; bottom: -22vw; background: var(--blob-3); animation: drift-c 29s ease-in-out infinite alternate; }
+@keyframes drift-a { to { transform: translate3d(9vw, 7vh, 0) scale(1.15); } }
+@keyframes drift-b { to { transform: translate3d(-8vw, 10vh, 0) scale(.9); } }
+@keyframes drift-c { to { transform: translate3d(6vw, -9vh, 0) scale(1.1); } }
+.grid { position: absolute; inset: 0; opacity: .5;
+  background-image: radial-gradient(var(--line) 1px, transparent 1.4px); background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(80% 70% at 50% 45%, #000 20%, transparent 78%);
+          mask-image: radial-gradient(80% 70% at 50% 45%, #000 20%, transparent 78%); }
+
+/* ---------- frame: top bar, stage, dock ---------- */
+.top { position: fixed; z-index: 30; top: 0; left: 0; right: 0; display: flex; align-items: center;
+  gap: 1rem; padding: 1.1rem 1.6rem; pointer-events: none; }
+.top > * { pointer-events: auto; }
+.brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; font-size: 1.15rem; letter-spacing: -.02em; }
+.brand svg { width: 2.1rem; height: 2.1rem; color: var(--accent); }
+.brand b { font-weight: 600; color: var(--accent); }
+.top .note { margin-left: auto; font-size: .78rem; color: var(--muted); display: flex; align-items: center; gap: .5rem; }
+.top .note i { flex: none; margin-right: .25rem; width: .5rem; height: .5rem; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: live 2s ease-out infinite; }
+@keyframes live { to { box-shadow: 0 0 0 .6rem transparent; } }
+.icon-btn { width: 2.5rem; height: 2.5rem; border-radius: 50%; display: grid; place-items: center;
+  background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(12px);
+  transition: transform .15s, background-color .2s, border-color .2s; }
+.icon-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+.icon-btn:active { transform: scale(.94); }
+.icon-btn svg { width: 1.15rem; height: 1.15rem; }
+:root[data-theme="dark"] .sun, :root:not([data-theme="dark"]) .moon { display: none; }
+
+.stage { position: fixed; inset: 0; z-index: 10; perspective: 2600px; }
+.scene { position: absolute; inset: 0; padding: 5.4rem 4.2rem 7.6rem; display: grid; align-items: center;
+  grid-template-rows: minmax(0, 1fr);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translate3d(5%, 0, -260px) rotateY(-7deg); transform-origin: 50% 50%;
+  transition: opacity .7s ease, transform .9s cubic-bezier(.2, .7, .2, 1), visibility 0s .9s; }
+.scene.is-active { opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+  transition: opacity .7s ease .12s, transform .9s cubic-bezier(.2, .7, .2, 1) .12s, visibility 0s; }
+.scene.is-past { transform: translate3d(-5%, 0, -260px) rotateY(7deg); }
+/* scenes whose parts sit one under another, centred as a group */
+.scene.stack { grid-template-rows: none; grid-auto-rows: auto; align-content: center; }
+
+.kicker { display: inline-flex; align-items: center; gap: .55rem; font-size: .8rem; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.kicker::before { content: ""; width: 1.6rem; height: 2px; background: currentColor; border-radius: 2px; }
+.new { font-size: .68rem; letter-spacing: .1em; padding: .18rem .55rem; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); }
+h1 { font-size: 3.7rem; line-height: 1.04; font-weight: 800; letter-spacing: -.045em; }
+h2 { font-size: 2.55rem; line-height: 1.08; font-weight: 800; letter-spacing: -.035em; text-wrap: balance; }
+h3 { font-size: 1.5rem; line-height: 1.2; font-weight: 700; letter-spacing: -.02em; }
+.grad { background: linear-gradient(100deg, var(--accent), var(--accent-2) 55%, #60a5fa); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lead { font-size: 1.2rem; color: var(--ink-2); max-width: 34em; text-wrap: pretty; }
+.small { font-size: .82rem; color: var(--muted); }
+
+/* things that appear at a step: data-at="n" shows from step n on */
+[data-at] { opacity: 0; transform: translateY(1.1rem); transition: opacity .6s ease, transform .7s cubic-bezier(.2, .7, .2, 1); }
+[data-at].shown { opacity: 1; transform: none; }
+[data-at].shown:not(.cur).fade-old { opacity: .42; }
+
+/* ---------- dock ---------- */
+.dock { position: fixed; z-index: 30; left: 50%; bottom: 1.15rem; transform: translateX(-50%);
+  display: flex; align-items: center; gap: .55rem; padding: .5rem .6rem; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 18px 50px -22px rgba(0, 0, 0, .55); max-width: calc(100vw - 2rem); }
+.dock .icon-btn { background: transparent; border-color: transparent; }
+.dock .play { background: var(--accent); color: var(--accent-ink); }
+.dock .play:hover { border-color: transparent; }
+.dock .pause-i, .is-playing .dock .play-i { display: none; }
+.is-playing .dock .pause-i { display: block; }
+.chapters { display: flex; gap: .15rem; overflow-x: auto; scrollbar-width: none; }
+.chapters::-webkit-scrollbar { display: none; }
+.chapters button { position: relative; padding: .5rem .8rem; border-radius: 999px; font-size: .78rem; font-weight: 600;
+  color: var(--muted); white-space: nowrap; transition: color .2s, background-color .2s; }
+.chapters button:hover { color: var(--ink); }
+.chapters button.on { color: var(--ink); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.chapters button i { position: absolute; left: .8rem; right: .8rem; bottom: .22rem; height: 2px; border-radius: 2px;
+  background: var(--accent); transform: scaleX(var(--p, 0)); transform-origin: left; transition: transform .35s; }
+.count { font-size: .74rem; color: var(--muted); font-variant-numeric: tabular-nums; padding: 0 .6rem 0 .2rem; white-space: nowrap; }
+.timer { position: fixed; z-index: 31; left: 0; bottom: 0; height: 3px; width: 100%; transform: scaleX(0); transform-origin: left;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.keys { font-size: .78rem; color: var(--muted); display: flex; gap: .9rem; flex-wrap: wrap; align-items: center; }
+.keys kbd { font: inherit; padding: .1rem .4rem; border: 1px solid var(--line); border-radius: .35rem; background: var(--card); margin-right: .25rem; }
+
+/* ---------- devices ---------- */
+.rig { position: relative; width: 100%; height: 100%; min-height: 0; display: grid; place-items: center;
+  perspective: 2400px; perspective-origin: 50% 45%; }
+.dev { position: absolute; left: 50%; top: 50%; translate: -50% -50%; opacity: 0; pointer-events: none; transform-style: preserve-3d;
+  transform: translate3d(14%, 2%, -420px) rotateY(-34deg) rotateX(6deg);
+  transition: opacity .7s ease, transform 1s cubic-bezier(.2, .75, .2, 1); }
+.dev.on { opacity: 1; pointer-events: auto; cursor: zoom-in;
+  transform: rotateY(calc(-9deg + var(--px, 0) * 5deg)) rotateX(calc(4deg - var(--py, 0) * 4deg)); }
+.dev.was { transform: translate3d(-16%, 2%, -420px) rotateY(30deg) rotateX(6deg); }
+.zoomed .dev.on { cursor: zoom-out; transform: scale(var(--zoom, 1.18)) translateX(-13%); }
+.zoomed .dev-phone.on { --zoom: 1.06; transform: scale(var(--zoom)) translateX(-62%); }
+.zoomed .device-scene .copy { opacity: .0; transform: translateX(-2rem); }
+.dev-body { position: relative; background: var(--bezel); border: 1px solid var(--bezel-edge); box-shadow: var(--shadow), inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.dev-body::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(118deg, rgba(255, 255, 255, .16), transparent 28%, transparent 70%, rgba(255, 255, 255, .05)); mix-blend-mode: screen; }
+.screen { position: relative; overflow: hidden; background: #f3f8f8; }
+.screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0;
+  opacity: 0; transform: scale(1.0); transition: opacity .75s ease, transform 7s linear; }
+.screen img.on { opacity: 1; transform: scale(1.035); }
+.dev-tablet { width: min(100%, calc((100vh - 13.5rem) * 1.52)); }
+.dev-tablet .dev-body { padding: 1.5%; border-radius: 2.2rem; }
+.dev-tablet .screen { aspect-ratio: 1440 / 900; border-radius: 1.3rem; }
+.dev-laptop { width: min(96%, calc((100vh - 15.5rem) * 1.5)); }
+.dev-laptop .dev-body { padding: 1.3% 1.3% 1.6%; border-radius: 1.3rem 1.3rem .3rem .3rem; }
+.dev-laptop .screen { aspect-ratio: 1600 / 1000; border-radius: .6rem; }
+.dev-laptop .base { position: relative; height: 1.05rem; margin: 0 -7%; border-radius: .2rem .2rem 1.3rem 1.3rem;
+  background: linear-gradient(var(--bezel-edge), var(--bezel)); box-shadow: 0 30px 50px -18px rgba(0, 0, 0, .6); }
+.dev-laptop .base::before { content: ""; position: absolute; left: 50%; top: 0; width: 14%; height: .32rem; transform: translateX(-50%);
+  border-radius: 0 0 .5rem .5rem; background: rgba(255, 255, 255, .12); }
+.dev-phone { height: min(100%, calc(100vh - 12.5rem)); aspect-ratio: 780 / 1420; }
+.dev-phone .dev-body { height: 100%; padding: 3.2% 3.6%; border-radius: 3rem; }
+.dev-phone .screen { height: 100%; border-radius: 2.2rem; }
+.dev-phone .dev-body::before { content: ""; position: absolute; z-index: 3; left: 50%; top: 2.4%; width: 26%; height: 2.6%;
+  transform: translateX(-50%); border-radius: 999px; background: var(--bezel); }
+.dev-phone .screen img { top: 5.5%; height: 94.5%; }
+
+/* a spotlight on one part of a screen */
+.hl { position: absolute; z-index: 2; border-radius: .7rem; pointer-events: none; opacity: 0;
+  border: 2px solid var(--hl, #2dd4bf); box-shadow: 0 0 0 200vmax var(--dim), 0 0 1.6rem .2rem var(--hl-glow, rgba(45, 212, 191, .55));
+  transition: opacity .6s ease .1s, left .7s, top .7s, width .7s, height .7s; }
+.hl.on { opacity: 1; transition-delay: 1s, 0s, 0s, 0s, 0s; }
+.hl span { position: absolute; left: -2px; bottom: calc(100% + .45rem); white-space: nowrap; font-size: .74rem; font-weight: 700;
+  padding: .28rem .6rem; border-radius: .45rem; background: var(--hl, #2dd4bf); color: #04201d; }
+.hl.below span { bottom: auto; top: calc(100% + .45rem); }
+.hl.right span { left: auto; right: -2px; }
+.hl.red { --hl: #f87171; --hl-glow: rgba(248, 113, 113, .55); }
+.hl.red span { color: #2a0606; }
+
+/* ---------- device scenes: words on the left, the screen on the right ---------- */
+.device-scene { grid-template-columns: minmax(19rem, 31%) minmax(0, 1fr); gap: 3.2rem; }
+.copy { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; transition: opacity .5s, transform .6s; }
+.ticks { display: flex; gap: .28rem; margin-top: .4rem; }
+.ticks i { flex: 1; height: .28rem; border-radius: 999px; background: var(--line); overflow: hidden; position: relative; max-width: 3rem; }
+.ticks i.done { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.ticks i.cur { background: var(--accent); box-shadow: 0 0 .8rem var(--glow); }
+.beat { position: relative; padding: 1.25rem 1.35rem; border-radius: 1.2rem; background: var(--card); border: 1px solid var(--line);
+  backdrop-filter: blur(14px); min-height: 11.5rem; }
+.beat .n { font-size: .78rem; font-weight: 700; letter-spacing: .12em; color: var(--accent); font-variant-numeric: tabular-nums; }
+.beat h3 { margin: .35rem 0 .5rem; }
+.beat p { color: var(--ink-2); font-size: 1.04rem; text-wrap: pretty; }
+.beat .fact { display: inline-flex; gap: .45rem; align-items: center; margin-top: .85rem; padding: .34rem .7rem; border-radius: .6rem;
+  font-size: .82rem; font-weight: 600; color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.beat .said { margin-top: .85rem; padding: .7rem .9rem; border-radius: .9rem .9rem .9rem .2rem; font-size: 1.12rem; font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.beat.swap > * { animation: beat-in .55s cubic-bezier(.2, .7, .2, 1) backwards; }
+.beat.swap > :nth-child(2) { animation-delay: .06s; }
+.beat.swap > :nth-child(3) { animation-delay: .12s; }
+.beat.swap > :nth-child(n + 4) { animation-delay: .2s; }
+@keyframes beat-in { from { opacity: 0; transform: translateY(.9rem); } }
+.who { display: flex; gap: .5rem; flex-wrap: wrap; }
+.who span { font-size: .76rem; font-weight: 600; padding: .28rem .7rem; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.who span.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+
+/* ---------- hero ---------- */
+#hero { grid-template-columns: minmax(0, 50%) minmax(0, 1fr); gap: 1.5rem; }
+#hero .copy { gap: 1.5rem; }
+.cta { display: flex; gap: .8rem; flex-wrap: wrap; align-items: center; }
+.btn { display: inline-flex; align-items: center; gap: .6rem; padding: .95rem 1.5rem; border-radius: 999px; font-weight: 700; font-size: 1.02rem;
+  background: var(--accent); color: var(--accent-ink); box-shadow: 0 14px 34px -12px var(--glow); transition: transform .15s, box-shadow .2s; }
+.btn:hover { transform: translateY(-2px); box-shadow: 0 20px 40px -12px var(--glow); }
+.btn:active { transform: scale(.97); }
+.btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
+.btn svg { width: 1.1rem; height: 1.1rem; }
+.pledge { display: flex; gap: .6rem; align-items: center; font-size: .9rem; color: var(--ink-2); }
+.pledge svg { width: 1.2rem; height: 1.2rem; color: var(--accent); flex: none; }
+.trio { position: relative; width: 100%; height: 100%; perspective: 2200px; }
+.trio .t { position: absolute; transform-style: preserve-3d; will-change: transform; }
+.trio .dev-body { box-shadow: var(--shadow); }
+.trio .t-laptop { width: 74%; left: 16%; top: 12%;
+  transform: rotateY(calc(-16deg + var(--px, 0) * 5deg)) rotateX(calc(7deg - var(--py, 0) * 4deg)) translateZ(-120px); animation: float-a 9s ease-in-out infinite alternate; }
+.trio .t-tablet { width: 52%; left: -2%; top: 46%;
+  transform: rotateY(calc(16deg + var(--px, 0) * 7deg)) rotateX(calc(6deg - var(--py, 0) * 5deg)) translateZ(60px); animation: float-b 8s ease-in-out infinite alternate; }
+.trio .t-phone { height: 62%; aspect-ratio: 780 / 1420; right: 1%; top: 32%;
+  transform: rotateY(calc(-22deg + var(--px, 0) * 9deg)) rotateX(calc(5deg - var(--py, 0) * 6deg)) translateZ(160px); animation: float-c 7s ease-in-out infinite alternate; }
+.trio .t-laptop .dev-body { padding: 1.3%; border-radius: 1rem; }
+.trio .t-laptop .screen { aspect-ratio: 16 / 10; border-radius: .5rem; }
+.trio .t-tablet .dev-body { padding: 1.8%; border-radius: 1.5rem; }
+.trio .t-tablet .screen { aspect-ratio: 16 / 10; border-radius: .9rem; }
+.trio .t-phone .dev-body { height: 100%; padding: 3.2% 3.6%; border-radius: 2rem; }
+.trio .t-phone .screen { height: 100%; border-radius: 1.5rem; }
+.trio .screen img { opacity: 1; transform: none; }
+@keyframes float-a { to { translate: 0 -1.1rem; } }
+@keyframes float-b { to { translate: 0 1.2rem; } }
+@keyframes float-c { to { translate: 0 -1.5rem; } }
+.wave { display: inline-flex; align-items: center; gap: .22rem; height: 1.3rem; }
+.wave i { width: .2rem; height: 100%; border-radius: .2rem; background: currentColor; animation: wave 1s ease-in-out infinite; }
+.wave i:nth-child(1) { animation-delay: -.6s; } .wave i:nth-child(2) { animation-delay: -.3s; }
+.wave i:nth-child(3) { animation-delay: -.8s; } .wave i:nth-child(4) { animation-delay: -.1s; }
+@keyframes wave { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+
+/* ---------- the problem ---------- */
+#problem { grid-template-columns: minmax(0, 42%) minmax(0, 1fr); gap: 3.5rem; }
+.facts { display: grid; gap: .7rem; margin-top: .6rem; }
+.fact-row { display: grid; grid-template-columns: 9.4rem 1fr; gap: 1rem; align-items: center; padding: .85rem 1.1rem; border-radius: 1rem;
+  background: var(--card); border: 1px solid var(--line); }
+.fact-row b { font-size: 2rem; font-weight: 800; letter-spacing: -.03em; color: var(--accent); line-height: 1.1; }
+.fact-row span { color: var(--ink-2); font-size: 1.08rem; }
+.fact-row.cur { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 14px 40px -18px var(--glow); }
+.hall { position: relative; padding: 2rem; border-radius: 1.6rem; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(10px); }
+.hall-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.1rem; font-size: .82rem; color: var(--muted); font-weight: 600; }
+.doc { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .8rem; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.dots { display: grid; grid-template-columns: repeat(20, 1fr); gap: .5rem; }
+.dots i { aspect-ratio: 1; border-radius: 34%; background: color-mix(in srgb, var(--ink) 26%, transparent); opacity: 0; transform: scale(.2);
+  transition: opacity .5s, transform .5s cubic-bezier(.3, 1.6, .5, 1), background-color .5s; }
+#problem[data-step] .dots i { opacity: 1; transform: none; }
+#problem:not([data-step="0"]) .dots i.served { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+#problem[data-step="2"] .dots i:not(.served), #problem[data-step="3"] .dots i:not(.served), #problem[data-step="4"] .dots i:not(.served) { animation: restless 2.4s ease-in-out infinite; animation-delay: calc(var(--i) * -37ms); }
+@keyframes restless { 50% { transform: translateY(-.16rem) scale(.9); opacity: .55; } }
+#problem[data-step="3"] .dots i.urgent, #problem[data-step="4"] .dots i.urgent { background: var(--danger); animation: urgent 1.1s ease-out infinite; opacity: 1; z-index: 2; position: relative; }
+@keyframes urgent { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 70%, transparent); } to { box-shadow: 0 0 0 1rem transparent; } }
+.hall-foot { margin-top: 1.4rem; min-height: 3.2rem; font-size: 1.18rem; font-weight: 600; color: var(--ink-2); position: relative; }
+.hall-foot span { position: absolute; inset: 0; opacity: 0; transform: translateY(.5rem); transition: opacity .5s, transform .5s; }
+.hall-foot span.cur { opacity: 1; transform: none; }
+.papers { position: absolute; right: 1.2rem; top: -1.4rem; display: flex; gap: .4rem; }
+.papers i { width: 2.4rem; height: 3rem; border-radius: .3rem; background: var(--card-solid); border: 1px solid var(--line);
+  box-shadow: 0 10px 20px -10px rgba(0, 0, 0, .4); opacity: 0; transform: translateY(1rem) rotate(0); transition: opacity .6s, transform .7s; position: relative; }
+.papers i::before { content: ""; position: absolute; left: 18%; right: 18%; top: 22%; height: 2px; background: var(--line); box-shadow: 0 .45rem var(--line), 0 .9rem var(--line), 0 1.35rem var(--line); }
+#problem[data-step="4"] .papers i { opacity: 1; }
+#problem[data-step="4"] .papers i:nth-child(1) { transform: rotate(-9deg); }
+#problem[data-step="4"] .papers i:nth-child(2) { transform: translateY(-.4rem) rotate(4deg); transition-delay: .1s; }
+#problem[data-step="4"] .papers i:nth-child(3) { transform: rotate(12deg); transition-delay: .2s; }
+
+/* ---------- one answer, five hops ---------- */
+#idea { gap: 3.2rem; }
+#idea .head { display: grid; gap: .9rem; justify-items: center; text-align: center; }
+.hops { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.1rem; align-items: stretch; }
+.hops::before { content: ""; position: absolute; left: 8%; right: 8%; top: 3.2rem; height: 2px; background: var(--line); }
+.beam { position: absolute; left: 8%; top: 3.2rem; height: 2px; width: 84%; transform-origin: left; transform: scaleX(calc(var(--k, 0) / 4));
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow: 0 0 1rem var(--glow); transition: transform .9s cubic-bezier(.3, .7, .2, 1); }
+.hop { position: relative; display: grid; justify-items: center; gap: .7rem; text-align: center; opacity: .38; transition: opacity .6s, transform .6s; }
+.hop.shown { opacity: 1; }
+.hop .orb { width: 6.4rem; height: 6.4rem; border-radius: 50%; display: grid; place-items: center; background: var(--card-solid);
+  border: 2px solid var(--line); transition: border-color .5s, box-shadow .5s, transform .5s; position: relative; z-index: 1; }
+.hop.shown .orb { border-color: var(--accent); }
+.hop.cur .orb { box-shadow: 0 0 0 .5rem color-mix(in srgb, var(--accent) 16%, transparent), 0 0 2.4rem var(--glow); transform: scale(1.08); }
+.hop .orb svg { width: 2.6rem; height: 2.6rem; color: var(--accent); }
+.hop h3 { font-size: 1.3rem; }
+.hop p { font-size: 1rem; color: var(--ink-2); max-width: 15em; }
+.hop .quote { font-size: 1.2rem; font-weight: 700; padding: .4rem .8rem; border-radius: .8rem; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.fallbacks { display: flex; gap: .7rem; justify-content: center; flex-wrap: wrap; }
+.pill { padding: .6rem 1.1rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 1rem; color: var(--ink-2); }
+.pill b { color: var(--ink); }
+
+/* ---------- built to be trusted ---------- */
+#trust { gap: 1.3rem; }
+#trust .head, #impact .head { display: grid; gap: .8rem; max-width: 56rem; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: .85rem; }
+.tile { padding: 1.05rem 1.25rem; border-radius: 1.2rem; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(12px);
+  display: grid; gap: .45rem; align-content: start; }
+.tile svg { width: 1.6rem; height: 1.6rem; color: var(--accent); }
+.tile h3 { font-size: 1.15rem; }
+.tile p { font-size: .92rem; color: var(--ink-2); }
+.tile.num b { font-size: 2.3rem; font-weight: 800; letter-spacing: -.04em; line-height: 1; color: var(--accent); }
+
+/* ---------- who gains ---------- */
+#impact { gap: 1.6rem; }
+.gains { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.gain { padding: 1.3rem; border-radius: 1.2rem; background: var(--card); border: 1px solid var(--line); display: grid; gap: .5rem; align-content: start; }
+.gain .tag { font-size: .74rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.gain h3 { font-size: 1.22rem; }
+.gain p { font-size: .92rem; color: var(--ink-2); }
+.path { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; position: relative; }
+.path::before { content: ""; position: absolute; left: 1rem; right: 1rem; top: .55rem; height: 2px; background: var(--line); }
+.stop { position: relative; padding-top: 1.7rem; }
+.stop::before { content: ""; position: absolute; top: 0; left: 0; width: 1.1rem; height: 1.1rem; border-radius: 50%; background: var(--bg); border: 3px solid var(--accent); }
+.stop.now::before { background: var(--accent); box-shadow: 0 0 0 .4rem color-mix(in srgb, var(--accent) 22%, transparent); }
+.stop b { display: block; font-size: 1.05rem; }
+.stop span { font-size: .88rem; color: var(--ink-2); }
+.honest { padding: .9rem 1.2rem; border-radius: 1rem; border: 1px dashed var(--line); font-size: .9rem; color: var(--ink-2); }
+.honest b { color: var(--ink); }
+
+/* ---------- close ---------- */
+#close { justify-items: center; text-align: center; gap: 1.5rem; }
+#close svg.mark { width: 6.5rem; height: 6.5rem; color: var(--accent); filter: drop-shadow(0 0 2.2rem var(--glow)); animation: breathe 3.6s ease-in-out infinite; }
+@keyframes breathe { 50% { transform: scale(1.06); } }
+.team { display: flex; gap: .7rem; flex-wrap: wrap; justify-content: center; }
+.team span { padding: .55rem 1rem; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: .92rem; }
+.team b { font-weight: 700; }
+
+/* ---------- small screens and calm motion ---------- */
+@media (max-width: 900px), (max-aspect-ratio: 1 / 1) {
+  html { font-size: clamp(11px, 2.6vw, 16px); }
+  .scene { padding: 4.6rem 1.2rem 6.4rem; overflow-y: auto; align-items: start; }
+  .device-scene, #hero, #problem { grid-template-columns: 1fr; gap: 1.2rem; grid-template-rows: auto minmax(0, 1fr); }
+  .rig, .trio { min-height: 46vh; }
+  .dev-tablet, .dev-laptop { width: 100%; }
+  .dev-phone { height: 54vh; }
+  .hops, .tiles, .gains, .path { grid-template-columns: 1fr 1fr; }
+  .hops::before, .beam, .path::before, .top .note span { display: none; }
+  h1 { font-size: 2.9rem; } h2 { font-size: 1.9rem; }
+  .beat { min-height: 0; }
+  .zoomed .dev.on { transform: scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .2s !important; }
+  .screen img.on { transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="grid"></div></div>
+
+<header class="top">
+  <div class="brand"><svg viewBox="0 0 240 240" aria-hidden="true"><use href="#mark"/></svg><span>OPD <b>Saathi</b></span></div>
+  <div class="note"><i></i><span>Real screens from the running app · fictional patients</span></div>
+  <button class="icon-btn" id="theme" title="Light / dark (T)" aria-label="Switch between light and dark">
+    <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+  </button>
+  <button class="icon-btn" id="full" title="Full screen (F)" aria-label="Full screen">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></svg>
+  </button>
+</header>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 240 240"><path fill="currentColor" fill-rule="evenodd" d="M 108 30 H 132 A 26 26 0 0 1 158 56 V 69 A 13 13 0 0 0 171 82 H 184 A 26 26 0 0 1 210 108 V 132 A 26 26 0 0 1 184 158 H 171 A 13 13 0 0 0 158 171 V 184 A 26 26 0 0 1 132 210 H 108 A 26 26 0 0 1 82 184 V 182 C 70 196 46 206 22 204 C 38 192 52 176 58 158 H 56 A 26 26 0 0 1 30 132 V 108 A 26 26 0 0 1 56 82 H 69 A 13 13 0 0 0 82 69 V 56 A 26 26 0 0 1 108 30 Z M 97 105 A 7 7 0 0 0 90 112 V 128 A 7 7 0 0 0 104 128 V 112 A 7 7 0 0 0 97 105 Z M 120 92 A 7 7 0 0 0 113 99 V 141 A 7 7 0 0 0 127 141 V 99 A 7 7 0 0 0 120 92 Z M 143 100 A 7 7 0 0 0 136 107 V 133 A 7 7 0 0 0 150 133 V 107 A 7 7 0 0 0 143 100 Z"/></symbol>
+</svg>
+
+<main class="stage" id="stage">
+
+  <!-- 0 · hero -->
+  <section class="scene" id="hero" data-name="Start" data-steps="1" data-dur="9000">
+    <div class="copy">
+      <span class="kicker">Voice-first history-taking and live queue for government OPDs</span>
+      <h1>The patient speaks.<br><span class="grad">The doctor reads one page.</span></h1>
+      <p class="lead">In <span class="hi">हिन्दी</span>, <span class="hi">मराठी</span> or English, at a kiosk or on their own phone. Before the consultation starts, the doctor has the history on one English page, in the patient's own words.</p>
+      <div class="cta">
+        <button class="btn" id="start"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play the film</button>
+        <button class="btn ghost" id="stepin">Step through <span class="small">→</span></button>
+      </div>
+      <p class="pledge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.800-1-8-4.500-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>History only. It never names a disease, suggests a medicine or lowers a patient's urgency.</p>
+      <div class="keys"><span><kbd>←</kbd><kbd>→</kbd>step</span><span><kbd>Space</kbd>play or pause</span><span><kbd>T</kbd>light or dark</span><span><kbd>F</kbd>full screen</span><span>click a screen to enlarge it</span></div>
+    </div>
+    <div class="trio" aria-hidden="true">
+      <div class="t t-laptop"><div class="dev-body"><div class="screen"><img data-shot="d-overview" alt=""></div></div></div>
+      <div class="t t-tablet"><div class="dev-body"><div class="screen"><img data-shot="k-question" alt=""></div></div></div>
+      <div class="t t-phone"><div class="dev-body"><div class="screen"><img data-shot="p-called" alt=""></div></div></div>
+    </div>
+  </section>
+
+  <!-- 1 · the problem -->
+  <section class="scene" id="problem" data-name="The problem" data-steps="5" data-dur="5200">
+    <div class="copy">
+      <span class="kicker">A morning in a government OPD</span>
+      <h2>Registration went digital. <span class="grad">Nobody takes the history.</span></h2>
+      <div class="facts">
+        <div class="fact-row" data-at="0"><b>80–200+</b><span>patients for one doctor in a four-hour morning OPD</span></div>
+        <div class="fact-row" data-at="1"><b>2–3 min</b><span>for each patient, so the history is rushed</span></div>
+        <div class="fact-row" data-at="2"><b>No token</b><span>nobody in the hall knows their place or their wait</span></div>
+        <div class="fact-row" data-at="3"><b>Unnoticed</b><span>a patient with a warning sign waits behind routine visits</span></div>
+        <div class="fact-row" data-at="4"><b>On paper</b><span>old prescriptions and reports nobody has time to read</span></div>
+      </div>
+    </div>
+    <div class="hall" aria-hidden="true">
+      <div class="papers"><i></i><i></i><i></i></div>
+      <div class="hall-head"><span>The waiting hall · 160 people</span><span class="doc">1 doctor</span></div>
+      <div class="dots" id="dots"></div>
+      <div class="hall-foot">
+        <span data-only="0">One room, one doctor, one long morning.</span>
+        <span data-only="1">Two or three minutes each. Most of it goes on the same basic questions.</span>
+        <span data-only="2">No token, no order anyone can see. People crowd the desk to ask.</span>
+        <span data-only="3">Somewhere in the hall, chest pain is waiting its turn.</span>
+        <span data-only="4">And the papers that would have helped never get read.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · the idea -->
+  <section class="scene stack" id="idea" data-name="The idea" data-steps="5" data-dur="4600">
+    <div class="head">
+      <span class="kicker">How one answer reaches the doctor</span>
+      <h2>Her words in. <span class="grad">One English page out.</span></h2>
+    </div>
+    <div class="hops">
+      <div class="beam" id="beam"></div>
+      <div class="hop" data-hop="0"><div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></div><h3>The patient</h3><span class="quote hi">“ताप, खोकला”</span><p>taps, speaks or types, in her own language</p></div>
+      <div class="hop" data-hop="1"><div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h1M8 7v10M12 4v16M16 8v8M20 11v2"/></svg></div><h3>Speech to text</h3><p>Sarvam AI turns Marathi or Hindi speech into text she can check</p></div>
+      <div class="hop" data-hop="2"><div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg></div><h3>Fixed rules</h3><p>danger signs and the department, decided on the hospital's own server</p></div>
+      <div class="hop" data-hop="3"><div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.100 1.900L12 17l-1.900-5.100L5 10l5.100-1.900z"/><path d="M19 15l.8 2.200L22 18l-2.200.8L19 21l-.8-2.200L16 18l2.200-.8z"/></svg></div><h3>A labelled draft</h3><p>Gemini writes the English history and a short brief, citing her answers</p></div>
+      <div class="hop" data-hop="4"><div class="orb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v6a4 4 0 0 0 8 0V3M10 13v3a5 5 0 0 0 10 0v-2"/><circle cx="20" cy="12" r="2"/></svg></div><h3>The doctor</h3><span class="quote">“Fever, cough”</span><p>plus her own words. The doctor accepts, edits or rejects</p></div>
+    </div>
+    <div class="fallbacks">
+      <span class="pill" data-at="2"><b>AI down?</b> Rules and the question bank carry on.</span>
+      <span class="pill" data-at="3"><b>Voice down?</b> Every question can be tapped.</span>
+      <span class="pill" data-at="4"><b>Network down?</b> An offline short form, then paper.</span>
+    </div>
+  </section>
+
+  <section class="scene device-scene" id="kiosk" data-name="Kiosk"></section>
+  <section class="scene device-scene" id="phone" data-name="Her phone"></section>
+  <section class="scene device-scene" id="safety" data-name="Safety"></section>
+  <section class="scene device-scene" id="doctor" data-name="Doctor"></section>
+  <section class="scene device-scene" id="admin" data-name="Hospital"></section>
+
+  <!-- trust -->
+  <section class="scene stack" id="trust" data-name="Trust" data-steps="3" data-dur="6000">
+    <div class="head">
+      <span class="kicker">Built to be trusted in a hospital</span>
+      <h2>AI helps. <span class="grad">The system never depends on it.</span></h2>
+    </div>
+    <div class="tiles">
+      <div class="tile" data-at="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.500-3.200 8-8 9-4.800-1-8-4.500-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><h3>History only, never a diagnosis</h3><p>No disease named, no medicine or dose suggested. AI text that advises or diagnoses is blocked before anyone sees it.</p></div>
+      <div class="tile" data-at="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg><h3>Urgency can only go up</h3><p>Danger signs come from fixed rules. AI may add a second opinion that raises priority; lowering it is a recorded staff decision.</p></div>
+      <div class="tile" data-at="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"/><path d="M17 15l2 2 3-4"/></svg><h3>AI output is a labelled draft</h3><p>Every sentence cites the answers it rests on. The doctor accepts, edits or rejects. AI never writes the doctor's notes.</p></div>
+      <div class="tile" data-at="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><h3>Encrypted, hospital by hospital</h3><p>Names, phones, case sheets, transcripts and paper photos are encrypted. Row-level security keeps each hospital's data apart.</p></div>
+      <div class="tile" data-at="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><rect x="3" y="4" width="18" height="16" rx="3"/></svg><h3>Consent, purpose by purpose</h3><p>Care consent is required; AI help is optional with nothing pre-selected, and the patient can stop it from their own phone.</p></div>
+      <div class="tile" data-at="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><h3>Every read is audited</h3><p>Who opened which record, when, and every edit as a new version. Earlier visits are visible only to the doctor caring for her today.</p></div>
+      <div class="tile num" data-at="2"><b>1,100+</b><h3>automated tests passing</h3><p>More than 960 backend and 137 web tests on the build shown here, plus 155 browser end-to-end checks.</p></div>
+      <div class="tile num" data-at="2"><b>60 / 60</b><h3>must-catch danger scripts caught</h3><p>by the fixed rules, across 500 synthetic scripts in English, Hindi, Marathi and Hinglish. The rules are drafts until clinicians sign them off.</p></div>
+      <div class="tile num" data-at="2"><b>0</b><h3>clouds needed to run an OPD day</h3><p>One server inside the hospital network. Without internet or AI: rules, tapping, typing, tokens and the live queue still work.</p></div>
+    </div>
+  </section>
+
+  <!-- impact -->
+  <section class="scene stack" id="impact" data-name="Impact" data-steps="2" data-dur="7000">
+    <div class="head">
+      <span class="kicker">Who gains</span>
+      <h2>Calmer for the patient, <span class="grad">faster for the doctor.</span></h2>
+    </div>
+    <div class="gains">
+      <div class="gain" data-at="0"><span class="tag">Patient</span><h3>Heard in her own language</h3><p>Speaks once, is read back to, knows her place in the queue and her wait.</p></div>
+      <div class="gain" data-at="0"><span class="tag">Doctor</span><h3>Starts with the page full</h3><p>History, earlier visits and old papers in English before she walks in.</p></div>
+      <div class="gain" data-at="0"><span class="tag">Nurse</span><h3>Urgent cases surface themselves</h3><p>Alerts in seconds, a reason for every place, one tap to call.</p></div>
+      <div class="gain" data-at="0"><span class="tag">Hospital</span><h3>Sees its own OPD</h3><p>Waits, load by department, languages: data to plan staff with.</p></div>
+    </div>
+    <div class="path" data-at="1">
+      <div class="stop now"><b>Today</b><span>Working end to end on one laptop, one command to start</span></div>
+      <div class="stop"><b>Pilot</b><span>Clinician and native-speaker sign-off, usability test, one hospital</span></div>
+      <div class="stop"><b>Many hospitals</b><span>One tenant per hospital is already built in</span></div>
+      <div class="stop"><b>State</b><span>ABDM and hospital-system links, more languages</span></div>
+    </div>
+    <p class="honest" data-at="1"><b>Honest limits.</b> The questions, danger-sign rules and translations are drafts until clinicians and native speakers sign them off. It is not connected to ABDM yet; a visit can already be exported as FHIR R4.</p>
+  </section>
+
+  <!-- close -->
+  <section class="scene stack" id="close" data-name="Thank you" data-steps="1" data-dur="12000">
+    <svg class="mark" viewBox="0 0 240 240" aria-hidden="true"><use href="#mark"/></svg>
+    <h1>OPD <span class="grad">Saathi</span></h1>
+    <p class="lead" style="max-width:30em">The patient speaks. The doctor reads one page.<br>Now see it live: the kiosk, a phone and the doctor's screen are running beside this film.</p>
+    <div class="team"><span><b>Team Pied Piper</b> · VNIT Nagpur</span><span>Shashi Shekhar Mishra</span><span>Bhukya Rohan</span><span>Ankit Maurya</span></div>
+    <p class="small">Open source (MIT). Every screen in this film was captured from the running app with fictional patients.</p>
+  </section>
+</main>
+
+<div class="timer" id="timer"></div>
+<nav class="dock" aria-label="Film controls">
+  <button class="icon-btn" id="prev" title="Back (←)" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button class="icon-btn play" id="play" title="Play / pause (Space)" aria-label="Play or pause">
+    <svg class="play-i" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    <svg class="pause-i" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+  </button>
+  <button class="icon-btn" id="next" title="Next (→)" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+  <div class="chapters" id="chapters"></div>
+  <span class="count" id="count"></span>
+</nav>
+
+<script>
+const SHOTS = "__SHOTS__";
+
+// The five chapters told with real screens. dev: which device the step is seen on.
+// hl: [left, top, width, height] in % of the screen, then a label and an optional style.
+const FILM = {
+  kiosk: {
+    kicker: "Chapter 1 · At the kiosk", title: "Sunita checks in. <span class='grad'>In Marathi, by voice.</span>",
+    who: ["Patient", 0],
+    steps: [
+      { img: "k-welcome", h: "She picks her language", p: "हिन्दी, मराठी or English. From here every screen is in Marathi, and every screen is read aloud." },
+      { img: "k-consent", h: "Consent, read aloud", p: "What is collected and who sees it. She also says who is answering: herself, a guardian or someone helping." },
+      { img: "k-ai", h: "AI help is her choice", p: "A separate, optional question with nothing pre-selected. If she says no, the visit works the same on the hospital's server alone." },
+      { img: "k-details", h: "Age and sex. No name needed", p: "A phone number is optional, and messages are sent only if she ticks the box herself." },
+      { img: "k-card", h: "Her OPD card", p: "The number and PIN from her last visit join today to her record. The kiosk never shows that record on screen." },
+      { img: "k-followup", h: "Follow-up, or a new problem?", p: "One tap tells the doctor whether today continues her visit of 26 September." },
+      { img: "k-danger", h: "Danger signs come first", p: "Six warning signs, asked before anything else. One tap and the nurse is alerted within seconds." },
+      { img: "k-question", h: "Tap, speak or type", p: "About a dozen short questions. One tap per answer, or she simply speaks." },
+      { img: "k-listening", h: "She answers in Marathi", p: "Real speech recognition. Recording stops by itself when she pauses; a second tap stops it sooner.", fact: "About 7 seconds from tap to text, her speaking included (measured)" },
+      { img: "k-heard", h: "Her words, for her to check", p: "Recognised by Sarvam AI exactly as she said it:", said: "“2 आठवड्यांपासून खूप थकवा आहे आणि खूप तहान लागते”", hl: [14.8, 79.5, 27.5, 18.8, "We heard you. Please check the words."] },
+      { img: "k-adaptive", h: "Her answers decide the next question", p: "She said tired and thirsty, so it asks about sleep and energy here, and then about passing urine, weight and eyesight: three questions another patient would not get.", fact: "“Don't know” and “prefer not to say” are never recorded as “no”" },
+      { img: "k-scale", h: "How bad is it, 0 to 10?", p: "Her own rating reaches the doctor as she gave it." },
+      { img: "k-review", h: "Read back before it counts", p: "She hears her answers in Marathi and can change any of them. Only then is anything sent to the doctor." },
+      { img: "k-papers", h: "The report she brought", p: "She photographs her old test report. It is stored encrypted with today's visit and, with her consent, read for the doctor." },
+      { img: "k-token", h: "Token, QR and OPD card", p: "Token MED-003, the department, her place in the queue, a QR to follow her turn on her phone, and her OPD card for next time.", fact: "Token issued 1.6 seconds after she confirmed (measured)" },
+    ],
+  },
+  phone: {
+    kicker: "Chapter 2 · On her own phone", badge: "New", title: "No kiosk free? <span class='grad'>Her phone is the kiosk.</span>",
+    who: ["Patient", 0],
+    steps: [
+      { img: "p-poster", dev: "laptop", h: "One QR poster on the wall", p: "The hospital prints it from Settings. Patients on the hospital Wi-Fi scan it. No app, no sign-up.", hl: [18.3, 24.3, 25.7, 64.2, "Phone check-in QR", "below"] },
+      { img: "p-landing", dev: "phone", h: "Scan, choose a language, start", p: "The check-in opens in the phone's browser: Hindi, Marathi or English." },
+      { img: "p-ai", dev: "phone", h: "The same consent and choices", p: "Care consent first, then the separate, optional question about AI help. Exactly as at the kiosk." },
+      { img: "p-question", dev: "phone", h: "The same interview, in her hand", p: "Same questions, same safety check, same queue. The button shows that the question is being read aloud.", hl: [64.5, 43, 27.5, 12, "Reading aloud · tap to stop", "right"] },
+      { img: "p-picked", dev: "phone", h: "One thumb is enough", p: "Large targets, one decision per screen, in Hindi here. She can switch apps and come back to the same visit." },
+      { img: "p-review", dev: "phone", h: "Review and confirm", p: "The same read-back as the kiosk before anything reaches the doctor." },
+      { img: "p-token", dev: "phone", h: "Her token, on her phone", p: "A refresh or a second scan never creates a duplicate visit: the same token is shown again." },
+      { img: "p-waiting", dev: "phone", h: "Her place in the queue, live", p: "Where to go, how many are ahead and the estimated wait. The page updates by itself." },
+      { img: "p-called", dev: "phone", h: "“आपकी बारी आ गई!”", p: "When the nurse taps Call, the phone changes by itself. No reload, no shouting across the hall.", fact: "178 ms after the nurse's tap, measured on this run", hl: [6.8, 51.2, 86.4, 25.6, "Your turn has come"] },
+    ],
+  },
+  safety: {
+    kicker: "Chapter 3 · Safety first", title: "A danger sign <span class='grad'>never waits in line.</span>",
+    who: ["Nurse", 1],
+    steps: [
+      { img: "e-danger", dev: "tablet", h: "One tap on a danger sign", p: "A 61-year-old man taps “Chest discomfort” on the safety screen. He can carry on, or stop and get help now." },
+      { img: "n-board", dev: "laptop", h: "The nurse knows in seconds", p: "An urgent alert on the live board, raised by fixed rules, not by AI. He is first in line, marked “Nurse to confirm”.", hl: [18.3, 50.4, 79.8, 7.6, "Urgent · raised by rules, not AI", "", "red"] },
+      { img: "n-why", dev: "laptop", h: "Every place has a reason", p: "“Why?” shows what put him first: the danger sign, the fever, the onset. AI is a second check that can only agree or raise. Patients never see the score.", hl: [55, 55.6, 31.2, 33.9, "83 / 100 · why he is first"] },
+    ],
+  },
+  doctor: {
+    kicker: "Chapter 4 · The doctor", title: "Before she walks in, <span class='grad'>the page is already full.</span>",
+    who: ["Doctor", 2],
+    steps: [
+      { img: "d-rail", dev: "laptop", h: "Today's patients", p: "Each token with the complaint in English, urgency first, and how long they have waited." },
+      { img: "d-overview", dev: "laptop", h: "One page, in English", p: "Complaint, duration, severity, what she denies. Beside it, the AI brief: a draft, with a source under every sentence.", hl: [70.2, 41, 28.2, 46, "AI draft · not reviewed"] },
+      { img: "d-source", dev: "laptop", h: "Tap a source, see her words", p: "The transcript: her Marathi, exactly as recorded, with the English beside it. This record cannot be changed." },
+      { img: "d-accepted", dev: "laptop", h: "Accept, edit or reject", p: "Nothing AI wrote enters the record until a doctor decides. Here: accepted by the doctor, and it says so." },
+      { img: "d-previous", dev: "laptop", h: "Her visit of 26 September", p: "Penicillin allergy, her regular medicines, her long-term illnesses: linked by her OPD card and shown only while she is under this doctor's care." },
+      { img: "d-papers", dev: "laptop", h: "Her old report, read for the doctor", p: "AI copied the report; it did not judge it. Each result is compared only with the range printed on the same paper, and the doctor checks it against the photo.", hl: [53, 27.6, 44.6, 40.2, "Below the range printed on this paper"] },
+      { img: "d-notes", dev: "laptop", h: "The doctor's own notes", p: "Examination, assessment and plan are never written by AI. Each save is a new version, printed on the case-sheet PDF." },
+    ],
+  },
+  admin: {
+    kicker: "Chapter 5 · The hospital", title: "The OPD, <span class='grad'>visible at last.</span>",
+    who: ["Admin", 3],
+    steps: [
+      { img: "a-reports", dev: "laptop", h: "The OPD in numbers", p: "Visits, average wait, consultation time, languages and load by department. Shown here with a month of fictional history." },
+      { img: "a-audit", dev: "laptop", h: "An audit trail of everything", p: "Every sign-in, every record opened, every edit and export, searchable and exportable." },
+      { img: "a-settings", dev: "laptop", h: "Each hospital sets itself up", p: "Its own departments, with token prefixes and names in three languages; its staff and kiosks; and its own switches for AI help, phone check-in and messages." },
+    ],
+  },
+};
+const ROLES = ["Patient", "Nurse", "Doctor", "Admin"];
+
+// ---------- build the device scenes ----------
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+for (const img of $$("img[data-shot]")) img.src = SHOTS[img.dataset.shot];
+for (const [id, film] of Object.entries(FILM)) {
+  const scene = document.getElementById(id);
+  scene.dataset.steps = film.steps.length;
+  const devs = [...new Set(film.steps.map((s) => s.dev ?? "tablet"))];
+  scene.innerHTML = `
+    <div class="copy">
+      <span class="kicker">${film.kicker}${film.badge ? ` <span class="new">${film.badge}</span>` : ""}</span>
+      <h2>${film.title}</h2>
+      <div class="who">${ROLES.map((r, i) => `<span class="${i === film.who[1] ? "on" : ""}">${r}</span>`).join("")}</div>
+      <div class="ticks">${film.steps.map(() => "<i></i>").join("")}</div>
+      <div class="beat"></div>
+    </div>
+    <div class="rig">${devs.map((dev) => `
+      <div class="dev dev-${dev}" data-dev="${dev}">
+        <div class="dev-body"><div class="screen">${film.steps.map((s, i) => (s.dev ?? "tablet") === dev ? `<img data-i="${i}" src="${SHOTS[s.img]}" alt="${s.h.replace(/"/g, "&quot;")}">` : "").join("")}<div class="hl"><span></span></div></div></div>
+        ${dev === "laptop" ? '<div class="base"></div>' : ""}
+      </div>`).join("")}</div>`;
+}
+const dots = $("#dots");
+dots.innerHTML = Array.from({ length: 160 }, (_, i) => `<i style="--i:${i};transition-delay:${(i % 20) * 14 + Math.floor(i / 20) * 26}ms" class="${i < 9 ? "served" : ""}${i === 113 ? " urgent" : ""}"></i>`).join("");
+
+// ---------- the player ----------
+const scenes = $$(".scene");
+const app = document.documentElement;
+const state = { s: 0, k: 0, playing: false, timer: 0 };
+const stepsOf = (i) => Number(scenes[i].dataset.steps || 1);
+const chapters = $("#chapters");
+chapters.innerHTML = scenes.map((scene, i) => `<button data-go="${i}">${scene.dataset.name}<i></i></button>`).join("");
+
+function renderDevice(scene, film, k) {
+  const step = film.steps[k];
+  const dev = step.dev ?? "tablet";
+  const order = [...new Set(film.steps.map((s) => s.dev ?? "tablet"))];
+  for (const el of $$(".dev", scene)) {
+    const mine = el.dataset.dev === dev;
+    el.classList.toggle("on", mine);
+    el.classList.toggle("was", !mine && order.indexOf(el.dataset.dev) < order.indexOf(dev));
+    for (const img of $$("img", el)) img.classList.toggle("on", mine && Number(img.dataset.i) === k);
+    const hl = $(".hl", el);
+    const on = mine && Boolean(step.hl);
+    hl.classList.remove("on");
+    if (on) {
+      const [x, y, w, h, label, place = "", tone = ""] = step.hl;
+      // On the phone the capture sits below the status strip (see .dev-phone .screen img).
+      const top = dev === "phone" ? 5.5 + y * 0.945 : y;
+      const height = dev === "phone" ? h * 0.945 : h;
+      Object.assign(hl.style, { left: `${x}%`, top: `${top}%`, width: `${w}%`, height: `${height}%` });
+      hl.className = `hl ${place} ${tone}`;
+      $("span", hl).textContent = label;
+      const stamp = `${state.s}:${state.k}`;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (stamp === `${state.s}:${state.k}`) hl.classList.add("on");
+      }));
+    }
+  }
+  $$(".ticks i", scene).forEach((tick, i) => { tick.className = i < k ? "done" : i === k ? "cur" : ""; });
+  const beat = $(".beat", scene);
+  beat.innerHTML = `<div class="n">${String(k + 1).padStart(2, "0")} / ${String(film.steps.length).padStart(2, "0")}</div>
+    <h3>${step.h}</h3><p>${step.p}</p>${step.said ? `<div class="said hi">${step.said}</div>` : ""}${step.fact ? `<div class="fact">${step.fact}</div>` : ""}`;
+  beat.classList.remove("swap");
+  void beat.offsetWidth;
+  beat.classList.add("swap");
+}
+
+function render() {
+  const { s, k } = state;
+  scenes.forEach((scene, i) => {
+    scene.classList.toggle("is-active", i === s);
+    scene.classList.toggle("is-past", i < s);
+  });
+  const scene = scenes[s];
+  scene.dataset.step = k;
+  for (const el of $$("[data-at]", scene)) {
+    const at = Number(el.dataset.at);
+    el.classList.toggle("shown", k >= at);
+    el.classList.toggle("cur", k === at);
+  }
+  for (const el of $$("[data-only]", scene)) el.classList.toggle("cur", Number(el.dataset.only) === k);
+  for (const hop of $$(".hop", scene)) {
+    const at = Number(hop.dataset.hop);
+    hop.classList.toggle("shown", k >= at);
+    hop.classList.toggle("cur", k === at);
+  }
+  if (scene.id === "idea") $("#beam").style.setProperty("--k", k);
+  if (FILM[scene.id]) renderDevice(scene, FILM[scene.id], k);
+  $$("button", chapters).forEach((button, i) => {
+    button.classList.toggle("on", i === s);
+    button.style.setProperty("--p", i < s ? 1 : i === s ? (k + 1) / stepsOf(s) : 0);
+  });
+  $(".chapters button.on").scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  const total = scenes.reduce((sum, _, i) => sum + stepsOf(i), 0);
+  const done = scenes.slice(0, s).reduce((sum, _, i) => sum + stepsOf(i), 0) + k + 1;
+  $("#count").textContent = `${done} / ${total}`;
+  try { history.replaceState(null, "", `#${scene.id}-${k + 1}`); } catch { /* opened from a file: the address stays as it is */ }
+  schedule();
+}
+
+function durationOf() {
+  const scene = scenes[state.s];
+  return FILM[scene.id] ? (FILM[scene.id].steps[state.k].hl ? 6200 : 4700) : Number(scene.dataset.dur || 5000);
+}
+function schedule() {
+  clearTimeout(state.timer);
+  const bar = $("#timer");
+  bar.getAnimations().forEach((a) => a.cancel());
+  if (!state.playing) return;
+  const last = state.s === scenes.length - 1 && state.k === stepsOf(state.s) - 1;
+  if (last) { setPlaying(false); return; }
+  const ms = durationOf();
+  bar.animate([{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { duration: ms, easing: "linear" });
+  state.timer = setTimeout(() => step(1, true), ms);
+}
+function setPlaying(on) {
+  state.playing = on;
+  app.classList.toggle("is-playing", on);
+  schedule();
+}
+function step(direction, auto = false) {
+  if (!auto && app.classList.contains("zoomed")) app.classList.remove("zoomed");
+  let { s, k } = state;
+  k += direction;
+  if (k >= stepsOf(s)) { if (s === scenes.length - 1) return; s += 1; k = 0; }
+  if (k < 0) { if (s === 0) return; s -= 1; k = stepsOf(s) - 1; }
+  Object.assign(state, { s, k });
+  render();
+}
+function go(s, k = 0) {
+  app.classList.remove("zoomed");
+  Object.assign(state, { s: Math.max(0, Math.min(scenes.length - 1, s)), k });
+  render();
+}
+function theme(next) {
+  const value = next ?? (app.dataset.theme === "dark" ? "light" : "dark");
+  app.dataset.theme = value;
+  try { localStorage.setItem("opd-saathi-showcase-theme", value); } catch { /* private window */ }
+}
+function fullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+}
+
+$("#next").onclick = () => step(1);
+$("#prev").onclick = () => step(-1);
+$("#play").onclick = () => setPlaying(!state.playing);
+$("#theme").onclick = () => theme();
+$("#full").onclick = fullscreen;
+$("#start").onclick = () => { go(1); setPlaying(true); };
+$("#stepin").onclick = () => go(1);
+chapters.onclick = (event) => { const b = event.target.closest("button"); if (b) go(Number(b.dataset.go)); };
+$("#stage").addEventListener("click", (event) => {
+  // A click on the screen in view enlarges it, so a detail can be read out to the room.
+  if (event.target.closest(".dev.on")) { app.classList.toggle("zoomed"); if (state.playing) setPlaying(false); }
+});
+addEventListener("keydown", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const key = event.key;
+  if (["ArrowRight", "PageDown", "Enter"].includes(key)) step(1);
+  else if (["ArrowLeft", "PageUp", "Backspace"].includes(key)) step(-1);
+  else if (key === "ArrowDown") go(state.s + 1);
+  else if (key === "ArrowUp") go(state.s - 1);
+  else if (key === " ") setPlaying(!state.playing);
+  else if (key === "Home") go(0);
+  else if (key === "End") go(scenes.length - 1);
+  else if (key === "t" || key === "T") theme();
+  else if (key === "f" || key === "F") fullscreen();
+  else if (key === "Escape") app.classList.remove("zoomed");
+  else if (/^[1-9]$/.test(key)) go(Number(key) - 1);
+  else return;
+  event.preventDefault();
+});
+let touchX = null;
+addEventListener("touchstart", (event) => { touchX = event.touches[0].clientX; }, { passive: true });
+addEventListener("touchend", (event) => {
+  if (touchX === null) return;
+  const dx = event.changedTouches[0].clientX - touchX;
+  touchX = null;
+  if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1);
+}, { passive: true });
+let frame = 0;
+addEventListener("pointermove", (event) => {
+  if (frame) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    app.style.setProperty("--px", ((event.clientX / innerWidth) * 2 - 1).toFixed(3));
+    app.style.setProperty("--py", ((event.clientY / innerHeight) * 2 - 1).toFixed(3));
+  });
+});
+
+try { const saved = localStorage.getItem("opd-saathi-showcase-theme"); if (saved) theme(saved); } catch { /* private window */ }
+const from = location.hash.match(/^#([a-z]+)-(\d+)$/);
+const at = from ? scenes.findIndex((scene) => scene.id === from[1]) : -1;
+if (at >= 0) go(at, Math.min(Number(from[2]) - 1, stepsOf(at) - 1)); else render();
+</script>
+</body>
+</html>

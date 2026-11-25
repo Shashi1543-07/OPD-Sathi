@@ -181,6 +181,43 @@
   color: var(--primary);
   box-shadow: 0 0 0 3px rgb(15 118 110 / 15%);
 }
+/* Reading aloud: the button fills, its icon becomes moving bars and a ring spreads from it. */
+.ui-tool-button.is-playing,
+.ui-tool-button.is-playing:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  transform: none;
+  animation: ui-tool-speaking 1.6s ease-out infinite;
+}
+@keyframes ui-tool-speaking {
+  from {
+    box-shadow: 0 0 0 0 rgb(15 118 110 / 45%);
+  }
+  to {
+    box-shadow: 0 0 0 12px rgb(15 118 110 / 0%);
+  }
+}
+/* "No voice on this device": the kiosk's usual notice, placed below the button so it never
+   pushes the header's row about. It leaves by itself after a few seconds. */
+.kiosk-tool-item .audio-playback-status {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: max-content;
+  max-width: min(18rem, 80vw);
+  box-shadow: var(--shadow-md);
+  animation: ui-notice-in var(--motion-standard) var(--motion-ease);
+}
+.kiosk-tool-item:has(.audio-playback-status) .ui-tooltip {
+  display: none;
+}
+@keyframes ui-notice-in {
+  from {
+    transform: translateY(-6px);
+  }
+}
 
 /* Floating tooltip on hover/focus */
 .ui-tooltip {
@@ -218,8 +255,9 @@
   font-size: 0.6875rem;
   font-weight: 400;
 }
-.kiosk-tool-item:hover .ui-tooltip,
-.kiosk-tool-item:focus-within .ui-tooltip {
+/* Shown to the keyboard's focus and, below, to a mouse. A tap leaves no label behind: on a
+   touch screen both a tapped button's focus and its "hover" stay until the next tap. */
+.kiosk-tool-item:has(:focus-visible) .ui-tooltip {
   opacity: 1;
   visibility: visible;
   transform: translateX(50%) translateY(0);
@@ -228,9 +266,18 @@
   right: 0;
   transform: translateX(0);
 }
-.kiosk-tools .kiosk-tool-item:hover .ui-tooltip,
-.kiosk-tools .kiosk-tool-item:focus-within .ui-tooltip {
+.kiosk-tools .kiosk-tool-item:has(:focus-visible) .ui-tooltip {
   transform: translateY(0);
+}
+@media (hover: hover) {
+  .kiosk-tool-item:hover .ui-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(50%) translateY(0);
+  }
+  .kiosk-tools .kiosk-tool-item:hover .ui-tooltip {
+    transform: translateY(0);
+  }
 }
 
 /* Touch target enhancement for Kiosk */
@@ -371,6 +418,37 @@
     0 6px 24px rgb(15 118 110 / 35%),
     0 3px 12px rgb(15 118 110 / 20%);
   transform: translateY(-1px);
+}
+
+/* Touch feedback on the first screen a patient sees: a language tile presses in and its
+   tick pops, and the start button gives under the finger. The phone's status card settles in
+   from just above its place: no fading, so the text is at full contrast from the first
+   frame, and never below its place, so the page is no taller while it moves. The welcome
+   card itself stays still: its buttons are measured as exactly 64 px by the layout tests. */
+@keyframes ui-settle {
+  from {
+    transform: translateY(-12px);
+  }
+}
+@keyframes ui-badge-in {
+  from {
+    transform: scale(0);
+  }
+}
+.status-card {
+  animation: ui-settle 0.35s var(--motion-ease) backwards;
+}
+.kiosk-app .ui-language-tile {
+  -webkit-tap-highlight-color: transparent;
+}
+.kiosk-app .ui-language-tile:active {
+  transform: scale(0.97);
+}
+.ui-language-badge {
+  animation: ui-badge-in 0.22s var(--motion-ease) backwards;
+}
+.ui-button.ui-button--kiosk:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 /* Dedicated developer preview footer boundary */
@@ -8907,7 +8985,7 @@
 }
 .acct-secret code,
 .acct-code-list code,
-.adm-code code {
+p.adm-code code {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   font-size: var(--font-size-md);
   overflow-wrap: anywhere;
@@ -8948,7 +9026,9 @@
   color: var(--priority-ink);
   margin-left: var(--space-1);
 }
-.adm-code {
+/* The temporary password in its dialog: a block. Small inline codes in the tables
+   (a department's code, a token prefix) share the class name and keep their own size. */
+p.adm-code {
   background: var(--surface-subtle);
   border-radius: var(--radius-md);
   margin: 0;

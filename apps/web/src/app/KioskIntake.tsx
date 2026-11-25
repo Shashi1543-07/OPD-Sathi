@@ -17,6 +17,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { ConfirmDialog } from "../components/ui";
+import { SoundBars } from "../components/ui/AudioPrompt";
 import { EmergencyNotice } from "./EmergencyNotice";
 import { KioskPapers } from "./KioskPapers";
 import {
@@ -220,11 +221,7 @@ function SpeakButton({
           } else play();
         }}
       >
-        {playing ? (
-          <Square aria-hidden="true" size={18} />
-        ) : (
-          <Volume2 aria-hidden="true" size={20} />
-        )}
+        {playing ? <SoundBars /> : <Volume2 aria-hidden="true" size={20} />}
         <span>{playing ? t("stopListening") : t("listen")}</span>
       </button>
       {unavailable && (
@@ -1420,7 +1417,8 @@ export function KioskIntake() {
                 </div>
               </div>
             )}
-            <div className="intake-question-head">
+            {/* Keyed so that each new question settles into place like a new screen. */}
+            <div className="intake-question-head" key={currentQuestion.id}>
               <h1 className="intake-title">{currentQuestion.prompt}</h1>
               <SpeakButton
                 text={currentQuestion.prompt}

@@ -69,6 +69,38 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **The complete guide** (`docs/OPD-Saathi-Complete-Guide.pdf`, 19 pages): how a visit works
   end to end, every question the interview asks, the OPD card, every screen with its address,
   AI, security, the technology, tests and results, what was built when, and how to run the demo.
+- **Every touch answers** (kiosk and phone): buttons and choices press in under the finger, a
+  chosen answer confirms itself, and each new question settles into place. The read-aloud and
+  "Listen" buttons show moving bars while they speak and stop on a second tap. Motion is
+  switched off for people who ask their device for less of it.
+- **Fixed:** the kiosk's read-aloud button left "Read-aloud finished." beside it for good, and
+  its label stayed on screen after a tap on a touch screen. The only notice now is "no voice on
+  this device", which leaves by itself.
+- **Fixed, safety:** the AI second opinion could raise the urgent alert "chest discomfort with
+  another concerning symptom" for a patient who mentioned only the other symptom (dizziness,
+  nausea), and such a patient moved to the front of the queue. A rule that needs two signs
+  is now raised only when both are shown; real chest pain with sweating or breathlessness is
+  raised as before. For the clinical lead: the rules themselves are unchanged.
+- **Fixed:** the case sheet PDF printed the department as an internal code (`NURSE_TRIAGE`);
+  it now prints the department's name.
+- **Fixed, wording:** the read-back said the patient's rating in English word order in Hindi
+  and Marathi ("…बताया 6 10 में से", "…सांगितला 6 १० पैकी"). It now reads "10 में से 6 बताया"
+  and "10 पैकी 6 सांगितला". For the language reviewers: please check both sentences.
+- **Fixed:** after an update or a change of network every screen could show "offline" and
+  sign-in could fail (the web server answered 502) until it was restarted by hand. Starting
+  the system now restarts the web server whenever the application behind it was replaced.
+  If it ever shows again after a manual change: `docker compose restart web`.
+- **Fixed:** in Settings → Departments each department's code was drawn over its name
+  ("Ear, Nose and Throat" was cut by "ENT").
+- **The doctor's English page survives a busy AI service**: when the AI service is busy for a
+  moment, the translation and brief are tried once more in the background instead of being
+  left out for that patient. Nobody waits for it.
+- **A film of the product** (`docs/showcase/OPD-Saathi-Showcase.html`): one file that opens
+  without a network and walks through the kiosk, the phone, the nurse's board, the doctor's
+  consultation and the reports with real screens of fictional patients, in light or dark.
+- **Setup and commands** (`docs/OPD-Saathi-Setup-Guide.pdf`, 6 pages): starting the demo,
+  a new network, another laptop, pairing a kiosk, what is needed before the first patient
+  (activation code, sign-ins, the OPD card), every command and the usual fixes.
 
 ### Technical
 
@@ -168,6 +200,35 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - The complete guide is built from `docs/complete-guide/guide.html` by `render-pdf.mjs` beside
   it, which refuses to write the PDF when a section would spill onto a second page; it reuses
   the feature guide's screenshots, and its question tables follow the question bank.
+- `second_opinion_flags` offers the model a rule with several sign groups one group at a time
+  (`RF_..__SIGN_n`) and raises the rule itself, when every group is shown by a model quote or a
+  listed sign in the transcript (`group_signs`); the prompt and `rules.yaml` are unchanged.
+  Probed against the live model with synthetic transcripts in three languages.
+- The kiosk's motion is CSS only and moves without fading, so text is at full contrast for the
+  accessibility scans from its first frame. `AudioPrompt` reads through `lib/voice.speak`.
+- `render_case_sheet_pdf(department_name=...)`; the export joins `departments`.
+- `.adm-code` named both the small inline codes in the admin tables and the temporary
+  password block; the block's rule is now `p.adm-code`.
+- `_summarize_with_one_retry` (intake): one more `summarize_interview` 1.5 s after an
+  unavailable or unusable answer, inside the same 25-second background bound.
+- The showcase is built by `docs/showcase/build.mjs` from `showcase.template.html` and
+  `img/` (captures of the demo stack resized to WebP), with the app's fonts inlined.
+- The setup guide is built from `docs/setup-guide/guide.html` by `render-pdf.mjs` beside it;
+  commands never break at a hyphen, so they copy out of the PDF intact.
+- `AudioPrompt.test.tsx` covers the read-aloud button: speaking, stopping, no leftover text.
+- `opentelemetry-api` 1.45.2 in the application locks (CVE-2026-126360, a denial of service in
+  trace-header parsing). Four advisories with no fixed release to move to are waived in
+  writing, approved by the owner on 26 Nov 2026: three in the CI-only Semgrep scanner's lock
+  (ADR 006, amendment of that date) and one in the Alertmanager image (`.trivyignore`, until
+  31 Dec 2026). Upgrading Alertmanager to 0.34.2 or later removes its five older waivers,
+  which expire on 30 Nov 2026.
+- nginx 1.30.6 in the web image's base has six advisories of 18 Nov 2026, fixed in 1.30.7,
+  and no fixed build of `nginx-unprivileged` exists yet. Approved by the owner on 26 Nov 2026:
+  waived in `.trivyignore` until 10 Dec 2026, and **HTTP/2 is switched off** in
+  `infra/web/nginx.tls.conf` until the fixed image, which removes the exposure to the two
+  critical ones. For hospital IT: pages are served over HTTP/1.1 meanwhile; nothing else
+  changes. Three of the six cannot apply (mail proxy, HTTP/3, a resolver setup not used);
+  the TLS 1.3 denial of service remains until the image is updated.
 
 ## [0.7.0]
 

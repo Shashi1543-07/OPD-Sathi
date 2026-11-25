@@ -149,6 +149,26 @@ def conditions_match(conditions: dict[str, Any], facts: PatientFacts) -> bool:
     return _conditions_match(conditions, facts)
 
 
+def group_signs(rule: RuleModel, text: str) -> list[str]:
+    """For each of a rule's sign groups, the listed sign the text states ("" if none)."""
+    normalized_text = normalize_text(text)
+    return [
+        next(
+            (
+                phrase
+                for language in LANGUAGES
+                for phrase in group["any"][language]
+                if any(
+                    not _negated(normalized_text, span)
+                    for span in _phrase_spans(normalized_text, phrase)
+                )
+            ),
+            "",
+        )
+        for group in rule.all_groups
+    ]
+
+
 def evaluate(
     text: str,
     *,
