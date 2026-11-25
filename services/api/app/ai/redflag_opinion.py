@@ -13,6 +13,7 @@ from app.domain.redflags.engine import (
     RedFlag,
     RuleModel,
     conditions_match,
+    group_signs,
     maximum_urgency,
 )
 
@@ -20,9 +21,11 @@ from app.domain.redflags.engine import (
 MAX_REDFLAG_SECONDS = 5.0
 
 
-def redflag_json_schema(rules: Sequence[RuleModel] = RULES) -> dict[str, Any]:
+def redflag_json_schema(
+    rules: Sequence[RuleModel] = RULES, ids: Sequence[str] | None = None
+) -> dict[str, Any]:
     """Return a response schema restricted to configured rules and short quote evidence."""
-    ids = sorted(rule.id for rule in rules)
+    ids = sorted(ids if ids is not None else (rule.id for rule in rules))
     return {
         "type": "object",
         "properties": {
@@ -45,21 +48,61 @@ def redflag_json_schema(rules: Sequence[RuleModel] = RULES) -> dict[str, Any]:
     }
 
 
-def _rule_prompt_details(rules: Sequence[RuleModel]) -> tuple[dict[str, object], ...]:
-    details: list[dict[str, object]] = []
+def _sign_id(rule_id: str, index: int) -> str:
+    """The ID under which one sign group of a several-group rule is offered to the model."""
+    return f"{rule_id}__SIGN_{index + 1}"
+
+
+def _offers(rules: Sequence[RuleModel]) -> dict[str, tuple[RuleModel, int | None]]:
+    """What the model may return: a one-group rule whole, a several-group rule group by group.
+
+    A rule such as "chest discomfort with another concerning symptom" needs a sign from
+    every one of its groups. Offered whole, the model raised it, urgent, from "dizziness"
+    alone, a sign of the second group. So the model only says which groups the patient's
+    words show, and the rule is raised here, when every group is shown.
+    """
+    offers: dict[str, tuple[RuleModel, int | None]] = {}
     for rule in rules:
-        signs: list[dict[str, object]] = []
-        for group in rule.all_groups:
-            signs.append({"phrases_by_language": group["any"]})
+        if len(rule.all_groups) == 1:
+            offers[rule.id] = (rule, None)
+            continue
+        for index in range(len(rule.all_groups)):
+            offers[_sign_id(rule.id, index)] = (rule, index)
+    return offers
+
+
+def _offer_prompt_details(
+    offers: dict[str, tuple[RuleModel, int | None]],
+) -> tuple[dict[str, object], ...]:
+    details: list[dict[str, object]] = []
+    for offer_id, (rule, index) in offers.items():
+        groups = rule.all_groups if index is None else [rule.all_groups[index]]
         details.append(
             {
-                "id": rule.id,
+                "id": offer_id,
                 "level": rule.level,
-                "warning_signs": signs,
+                "warning_signs": [{"phrases_by_language": group["any"]} for group in groups],
                 "conditions": rule.conditions,
             }
         )
     return tuple(details)
+
+
+def _group_quote(
+    group: dict[str, dict[str, list[str]]],
+    offers: dict[str, tuple[RuleModel, int | None]],
+    quotes: dict[str, str],
+) -> str:
+    """The model's quote for a sign group, under whichever offered ID lists those signs.
+
+    "Chest pain" is a rule of its own and also the first group of "chest pain with another
+    sign"; the model often quotes it under only one of the two IDs.
+    """
+    for offer_id, (rule, index) in offers.items():
+        offered = rule.all_groups if index is None else [rule.all_groups[index]]
+        if offer_id in quotes and offered == [group]:
+            return quotes[offer_id]
+    return ""
 
 
 async def second_opinion_flags(
@@ -85,19 +128,19 @@ async def second_opinion_flags(
     ]
     if not transcript.strip() or not rules:
         return []
-    by_id = {rule.id: rule for rule in rules}
+    offers = _offers(rules)
     prompt = build_redflag_prompt(
         transcript,
         language,
-        tuple(by_id),
-        _rule_prompt_details(rules),
+        tuple(offers),
+        _offer_prompt_details(offers),
     )
     bounded_timeout = min(max(timeout, 0.01), MAX_REDFLAG_SECONDS)
     try:
         response = await asyncio.wait_for(
             provider.generate_json(
                 prompt.text,
-                redflag_json_schema(rules),
+                redflag_json_schema(rules, tuple(offers)),
                 timeout=bounded_timeout - 0.10,
                 session_id=session_id,
             ),
@@ -113,35 +156,48 @@ async def second_opinion_flags(
         validate_safe_output(raw_flags)
     except UnsafeLLMOutputError:
         return []
-    extra: list[RedFlag] = []
-    seen: set[str] = set()
+    # The first valid quote for each offered ID.
+    quotes: dict[str, str] = {}
     for item in raw_flags:
         if not isinstance(item, dict):
             continue
-        rule_id = item.get("rule_id")
+        offer_id = item.get("rule_id")
         evidence = item.get("evidence")
         if (
-            not isinstance(rule_id, str)
-            or rule_id not in by_id
-            or rule_id in seen
+            not isinstance(offer_id, str)
+            or offer_id not in offers
+            or offer_id in quotes
             or not isinstance(evidence, str)
             or not evidence
             or len(evidence) > 240
             or evidence not in transcript
         ):
             continue
-        rule = by_id[rule_id]
+        quotes[offer_id] = evidence
+    extra: list[RedFlag] = []
+    for rule in rules:
+        if len(rule.all_groups) == 1:
+            evidence = quotes.get(rule.id, "")
+        else:
+            # Each group is shown by the model's quote or by a listed sign in the transcript;
+            # the model must show at least one (the rules already raise a rule whose every
+            # group is stated in the listed words).
+            stated = group_signs(rule, transcript)
+            model = [_group_quote(group, offers, quotes) for group in rule.all_groups]
+            parts = [quote or sign for quote, sign in zip(model, stated, strict=True)]
+            evidence = "; ".join(dict.fromkeys(parts)) if any(model) and all(parts) else ""
+        if not evidence:
+            continue
         extra.append(
             RedFlag(
                 id=rule.id,
                 level=rule.level,
                 source="llm",
-                evidence=evidence,
+                evidence=evidence[:240],
                 reason_en=rule.reason_en,
                 visible_to_patient=False,
             )
         )
-        seen.add(rule_id)
     return extra
 
 
