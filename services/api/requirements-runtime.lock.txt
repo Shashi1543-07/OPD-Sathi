@@ -1479,9 +1479,9 @@ pydantic-core==2.50.1 \
     # via
     #   -c services/api/requirements.lock.txt
     #   pydantic
-pydantic-settings==2.15.0 \
-    --hash=sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42 \
-    --hash=sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117
+pydantic-settings==2.16.2 \
+    --hash=sha256:3dc08ffabed2bbd5dc2dd55ead7b78b4e4c5cd776aecd04310db5f1224caaf46 \
+    --hash=sha256:8d523e5c129b097686bde019bd6109bff53f4c8c3f63f1ddf9933ffa42e5ab4f
     # via
     #   -c services/api/requirements.lock.txt
     #   -r services/api/requirements-runtime.in
