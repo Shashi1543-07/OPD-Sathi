@@ -69,6 +69,34 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **The complete guide** (`docs/OPD-Saathi-Complete-Guide.pdf`, 19 pages): how a visit works
   end to end, every question the interview asks, the OPD card, every screen with its address,
   AI, security, the technology, tests and results, what was built when, and how to run the demo.
+- **Every touch answers** (kiosk and phone): buttons and choices press in under the finger, a
+  chosen answer confirms itself, and each new question settles into place. The read-aloud and
+  "Listen" buttons show moving bars while they speak and stop on a second tap. Motion is
+  switched off for people who ask their device for less of it.
+- **Fixed:** the kiosk's read-aloud button left "Read-aloud finished." beside it for good, and
+  its label stayed on screen after a tap on a touch screen. The only notice now is "no voice on
+  this device", which leaves by itself.
+- **Fixed, safety:** the AI second opinion could raise the urgent alert "chest discomfort with
+  another concerning symptom" for a patient who mentioned only the other symptom (dizziness,
+  nausea), and such a patient moved to the front of the queue. A rule that needs two signs
+  is now raised only when both are shown; real chest pain with sweating or breathlessness is
+  raised as before. For the clinical lead: the rules themselves are unchanged.
+- **Fixed:** the case sheet PDF printed the department as an internal code (`NURSE_TRIAGE`);
+  it now prints the department's name.
+- **Fixed, wording:** the read-back said the patient's rating in English word order in Hindi
+  and Marathi ("…बताया 6 10 में से", "…सांगितला 6 १० पैकी"). It now reads "10 में से 6 बताया"
+  and "10 पैकी 6 सांगितला". For the language reviewers: please check both sentences.
+- **Fixed:** in Settings → Departments each department's code was drawn over its name
+  ("Ear, Nose and Throat" was cut by "ENT").
+- **The doctor's English page survives a busy AI service**: when the AI service is busy for a
+  moment, the translation and brief are tried once more in the background instead of being
+  left out for that patient. Nobody waits for it.
+- **A film of the product** (`docs/showcase/OPD-Saathi-Showcase.html`): one file that opens
+  without a network and walks through the kiosk, the phone, the nurse's board, the doctor's
+  consultation and the reports with real screens of fictional patients, in light or dark.
+- **Setup and commands** (`docs/OPD-Saathi-Setup-Guide.pdf`, 6 pages): starting the demo,
+  a new network, another laptop, pairing a kiosk, what is needed before the first patient
+  (activation code, sign-ins, the OPD card), every command and the usual fixes.
 
 ### Technical
 
@@ -168,6 +196,22 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - The complete guide is built from `docs/complete-guide/guide.html` by `render-pdf.mjs` beside
   it, which refuses to write the PDF when a section would spill onto a second page; it reuses
   the feature guide's screenshots, and its question tables follow the question bank.
+- `second_opinion_flags` offers the model a rule with several sign groups one group at a time
+  (`RF_..__SIGN_n`) and raises the rule itself, when every group is shown by a model quote or a
+  listed sign in the transcript (`group_signs`); the prompt and `rules.yaml` are unchanged.
+  Probed against the live model with synthetic transcripts in three languages.
+- The kiosk's motion is CSS only and moves without fading, so text is at full contrast for the
+  accessibility scans from its first frame. `AudioPrompt` reads through `lib/voice.speak`.
+- `render_case_sheet_pdf(department_name=...)`; the export joins `departments`.
+- `.adm-code` named both the small inline codes in the admin tables and the temporary
+  password block; the block's rule is now `p.adm-code`.
+- `_summarize_with_one_retry` (intake): one more `summarize_interview` 1.5 s after an
+  unavailable or unusable answer, inside the same 25-second background bound.
+- The showcase is built by `docs/showcase/build.mjs` from `showcase.template.html` and
+  `img/` (captures of the demo stack resized to WebP), with the app's fonts inlined.
+- The setup guide is built from `docs/setup-guide/guide.html` by `render-pdf.mjs` beside it;
+  commands never break at a hyphen, so they copy out of the PDF intact.
+- `AudioPrompt.test.tsx` covers the read-aloud button: speaking, stopping, no leftover text.
 
 ## [0.7.0]
 

@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OPD Saathi — Setup and Commands</title>
+<style>
+  @page { size: A4; margin: 13mm 13mm 14mm; }
+  :root {
+    --navy: #0b2545; --teal: #0f766e; --teal-tint: #e6f6f4; --ink: #1f2937; --muted: #5b6474;
+    --line: #dde3ea; --soft: #f6f8fa; --red: #b42318; --red-tint: #fdecea; --amber: #b45309;
+    --amber-tint: #fff4e5; --code: #0f1b2d;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* No ligatures, so text copied or searched in the PDF reads "staff", not "sta" + one glyph. */
+  body { margin: 0; color: var(--ink); font: 9.8pt/1.4 Calibri, "Nirmala UI", Arial, sans-serif; font-variant-ligatures: none; background: #fff; }
+  h1, h2, h3, h4 { color: var(--navy); line-height: 1.2; margin: 0; }
+  h1 { font-size: 27pt; font-weight: 800; letter-spacing: -0.02em; }
+  h2 { font-size: 17pt; font-weight: 800; letter-spacing: -0.01em; }
+  h3 { font-size: 11.6pt; font-weight: 700; margin: 9px 0 4px; }
+  p { margin: 0 0 5px; }
+  ol, ul { margin: 0 0 6px; padding-left: 17px; }
+  li { margin: 2.5px 0; }
+  strong { color: var(--navy); }
+  .page { break-after: page; }
+  .page:last-child { break-after: auto; }
+  .kicker { color: var(--teal); font-size: 8pt; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 3px; }
+  .lead { color: var(--muted); font-size: 10.4pt; margin: 4px 0 8px; }
+  .head { border-bottom: 3px solid var(--teal); padding-bottom: 6px; margin-bottom: 9px; display: flex; align-items: flex-end; gap: 10px; }
+  .head .letter { flex: none; width: 30px; height: 30px; border-radius: 8px; background: var(--teal); color: #fff; font-weight: 800; font-size: 15pt; display: grid; place-items: center; }
+  .head + .lead { margin-top: -3px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: start; }
+  .side { display: grid; grid-template-columns: 1.02fr 0.98fr; gap: 11px; align-items: start; }
+  .side.wide { grid-template-columns: 1.32fr 0.68fr; }
+  /* A command never breaks at a hyphen: copied from the PDF, "demo-" + "kiosk" would lose it. */
+  .nb { white-space: nowrap; }
+  .card { border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; background: #fff; break-inside: avoid; }
+  .card h3 { margin-top: 0; }
+  .card.teal { background: var(--teal-tint); border-color: #b9e3dd; }
+  .note { border-left: 4px solid var(--amber); background: var(--amber-tint); border-radius: 0 7px 7px 0; padding: 5px 10px; margin: 6px 0; font-size: 9.2pt; break-inside: avoid; }
+  .stop { border-left: 4px solid var(--red); background: var(--red-tint); border-radius: 0 7px 7px 0; padding: 5px 10px; margin: 6px 0; font-size: 9.2pt; break-inside: avoid; }
+  code { font: 8.6pt/1.35 Consolas, "Cascadia Mono", "Courier New", monospace; background: var(--soft); border: 1px solid var(--line); border-radius: 4px; padding: 0 3px; white-space: nowrap; }
+  pre { margin: 4px 0 7px; padding: 6px 9px; border-radius: 7px; background: var(--code); color: #e6edf5; font: 8.5pt/1.42 Consolas, "Cascadia Mono", "Courier New", monospace; white-space: pre-wrap; overflow-wrap: anywhere; break-inside: avoid; }
+  pre .c { color: #8fa3ba; }
+  pre .y { color: #fcd34d; }
+  pre .g { color: #6ee7b7; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 4px 0 7px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 3.4px 6px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); color: var(--navy); font-size: 7.8pt; letter-spacing: 0.04em; text-transform: uppercase; }
+  tr { break-inside: avoid; }
+  td code { white-space: normal; overflow-wrap: anywhere; }
+  .shot { margin: 0; break-inside: avoid; }
+  .shot img { width: 100%; display: block; border: 1px solid var(--line); border-radius: 7px; }
+  .shot figcaption { color: var(--muted); font-size: 8.1pt; line-height: 1.3; margin-top: 3px; }
+  .shot figcaption b { color: var(--navy); }
+  .steps { counter-reset: step; list-style: none; padding: 0; margin: 0 0 6px; }
+  .steps > li { counter-increment: step; position: relative; padding-left: 25px; margin: 5px 0; }
+  .steps > li::before { content: counter(step); position: absolute; left: 0; top: 0.5px; width: 18px; height: 18px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 8.4pt; font-weight: 700; display: grid; place-items: center; }
+  .cover { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; border-bottom: 3px solid var(--teal); padding-bottom: 10px; margin-bottom: 10px; }
+  .cover svg { width: 62px; height: 62px; color: var(--teal); }
+  .foot { color: var(--muted); font-size: 8pt; margin-top: 8px; }
+  .tag { display: inline-block; border-radius: 999px; padding: 0 7px; font-size: 7.8pt; font-weight: 700; background: var(--teal-tint); color: var(--teal); }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="page">
+  <div class="cover">
+    <div>
+      <div class="kicker">OPD Saathi · demo installation on Windows</div>
+      <h1>Setup and commands</h1>
+      <p class="lead" style="margin:5px 0 0">Start it, move to a new network, install it on another laptop, pair a kiosk, and take the first patient. Fictional patients only.</p>
+    </div>
+    <svg viewBox="0 0 240 240" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 108 30 H 132 A 26 26 0 0 1 158 56 V 69 A 13 13 0 0 0 171 82 H 184 A 26 26 0 0 1 210 108 V 132 A 26 26 0 0 1 184 158 H 171 A 13 13 0 0 0 158 171 V 184 A 26 26 0 0 1 132 210 H 108 A 26 26 0 0 1 82 184 V 182 C 70 196 46 206 22 204 C 38 192 52 176 58 158 H 56 A 26 26 0 0 1 30 132 V 108 A 26 26 0 0 1 56 82 H 69 A 13 13 0 0 0 82 69 V 56 A 26 26 0 0 1 108 30 Z M 97 105 A 7 7 0 0 0 90 112 V 128 A 7 7 0 0 0 104 128 V 112 A 7 7 0 0 0 97 105 Z M 120 92 A 7 7 0 0 0 113 99 V 141 A 7 7 0 0 0 127 141 V 99 A 7 7 0 0 0 120 92 Z M 143 100 A 7 7 0 0 0 136 107 V 133 A 7 7 0 0 0 150 133 V 107 A 7 7 0 0 0 143 100 Z"/></svg>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">Find your case</h3>
+      <table>
+        <tr><th>I want to</th><th>Go to</th></tr>
+        <tr><td>Start it on my own laptop, everything closed</td><td><b>A</b>, page 2</td></tr>
+        <tr><td>Use it on a new Wi-Fi, or after a restart</td><td><b>B</b>, page 2</td></tr>
+        <tr><td>Install it on another laptop from the repository</td><td><b>C</b>, page 3</td></tr>
+        <tr><td>Use a separate tablet or PC as the kiosk</td><td><b>D</b>, page 4</td></tr>
+        <tr><td>Be ready for the first patient</td><td><b>E</b>, page 5</td></tr>
+        <tr><td>Find a command, or fix a problem</td><td><b>F</b>, page 6</td></tr>
+      </table>
+      <h3>The addresses</h3>
+      <table>
+        <tr><th>Who</th><th>Address</th></tr>
+        <tr><td>Patient kiosk</td><td><code>http://localhost:8080/kiosk</code></td></tr>
+        <tr><td>Staff (nurse, doctor, admin)</td><td><code>http://localhost:8080/staff</code></td></tr>
+        <tr><td>Patient's phone: check-in</td><td><code>http://&lt;PC address&gt;:8080/m/…</code> (a QR)</td></tr>
+        <tr><td>Patient's phone: place in queue</td><td><code>http://&lt;PC address&gt;:8080/s/…</code> (the token's QR)</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3 style="margin-top:0">What you need</h3>
+      <table>
+        <tr><th>Thing</th><th>Why</th></tr>
+        <tr><td><b>Windows 10 or 11</b>, 8 GB RAM or more</td><td>The whole system runs on this one laptop. Close other heavy programs.</td></tr>
+        <tr><td><b>Docker Desktop</b>, showing “Engine running”</td><td>It runs the database, the server and the web app.</td></tr>
+        <tr><td><b>Chrome or Edge</b></td><td>Voice needs one of these two.</td></tr>
+        <tr><td><b>Git</b></td><td>Only to copy the repository to a new laptop.</td></tr>
+        <tr><td><b>Internet</b></td><td>For the first build, and for AI and natural voices. Everything else works without it.</td></tr>
+        <tr><td><b>One Wi-Fi</b> for laptop, phones and kiosks</td><td>Phones and other devices reach the laptop over it.</td></tr>
+      </table>
+      <div class="card teal">
+        <h3>Two rules that save an hour</h3>
+        <ul style="margin:0">
+          <li>Type every command in <b>PowerShell, in the project folder</b> (the one that holds <code>start-demo.ps1</code>).</li>
+          <li>This guide uses <b>port 8080</b>. Keep to one port: a kiosk's pairing belongs to the address it was opened at.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h3>The whole thing in four lines</h3>
+<pre><span class="c"># 1. Start Docker Desktop and wait for "Engine running". Then, in PowerShell:</span>
+cd C:\Users\lenovo\Downloads\OPD-Sathi
+Set-ExecutionPolicy Bypass -Scope Process     <span class="c"># allows scripts in this window only</span>
+.\start-demo.ps1 -WebPort 8080                <span class="c"># starts everything; prints the links and logins</span>
+.\scripts\demo-check.ps1                      <span class="c"># every line should say [ok]</span></pre>
+  <p class="foot">OPD Saathi collects a patient's history and runs the queue. It does not diagnose. This guide is for the demo installation; installing at a real hospital is in <b>docs/DEPLOYMENT.md</b> (and the box on page 3).</p>
+</section>
+
+<!-- 2 -->
+<section class="page">
+  <div class="head"><span class="letter">A</span><div><div class="kicker">Everything is closed</div><h2>Start it on your own laptop</h2></div></div>
+  <div class="side">
+    <ol class="steps">
+      <li><b>Start Docker Desktop</b> from the Start menu. Wait until the bottom-left corner says <b>Engine running</b>.</li>
+      <li><b>Open PowerShell in the project folder:</b>
+<pre>cd C:\Users\lenovo\Downloads\OPD-Sathi</pre></li>
+      <li><b>Run the start script</b> (two lines, same window):
+<pre>Set-ExecutionPolicy Bypass -Scope Process
+.\start-demo.ps1 -WebPort 8080</pre>
+        After code changes it rebuilds (a few minutes). If nothing changed, add <code>-NoBuild</code> and it starts in seconds.</li>
+      <li><b>Read what it prints</b> (right). It also opens the kiosk link in your default browser, which pairs that browser as the kiosk.</li>
+      <li><b>Check it:</b>
+<pre>.\scripts\demo-check.ps1</pre>
+        Every line should say <code>[ok]</code>. A <code>[warn]</code> on AI means Gemini is busy or there is no internet: the demo still runs, without AI.</li>
+      <li><b>Open the screens</b> in Chrome or Edge: the kiosk tab (press <b>F11</b>), and <code>/staff</code> signed in as the nurse and the doctor.</li>
+    </ol>
+    <div>
+<pre><span class="g">OPD Saathi is running.</span>
+
+  Patient kiosk (open once to activate):
+    <span class="y">http://localhost:8080/kiosk?activate=…</span>
+  Staff workspace:   http://localhost:8080/staff
+    Admin:  admin@demo.opdsathi.test / <span class="c">(password)</span>
+    Doctors (password <span class="c">…</span>), one per department:
+      doctor01 General Medicine | doctor02 …
+    Nurses (password <span class="c">…</span>):
+      nurse01 ... nurse05@demo.opdsathi.test
+  Returning patient for the demo:
+    <span class="y">OPD number 26-000001, PIN ……</span>; 52, female
+  Token QR codes open on phones via
+    <span class="g">http://&lt;PC address&gt;:8080</span>
+  Patients' own phones check in at:
+    <span class="y">http://&lt;PC address&gt;:8080/m/…</span>
+  AI: Gemini key found - … are ON.</pre>
+      <div class="note"><b>The passwords stay the same</b> on every run. They live in the <code>.env</code> file (<code>DEMO_ADMIN_PASSWORD</code>, <code>DEMO_STAFF_PASSWORD</code>). Never share or commit that file.</div>
+      <p><b>To stop:</b> <code>docker compose down</code>. Patients and settings are kept.</p>
+    </div>
+  </div>
+
+  <div class="head" style="margin-top:10px"><span class="letter">B</span><div><div class="kicker">A new Wi-Fi, or the laptop was restarted</div><h2>Move to a new network</h2></div></div>
+  <p class="lead">Phones and other devices use the laptop's <b>current</b> address. On a new network the old QR codes point nowhere, so the script must run again there.</p>
+  <div class="side">
+    <ol class="steps">
+      <li>Connect the laptop <b>and</b> the phones to the same Wi-Fi (or one phone's hotspot).</li>
+      <li>Run the start script again; it reads the new address and puts it in every QR:
+<pre>.\start-demo.ps1 -WebPort 8080 -NoBuild</pre></li>
+      <li>Check that phones can reach the laptop:
+<pre>.\scripts\lan-check.ps1</pre></li>
+      <li>On a phone, open the test link it prints. It must show <code>{"status":"ready"}</code>:
+<pre>http://&lt;PC address&gt;:8080/api/readyz</pre></li>
+    </ol>
+    <table>
+      <tr><th>If the phone cannot connect</th><th>Do this</th></tr>
+      <tr><td>The laptop passes every check, the phone times out</td><td>Campus and guest Wi-Fi keep devices apart. Use a phone hotspot that the laptop and the phones all join.</td></tr>
+      <tr><td>Windows calls the network <b>Public</b></td><td>Set it to Private (Settings → Network), or in an <b>Administrator</b> PowerShell: <code>.\scripts\lan-check.ps1 -AddFirewallRule</code>. Remove it later with <code>-RemoveFirewallRule</code>.</td></tr>
+      <tr><td>The QR opens a page that loads for ever</td><td>The QR holds an old address: run the start script again.</td></tr>
+      <tr><td>Speaking does not work on the phone</td><td>Expected: browsers allow the microphone only on HTTPS or on the laptop itself. Phones tap and type.</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="page">
+  <div class="head"><span class="letter">C</span><div><div class="kicker">From the repository</div><h2>Install it on another laptop</h2></div></div>
+  <div class="side wide">
+    <ol class="steps">
+      <li><b>Install three programs:</b> Docker Desktop (restart when it asks; accept WSL 2), Git, and Chrome or Edge.</li>
+      <li><b>Copy the repository</b> (PowerShell):
+<pre>git clone https://github.com/Shashi1543-07/OPD-Sathi.git
+cd OPD-Sathi</pre></li>
+      <li><b>Start Docker Desktop</b>, wait for “Engine running”, then:
+<pre>Set-ExecutionPolicy Bypass -Scope Process
+.\start-demo.ps1 -WebPort 8080</pre>
+        The first run needs internet and takes several minutes: it builds the programs.</li>
+      <li><b>Optional, for AI and natural voices:</b> open <code>.env</code> in Notepad, fill in the two keys, save, and run the start script again.
+<pre>GEMINI_API_KEY=<span class="c">your key from aistudio.google.com/apikey</span>
+SARVAM_API_KEY=<span class="c">your key from dashboard.sarvam.ai</span></pre></li>
+      <li><b>Check it:</b> <code>.\scripts\demo-check.ps1</code></li>
+    </ol>
+    <div>
+      <div class="card teal">
+        <h3>What the first run does by itself</h3>
+        <ul style="margin:0">
+          <li>Creates <code>.env</code> with fresh random secrets and passwords.</li>
+          <li>Creates the database and a <b>fictional hospital</b> in Nagpur: 1 administrator, 8 doctors, 5 nurses, 8 departments.</li>
+          <li>Adds a month of sample OPD days, so Reports are not empty.</li>
+          <li>Creates the <b>returning patient</b> with an OPD card.</li>
+          <li>Creates a kiosk, a phone check-in QR, and prints every link and login.</li>
+        </ul>
+      </div>
+      <h3>What it asks you</h3>
+      <table>
+        <tr><th>Question</th><th>Answer</th></tr>
+        <tr><td>Windows: allow Docker through the firewall?</td><td>Allow, for private networks.</td></tr>
+        <tr><td>Browser, on the kiosk: use the microphone?</td><td>Allow. Otherwise patients can only tap and type.</td></tr>
+        <tr><td>Nothing else is typed</td><td>The demo hospital and its logins are made for you.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:4px">
+    <div class="note" style="margin:0">
+      <b>The new laptop is a new installation.</b> It has its own passwords (printed by the script), an empty queue and its own kiosk pairing. To carry your AI keys and passwords over, copy the old laptop's <code>.env</code> into the new folder <b>before</b> the first run, by USB, never by chat or e-mail. Patients and history do not move with it.
+    </div>
+    <div class="note" style="margin:0">
+      <b>Without AI keys everything still works:</b> tapping and typing, the danger-sign rules, tokens, the live queue, the phone pages, the case sheet from the question bank. What is missing is the English translation of free text, the AI brief and reading photographed papers.
+    </div>
+  </div>
+
+  <h3 style="margin-top:10px">For a real hospital instead of the demo</h3>
+  <div class="side">
+    <div>
+<pre>powershell -ExecutionPolicy Bypass -File .\setup-hospital.ps1 -WebPort 8080</pre>
+      <p>No demo data. It asks for five things and then prints the addresses:</p>
+      <table>
+        <tr><th>It asks</th><th>Example</th></tr>
+        <tr><td>Hospital name (shown on its kiosks)</td><td>District Hospital, Wardha</td></tr>
+        <tr><td>Short unique hospital code</td><td>dh-wardha</td></tr>
+        <tr><td>Administrator's full name, e-mail and password</td><td>The password is not shown as you type.</td></tr>
+      </table>
+    </div>
+    <div>
+      <p><b>Then the administrator, at <code>/staff</code>:</b></p>
+      <ol style="margin-bottom:4px">
+        <li>Signs in and sets up <b>two-step sign-in</b> when asked (an authenticator app).</li>
+        <li><b>Settings → Departments:</b> the standard eight are ready; rename or switch off.</li>
+        <li><b>Settings → Users:</b> adds each doctor and nurse. They choose their own password at first sign-in.</li>
+        <li><b>Settings → Kiosks:</b> registers each kiosk (section D).</li>
+      </ol>
+      <div class="stop" style="margin-bottom:0">Real patients need HTTPS, backups and clinical sign-off first: <b>docs/DEPLOYMENT.md</b> and <b>docs/GO_LIVE_CHECKLIST.md</b>.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section class="page">
+  <div class="head"><span class="letter">D</span><div><div class="kicker">A tablet or a second PC as the kiosk</div><h2>Pair a kiosk</h2></div></div>
+  <p class="lead">A kiosk is any browser that has been paired <b>once</b> with a one-time activation code. Until then it shows “Activate this kiosk” and cannot start a check-in.</p>
+  <div class="side">
+    <div>
+      <h3 style="margin-top:0">The kiosk on this same laptop</h3>
+      <p>Nothing to do: the start script opens the activation link for you. To move the demo kiosk to another browser on this laptop, make a new link and open it once there (the earlier browser is then unpaired):</p>
+<pre>docker compose run --rm api python -m app.cli demo-kiosk --web-url http://localhost:8080</pre>
+      <h3>The kiosk on another device</h3>
+      <ol class="steps">
+        <li>The laptop is running (A) and both devices are on the same Wi-Fi (B).</li>
+        <li>On the laptop, sign in as the <b>admin</b> and open <b>Settings → Kiosks</b>.</li>
+        <li>Under <b>Register kiosk</b> choose <b>Kiosk screen</b>, type where it stands (“Reception kiosk 1”) and press <b>Register kiosk</b>.</li>
+        <li>The <b>one-time activation code</b> appears, once. Press <b>Copy setup link</b>. It works for a day; the screen says until when.</li>
+        <li>On the kiosk device, open the link in Chrome or Edge. If it starts with <code>localhost</code>, put the laptop's address there instead:
+<pre>http://&lt;PC address&gt;:8080/kiosk?activate=&lt;code&gt;</pre></li>
+        <li>The welcome screen with <b>Start patient check-in</b> appears. Press <b>F11</b>. The kiosk now stays signed in by itself.</li>
+      </ol>
+    </div>
+    <figure class="shot">
+      <img src="img/register-kiosk.jpg" alt="Settings, Kiosks: the one-time kiosk activation code after registering a kiosk">
+      <figcaption><b>Staff → Settings → Kiosks.</b> Left: the code just made for “Reception kiosk 1” (this one has been deleted), with <b>Copy setup link</b>. Below it, the <b>Register kiosk</b> form. Right: every kiosk and when it was last seen.</figcaption>
+    </figure>
+  </div>
+  <div class="side" style="margin-top:6px">
+    <figure class="shot">
+      <img src="img/activate.jpg" alt="An unpaired kiosk asking for its one-time activation code">
+      <figcaption><b>An unpaired browser.</b> It asks for the one-time activation code. Opening the setup link fills it in for you; typing the code here works too.</figcaption>
+    </figure>
+    <div>
+      <table>
+        <tr><th>On the Kiosks screen</th><th>What it does</th></tr>
+        <tr><td><b>More actions → New activation code</b></td><td>The code was lost, or the kiosk's browser was reset. Its records are kept.</td></tr>
+        <tr><td><b>Deactivate</b></td><td>The kiosk stops at once; activate it again later.</td></tr>
+        <tr><td><b>Type: Phone check-in QR</b></td><td>Makes a poster QR instead of a kiosk. <b>Show QR</b> prints it; <b>Replace QR</b> makes old posters stop working.</td></tr>
+        <tr><td><b>Connection: Online / Offline</b></td><td>A kiosk reports in every minute while its screen is open.</td></tr>
+      </table>
+      <div class="note"><b>Voice on a separate kiosk.</b> Browsers allow the microphone only on HTTPS or on the laptop itself (<code>localhost</code>). A kiosk on another device over plain Wi-Fi works by tapping and typing. For a demo with voice, use the kiosk tab on the laptop.</div>
+      <div class="note">A kiosk left alone for about a minute warns, then returns to the welcome screen, so the next patient never sees the last one's answers.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="page">
+  <div class="head"><span class="letter">E</span><div><div class="kicker">Before the doors open</div><h2>Ready for the first patient</h2></div></div>
+  <div class="side">
+    <div>
+      <table>
+        <tr><th style="width:38%">Check</th><th>How</th></tr>
+        <tr><td><b>1. Everything is up</b></td><td><code>.\scripts\demo-check.ps1</code> shows only <code>[ok]</code>.</td></tr>
+        <tr><td><b>2. The kiosk is paired</b></td><td><code>/kiosk</code> shows <b>Start patient check-in</b>, not “Activate this kiosk”.</td></tr>
+        <tr><td><b>3. Staff are signed in</b></td><td>Nurse on <b>Queue</b>, doctor on <b>Consultations</b>. <b>One browser holds one staff sign-in for all its tabs</b>: use Edge beside Chrome, or a private window, for the second role. The kiosk tab can share a browser with either.</td></tr>
+        <tr><td><b>4. Phones reach the laptop</b></td><td><code>.\scripts\lan-check.ps1</code>, and the test link opens on a phone.</td></tr>
+        <tr><td><b>5. The check-in QR is on the wall</b></td><td><b>Settings → Kiosks → Waiting hall phone QR → More actions → Show QR → Print.</b></td></tr>
+        <tr><td><b>6. The returning patient is fresh</b></td><td>Her OPD number and PIN are in the start script's output.</td></tr>
+        <tr><td><b>7. Sound and microphone</b></td><td>Volume up; allow the microphone when the kiosk asks.</td></tr>
+      </table>
+    </div>
+    <figure class="shot">
+      <img src="img/signin.jpg" alt="Staff sign-in: hospital, e-mail and password">
+      <figcaption><b>Staff sign-in</b> at <code>/staff</code>: pick the hospital, then e-mail and password. Demo accounts: <code>admin@</code>, <code>doctor01@</code> … <code>doctor08@</code>, <code>nurse01@</code> … <code>nurse05@demo.opdsathi.test</code>.</figcaption>
+    </figure>
+  </div>
+
+  <h3>The OPD card: what a patient is asked</h3>
+  <div class="grid2">
+    <figure class="shot">
+      <img src="img/opd-card.jpg" alt="Kiosk: entering the OPD number and PIN">
+      <figcaption><b>A returning patient</b> taps “Yes, I have my OPD card” and types the <b>OPD number</b> (like 26-000001) and the <b>6-digit PIN</b>. A wrong card is refused without saying which part was wrong; she can carry on without it.</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="img/token.jpg" alt="Kiosk: the token with its QR and the patient's OPD card">
+      <figcaption><b>Every patient leaves with three things:</b> the token (MED-003), a QR that shows her place in the queue on her phone, and her OPD card number and PIN for the next visit. A new patient gets a new card here.</figcaption>
+    </figure>
+  </div>
+  <div class="grid2" style="margin-top:6px">
+    <div>
+      <table>
+        <tr><th>The patient is asked</th><th>Good to know</th></tr>
+        <tr><td>Language, then consent</td><td>Without consent there is no check-in: staff help at the desk.</td></tr>
+        <tr><td>AI help: yes or no</td><td>Optional. “No” still gives a token.</td></tr>
+        <tr><td>Age and sex; phone number optional</td><td>No name at the kiosk.</td></tr>
+        <tr><td>OPD card, if she has one</td><td>Age and sex must match the card.</td></tr>
+        <tr><td>Danger signs, then about a dozen questions</td><td>A danger sign alerts the nurse at once.</td></tr>
+      </table>
+    </div>
+    <div>
+<pre><span class="c"># Start each run-through with a clean returning patient</span>
+docker compose run --rm api python -m app.cli seed-demo-returning --reset
+<span class="c"># A lost OPD card: Staff → Patients → find her → new PIN</span></pre>
+      <div class="note" style="margin-bottom:0"><b>For the returning patient use age 52, Female</b>, then her OPD number and PIN. The script above removes the visits earlier run-throughs added to her record and prints the card again.</div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section class="page">
+  <div class="head"><span class="letter">F</span><div><div class="kicker">One page to keep open</div><h2>Commands and fixes</h2></div></div>
+  <table>
+    <tr><th style="width:36%">I want to</th><th>Command (PowerShell, in the project folder)</th></tr>
+    <tr><td>Start everything</td><td><code>.\start-demo.ps1 -WebPort 8080</code></td></tr>
+    <tr><td>Start fast, nothing changed</td><td><code>.\start-demo.ps1 -WebPort 8080 -NoBuild</code></td></tr>
+    <tr><td>Is everything ready?</td><td><code>.\scripts\demo-check.ps1</code></td></tr>
+    <tr><td>Can phones reach this laptop?</td><td><code>.\scripts\lan-check.ps1</code></td></tr>
+    <tr><td>Stop (data is kept)</td><td><code>docker compose down</code></td></tr>
+    <tr><td>Watch the server for errors</td><td><code>docker compose logs -f api</code> &nbsp;(<code>worker</code> for the background jobs; Ctrl+C to leave)</td></tr>
+    <tr><td>A new kiosk activation link</td><td><code>docker compose run --rm api python -m app.cli demo-kiosk --web-url http://localhost:8080</code></td></tr>
+    <tr><td>The phone check-in link again</td><td><code>docker compose run --rm api python -m app.cli demo-checkin --web-url http://&lt;PC address&gt;:8080</code></td></tr>
+    <tr><td>Reset the returning patient</td><td><code>docker compose run --rm api python -m app.cli seed-demo-returning --reset</code></td></tr>
+    <tr><td>Do AI and voice answer right now?</td><td><code>docker compose run --rm api python -m app.cli ai-check</code></td></tr>
+    <tr><td>Five sample patients in today's queue</td><td><code>docker compose run --rm api python -m app.cli seed-demo-data</code> &nbsp;(remove: <code>clear-demo-data</code>)</td></tr>
+    <tr><td>Take the latest code</td><td><code>git pull</code> then <code>.\start-demo.ps1 -WebPort 8080</code> (it rebuilds)</td></tr>
+  </table>
+  <div class="stop"><b>Never before a demo:</b> <code>docker compose down -v</code>. The <code>-v</code> deletes the database: every patient, login and kiosk pairing. Plain <code>docker compose down</code> keeps them.</div>
+
+  <h3>When something goes wrong</h3>
+  <table>
+    <tr><th style="width:34%">What you see</th><th>What to do</th></tr>
+    <tr><td>“running scripts is disabled on this system”</td><td>Run <code>Set-ExecutionPolicy Bypass -Scope Process</code> first, in the same window.</td></tr>
+    <tr><td>“Docker Desktop is not running” / cannot connect to the Docker daemon</td><td>Start Docker Desktop, wait for “Engine running”, run the script again.</td></tr>
+    <tr><td>The kiosk says <b>Activate this kiosk</b></td><td>This browser is not paired (another browser, another port, or cleared data). Make a new link (table above) and open it once here.</td></tr>
+    <tr><td>The page looks old after an update</td><td>Reload it once. From then on open pages update themselves.</td></tr>
+    <tr><td>The page does not load</td><td>Wait 20 seconds and reload. Then <code>docker compose ps</code>: every line should say Up. If not, run the start script again.</td></tr>
+    <tr><td><code>[warn] AI: Gemini did not answer</code></td><td>No internet, or the free AI service is busy. Try <code>ai-check</code> again in a minute. Meanwhile choose <b>No, continue without AI</b> at the kiosk.</td></tr>
+    <tr><td>The voice answer is not heard</td><td>Allow the microphone (the icon in the address bar), or tap <b>Type instead</b>.</td></tr>
+    <tr><td>The doctor's page has no AI brief</td><td>It arrives a few seconds after the token; press refresh. If AI was busy, the page still has the history from the question bank.</td></tr>
+    <tr><td>The nurse's tab has turned into the doctor's (or the other way)</td><td>One browser holds one staff sign-in. Open the second role in another browser or a private window.</td></tr>
+    <tr><td>The OPD card is refused</td><td>Check age 52 and Female, then the number and PIN. Or tap <b>No, or I don't have my card</b>.</td></tr>
+    <tr><td>Forgot the passwords</td><td>Run the start script (it prints them), or read <code>DEMO_ADMIN_PASSWORD</code> and <code>DEMO_STAFF_PASSWORD</code> in <code>.env</code>.</td></tr>
+  </table>
+  <p class="foot">More: <b>docs/DEMO.md</b> (the ten-minute demo script) · <b>docs/MOBILE_LAN.md</b> (phones on Wi-Fi) · <b>docs/DEPLOYMENT.md</b> (a real hospital) · <b>docs/showcase/OPD-Saathi-Showcase.html</b> (the film of the product).</p>
+</section>
+
+<script>
+  // Keep every word of a command whole (see .nb), so it breaks only at spaces.
+  for (const block of document.querySelectorAll("pre, td code")) {
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const parts = node.textContent.split(/(\s+)/);
+      if (!parts.some((part) => part.includes("-"))) continue;
+      const pieces = document.createDocumentFragment();
+      for (const part of parts) {
+        if (!part.includes("-")) { pieces.append(part); continue; }
+        const word = document.createElement("span");
+        word.className = "nb";
+        word.textContent = part;
+        pieces.append(word);
+      }
+      node.replaceWith(pieces);
+    }
+  }
+</script>
+</body>
+</html>
