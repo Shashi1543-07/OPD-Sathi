@@ -20,3 +20,22 @@ CVE-2026-97031 exp:2026-11-30
 # v0.34.2 or later already removes the five entries above, and should be done before they
 # expire on 30 Nov 2026.
 CVE-2026-78661 exp:2026-12-31
+
+# nginx 1.30.6 in the web image's base, nginxinc/nginx-unprivileged:1.30.6-alpine. Six
+# advisories were published on 18 Nov 2026, fixed in nginx 1.30.7; the newest build of the
+# base image is still 1.30.6 (checked 26 Nov 2026; the official nginx image has 1.30.8).
+# Accepted by the owner on 26 Nov 2026; each entry expires on 10 Dec 2026, when the scan fails
+# again until the base image is updated (Dependabot proposes the new digest).
+# Not reachable in our configuration: the mail proxy module is not configured,
+CVE-2026-113425 exp:2026-12-10
+# HTTP/3 is not configured,
+CVE-2026-121810 exp:2026-12-10
+# and no proxied name uses a variable, and there is no SSI or mirror (the resolver bug).
+CVE-2026-123634 exp:2026-12-10
+# HTTP/2 (two critical bugs): switched off in infra/web/nginx.tls.conf until the fixed image.
+CVE-2026-123007 exp:2026-12-10
+CVE-2026-123633 exp:2026-12-10
+# TLS 1.3: a crafted connection can hang one worker (denial of service, no data exposed).
+# Applies to an HTTPS installation, which is inside the hospital network and has no fix but
+# the new image; the plain-HTTP demo is not affected. TLS 1.3 stays on.
+CVE-2026-118899 exp:2026-12-10

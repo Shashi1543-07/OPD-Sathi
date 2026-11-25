@@ -222,6 +222,13 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
   (ADR 006, amendment of that date) and one in the Alertmanager image (`.trivyignore`, until
   31 Dec 2026). Upgrading Alertmanager to 0.34.2 or later removes its five older waivers,
   which expire on 30 Nov 2026.
+- nginx 1.30.6 in the web image's base has six advisories of 18 Nov 2026, fixed in 1.30.7,
+  and no fixed build of `nginx-unprivileged` exists yet. Approved by the owner on 26 Nov 2026:
+  waived in `.trivyignore` until 10 Dec 2026, and **HTTP/2 is switched off** in
+  `infra/web/nginx.tls.conf` until the fixed image, which removes the exposure to the two
+  critical ones. For hospital IT: pages are served over HTTP/1.1 meanwhile; nothing else
+  changes. Three of the six cannot apply (mail proxy, HTTP/3, a resolver setup not used);
+  the TLS 1.3 denial of service remains until the image is updated.
 
 ## [0.7.0]
 
