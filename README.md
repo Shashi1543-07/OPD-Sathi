@@ -273,7 +273,7 @@ hazard log) and [SECURITY.md](SECURITY.md) (reporting a vulnerability).
 | [docs/PROBLEM_STATEMENT.md](docs/PROBLEM_STATEMENT.md) | The problem OPD Saathi addresses, and what a solution has to do |
 | [docs/OPD-Saathi-Feature-Guide.pdf](docs/OPD-Saathi-Feature-Guide.pdf) | A shorter feature guide with screenshots |
 | [docs/showcase/OPD-Saathi-Showcase.html](docs/showcase/OPD-Saathi-Showcase.html) | A film of the product in one HTML file: open it in a browser, no network needed (keys: arrows, Space, T, F) |
-| [docs/OPD-Saathi-Setup-Guide.pdf](docs/OPD-Saathi-Setup-Guide.pdf) | Six pages of commands: start it, move to a new network, install on another laptop, pair a kiosk, the first patient, fixes |
+| [docs/OPD-Saathi-Setup-Guide.pdf](docs/OPD-Saathi-Setup-Guide.pdf) | Seven pages of commands: start it, move to a new network, install on another laptop, pair a kiosk, the first patient, fixes, passwords |
 | [docs/EVALUATION.md](docs/EVALUATION.md) | Results of the synthetic evaluations |
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How changes are made and reviewed |
