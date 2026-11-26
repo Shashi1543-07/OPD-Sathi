@@ -86,6 +86,7 @@
         <tr><td>Use a separate tablet or PC as the kiosk</td><td><b>D</b>, page 4</td></tr>
         <tr><td>Be ready for the first patient</td><td><b>E</b>, page 5</td></tr>
         <tr><td>Find a command, or fix a problem</td><td><b>F</b>, page 6</td></tr>
+        <tr><td>Find, choose or reset a password</td><td><b>G</b>, page 7</td></tr>
       </table>
       <h3>The addresses</h3>
       <table>
@@ -392,9 +393,58 @@ docker compose run --rm api python -m app.cli seed-demo-returning --reset
     <tr><td>The doctor's page has no AI brief</td><td>It arrives a few seconds after the token; press refresh. If AI was busy, the page still has the history from the question bank.</td></tr>
     <tr><td>The nurse's tab has turned into the doctor's (or the other way)</td><td>One browser holds one staff sign-in. Open the second role in another browser or a private window.</td></tr>
     <tr><td>The OPD card is refused</td><td>Check age 52 and Female, then the number and PIN. Or tap <b>No, or I don't have my card</b>.</td></tr>
-    <tr><td>Forgot the passwords</td><td>Run the start script (it prints them), or read <code>DEMO_ADMIN_PASSWORD</code> and <code>DEMO_STAFF_PASSWORD</code> in <code>.env</code>.</td></tr>
+    <tr><td>Forgot the passwords</td><td>Section <b>G</b>: one command shows them, another copies one without showing it.</td></tr>
   </table>
   <p class="foot">More: <b>docs/DEMO.md</b> (the ten-minute demo script) · <b>docs/MOBILE_LAN.md</b> (phones on Wi-Fi) · <b>docs/DEPLOYMENT.md</b> (a real hospital) · <b>docs/showcase/OPD-Saathi-Showcase.html</b> (the film of the product).</p>
+</section>
+
+<!-- 7 -->
+<section class="page">
+  <div class="head"><span class="letter">G</span><div><div class="kicker">Find one, choose one, forget one</div><h2>Passwords and sign-in</h2></div></div>
+  <p class="lead">The demo has <b>two passwords</b>: one for the admin, one shared by all doctors and nurses. Both are lines in the <code>.env</code> file in the project folder. The first run on a laptop makes them up; every later run prints them and sets the 14 demo accounts back to them.</p>
+<pre><span class="c"># Show both passwords</span>
+Select-String -Path .env -Pattern "^DEMO_(ADMIN|STAFF)_PASSWORD="
+<span class="c"># Or copy one without showing it (a projector may be on), then paste it with Ctrl+V.</span>
+<span class="c"># Doctors and nurses:</span>
+(Select-String "^DEMO_STAFF_PASSWORD=" .env).Line.Split("=",2)[1] | Set-Clipboard
+<span class="c"># Admin:</span>
+(Select-String "^DEMO_ADMIN_PASSWORD=" .env).Line.Split("=",2)[1] | Set-Clipboard</pre>
+  <table>
+    <tr><th style="width:30%">In the demo</th><th>Do this</th></tr>
+    <tr><td>Forgot a password</td><td>The commands above. The start script prints both as well.</td></tr>
+    <tr><td>Choose your own passwords</td><td>Open <code>.env</code> in Notepad and change the two lines: 12 characters or more, using only letters, digits and hyphens. Save, then run the start script again.</td></tr>
+    <tr><td>Five wrong tries: sign-in is paused</td><td>Wait 15 minutes, or run the start script again: it opens the demo accounts at once.</td></tr>
+    <tr><td>A new laptop</td><td>Its first run makes two new passwords and prints them. To keep the old ones, copy the old <code>.env</code> across <b>before</b> the first run (section C).</td></tr>
+  </table>
+  <div class="stop"><b>Never delete <code>.env</code>, and keep a copy on a USB stick.</b> It also holds the keys that open the saved patients and history. A fresh <code>.env</code> cannot open an old database.</div>
+
+  <h3>A real hospital: every person has their own password</h3>
+  <!-- The two pictures share one height: their columns keep the pictures' own widths (824 : 1480). -->
+  <div style="display:grid;grid-template-columns:824fr 1480fr 560fr;gap:9px;align-items:start">
+    <figure class="shot">
+      <img src="img/users-create.jpg" alt="Settings, Users: the Create staff account form with its Initial password field">
+      <figcaption><b>Settings → Users → Create staff account.</b> The admin types an <b>Initial password</b>.</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="img/users-reset.jpg" alt="Settings, Users: the More actions menu of one person, with Reset password">
+      <figcaption><b>The … button at the end of a person's row</b> opens this menu. <b>Reset password</b> is for a forgotten one. <b>Unlock account</b> joins the list while that person's sign-in is paused.</figcaption>
+    </figure>
+    <div class="card teal" style="font-size:9pt">
+      <h3 style="font-size:10.4pt">What a password must be</h3>
+      <p style="margin:0">12 characters or more.</p>
+      <p style="margin:4px 0 0">Refused: common passwords, keyboard or number runs, and ones built from your own name, e-mail or hospital.</p>
+    </div>
+  </div>
+  <table style="margin-top:7px">
+    <tr><th style="width:30%">Case</th><th>What to do</th></tr>
+    <tr><td>The first administrator</td><td><code>setup-hospital.ps1</code> asks for the password twice (section C). It is not shown as you type.</td></tr>
+    <tr><td>A new doctor or nurse</td><td>The admin creates the account with an initial password and tells the person privately. At the first sign-in the person must choose their own.</td></tr>
+    <tr><td>A doctor or nurse forgot theirs</td><td><b>… → Reset password.</b> A temporary password is shown once. The person is signed out everywhere and chooses their own at the next sign-in.</td></tr>
+    <tr><td>Sign-in is paused</td><td>Five wrong tries pause it for 15 minutes. To open it sooner: <b>… → Unlock account.</b></td></tr>
+    <tr><td>Change your own password</td><td><b>My account</b> (bottom left of every staff screen) <b>→ Change password.</b></td></tr>
+    <tr><td>The administrator forgot theirs</td><td>A second administrator resets it the same way; nobody can reset their own there. So create two administrator accounts on the first day.</td></tr>
+    <tr><td>The phone with the two-step codes is lost</td><td>Use one of the recovery codes from the set-up, or an admin chooses <b>… → Reset two-step sign-in.</b> The demo has two-step sign-in switched off.</td></tr>
+  </table>
 </section>
 
 <script>

@@ -98,9 +98,11 @@ the go-live gate (`docs/GO_LIVE_CHECKLIST.md`). How releases are made and instal
 - **A film of the product** (`docs/showcase/OPD-Saathi-Showcase.html`): one file that opens
   without a network and walks through the kiosk, the phone, the nurse's board, the doctor's
   consultation and the reports with real screens of fictional patients, in light or dark.
-- **Setup and commands** (`docs/OPD-Saathi-Setup-Guide.pdf`, 6 pages): starting the demo,
+- **Setup and commands** (`docs/OPD-Saathi-Setup-Guide.pdf`, 7 pages): starting the demo,
   a new network, another laptop, pairing a kiosk, what is needed before the first patient
-  (activation code, sign-ins, the OPD card), every command and the usual fixes.
+  (activation code, sign-ins, the OPD card), every command and the usual fixes, and
+  passwords: where the demo's two are kept, how to show, copy or choose them, and what a
+  hospital does when someone forgets theirs.
 
 ### Technical
 
